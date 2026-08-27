@@ -1,0 +1,75 @@
+# GitLab CI/CD pipeline for mcp-proxmox.
+#
+# Stages:
+#   lint    — static analysis on master and MRs
+#   test    — hermetic unit tests on EVERY commit (any branch + MR)
+#   build   — goreleaser snapshot build on master and MRs
+#   release — goreleaser release on tags
+stages:
+  - lint
+  - test
+  - build
+  - release
+
+variables:
+  GORELEASER_PROJECT_NAME: mcp-proxmox
+
+lint:
+  stage: lint
+  image: harbor.hosting.reg.ru/cloud-platform-api/infra/cicd/ci:latest
+  tags:
+    - cloud-infra-runner.msk1
+  script:
+    - golangci-lint run ./...
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+test:
+  stage: test
+  image: harbor.hosting.reg.ru/cloud-platform-api/infra/cicd/ci:latest
+  tags:
+    - cloud-infra-runner.msk1
+  script:
+    - go test ./...
+    - go vet ./...
+    - gofmt -l .
+  rules:
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+build-master:
+  stage: build
+  image: harbor.hosting.reg.ru/cloud-platform-api/infra/cicd/ci:latest
+  tags:
+    - cloud-infra-runner.msk1
+  script:
+    - goreleaser build --snapshot --clean
+  artifacts:
+    name: ${GORELEASER_PROJECT_NAME}
+    paths:
+      - dist/**
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
+
+build-mr:
+  stage: build
+  image: harbor.hosting.reg.ru/cloud-platform-api/infra/cicd/ci:latest
+  tags:
+    - cloud-infra-runner.msk1
+  script:
+    - goreleaser build --snapshot --clean
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+release:
+  stage: release
+  image: harbor.hosting.reg.ru/cloud-platform-api/infra/cicd/ci:latest
+  tags:
+    - cloud-infra-runner.msk1
+  script:
+    - goreleaser release --clean
+  rules:
+    - if: $CI_COMMIT_TAG
+  dependencies: []

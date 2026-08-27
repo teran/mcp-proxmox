@@ -1,0 +1,85 @@
+# Forgejo Actions workflow for mcp-proxmox (format compatible with GitHub Actions).
+#
+# Goal: test every push/PR, and build + create a release on tags.
+#   test    — runs on every push and PR (all branches): build, vet, gofmt,
+#             hermetic tests, golangci-lint, go-arch-lint
+#   release — runs only on tag pushes (refs/tags/*): builds the binary and
+#             publishes it as a Forgejo release
+#
+# Container image: golang:1.27 matches the toolchain used locally and satisfies
+# the `go 1.27.0` directive in go.mod.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Test & Lint
+    runs-on: docker
+    container:
+      image: golang:1.27
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Format (gofmt)
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt required for the following files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Test
+        run: go test ./...
+
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
+
+      - name: Lint (golangci-lint)
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          golangci-lint run ./...
+
+      - name: Install go-arch-lint
+        run: go install github.com/fe3dback/go-arch-lint@latest
+
+      - name: Architecture check (go-arch-lint)
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          go-arch-lint check
+
+  release:
+    name: Release
+    # Only on tag pushes. In Forgejo Actions github.ref works the same as in
+    # GitHub Actions (refs/tags/<tag> for tag pushes).
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: docker
+    container:
+      image: golang:1.27
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build binary
+        run: |
+          mkdir -p dist
+          VERSION="$(git describe --tags --exact-match 2>/dev/null || echo v0.0.0-dev)"
+          CGO_ENABLED=0 go build -trimpath \
+            -ldflags "-s -w -X main.version=${VERSION}" -o dist/mcp-proxmox ./cmd/mcp-proxmox
+
+      - name: Create Forgejo release
+        uses: https://code.forgejo.org/forgejo/release@v2
+        with:
+          files: dist/mcp-proxmox
+          gitea_token: ${{ secrets.GITHUB_TOKEN }}

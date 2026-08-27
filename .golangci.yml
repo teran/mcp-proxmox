@@ -1,0 +1,78 @@
+# golangci-lint v2 configuration for mcp-proxmox.
+# Format: https://golangci-lint.run/usage/configuration/
+version: "2"
+
+run:
+  # Number of CPUs to use (default: runtime.NumCPU).
+  concurrency: 4
+  # Timeout for the whole run.
+  timeout: 5m
+  # Exit code when at least one issue was found.
+  issues-exit-code: 1
+
+linters:
+  # Start from an empty baseline and explicitly enable the linters we want.
+  default: none
+  enable:
+    - errcheck      # unchecked errors in Go code
+    - govet         # reports suspicious constructs
+    - staticcheck   # go vet on steroids; a lot of valuable checks
+    - ineffassign   # detects ineffectual assignments
+    - unused        # unused code (and unparam-style dead params)
+    - revive        # fast, configurable linter inspired by golint
+    - depguard      # enforce the clean-architecture import boundaries
+    - nakedret      # report naked returns in long functions
+    - gosec         # security: secrets, TLS, injection, SSRF
+
+  settings:
+    depguard:
+      # Clean-architecture rule: neither domain/** nor application/** may import
+      # the MCP SDK, logrus, net/http, or any Proxmox client. Those dependencies
+      # must stay confined to adapter/** and cmd/mcp-proxmox (the composition
+      # root). net/http is confined to adapter/pve + adapter/pbs; logrus to
+      # adapter/logging (plus select adapter files for trace/debug); the go-sdk
+      # to adapter/mcp + cmd/mcp-proxmox.
+      rules:
+        clean-arch:
+          files:
+            - "domain/**"
+            - "application/**"
+          deny:
+            - pkg: "github.com/modelcontextprotocol/*"
+              desc: "MCP SDK is an adapter concern; domain/application must stay pure"
+            - pkg: "github.com/sirupsen/logrus"
+              desc: "logging is abstracted behind port.AppLogger"
+            - pkg: "net/http"
+              desc: "HTTP is an adapter concern; use port interfaces"
+            - pkg: "github.com/kelseyhightower/envconfig"
+              desc: "config loading is an adapter/cmd concern"
+
+    revive:
+      rules:
+        - name: package-comments
+          disabled: true
+        - name: exported
+          disabled: true
+
+    nakedret:
+      # Allow naked returns only in functions shorter than this many lines.
+      max-func-lines: 30
+
+  exclusions:
+    # Standard generated-file exclusion.
+    generated: lax
+    rules:
+      - path: _test\.go$
+        linters:
+          - errcheck
+          - nakedret
+    presets:
+      - comments      # exclude issues about comment formatting
+      - common-false-positives
+      - legacy        # exclude legacy staticcheck rules
+      - std-error-handling
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
