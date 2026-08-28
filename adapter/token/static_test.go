@@ -24,9 +24,15 @@ func TestStaticTokenSource_AuthorizationHeader(t *testing.T) {
 			want: "PVEAPIToken=user@pam!tokenid=secret",
 		},
 		{
-			name: "valid pbs token uses pbs scheme",
+			name: "valid pbs token uses pbs scheme and colon separator",
 			raw:  "user@pbs!tokenid=secret",
-			want: "PBSAPIToken=user@pbs!tokenid=secret",
+			want: "PBSAPIToken=user@pbs!tokenid:secret",
+			pbs:  true,
+		},
+		{
+			name: "pbs token with no '=' stays unchanged",
+			raw:  "user@pbs!tokenid:secret",
+			want: "PBSAPIToken=user@pbs!tokenid:secret",
 			pbs:  true,
 		},
 		{
