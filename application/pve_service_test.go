@@ -51,10 +51,10 @@ func TestPVEService_Success(t *testing.T) {
 	})
 
 	t.Run("GetNextID", func(t *testing.T) {
-		gw := &mockPVEGateway{getNextID: func(ctx context.Context) (int, error) { return 201, nil }}
+		gw := &mockPVEGateway{getNextID: func(ctx context.Context) (string, error) { return "201", nil }}
 		got, err := (&PVEService{gw: gw}).GetNextID(context.Background())
 		require.NoError(t, err)
-		assert.Equal(t, 201, got)
+		assert.Equal(t, "201", got)
 	})
 
 	t.Run("ListVMs", func(t *testing.T) {
@@ -220,7 +220,7 @@ func TestPVEService_ErrorPropagation(t *testing.T) {
 	gw.getNodeStatus = func(ctx context.Context, node string) (*model.NodeStatus, error) { return nil, sentinel }
 	gw.getClusterStatus = func(ctx context.Context) ([]model.ClusterStatus, error) { return nil, sentinel }
 	gw.getClusterRes = func(ctx context.Context) ([]model.ClusterResource, error) { return nil, sentinel }
-	gw.getNextID = func(ctx context.Context) (int, error) { return 0, sentinel }
+	gw.getNextID = func(ctx context.Context) (string, error) { return "", sentinel }
 	gw.listVMs = func(ctx context.Context, node string) ([]model.VM, error) { return nil, sentinel }
 	gw.getVMConfig = func(ctx context.Context, node string, vmid int) (*model.VMConfig, error) { return nil, sentinel }
 	gw.getVMStatus = func(ctx context.Context, node string, vmid int) (*model.VMStatus, error) { return nil, sentinel }

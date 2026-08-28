@@ -98,12 +98,12 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 		},
 		{
 			name: "GetNextID",
-			body: `{"data":201}`,
+			body: `{"data":"201"}`,
 			path: "/api2/json/cluster/nextid",
 			call: func(g *Gateway) error {
 				id, err := g.GetNextID(context.Background())
 				if assert.NoError(t, err) {
-					assert.Equal(t, 201, id)
+					assert.Equal(t, "201", id)
 				}
 				return err
 			},

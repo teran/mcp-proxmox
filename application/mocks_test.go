@@ -14,7 +14,7 @@ type mockPVEGateway struct {
 	getNodeStatus    func(ctx context.Context, node string) (*model.NodeStatus, error)
 	getClusterStatus func(ctx context.Context) ([]model.ClusterStatus, error)
 	getClusterRes    func(ctx context.Context) ([]model.ClusterResource, error)
-	getNextID        func(ctx context.Context) (int, error)
+	getNextID        func(ctx context.Context) (string, error)
 	listVMs          func(ctx context.Context, node string) ([]model.VM, error)
 	getVMConfig      func(ctx context.Context, node string, vmid int) (*model.VMConfig, error)
 	getVMStatus      func(ctx context.Context, node string, vmid int) (*model.VMStatus, error)
@@ -54,11 +54,11 @@ func (m *mockPVEGateway) GetClusterResources(ctx context.Context) ([]model.Clust
 	}
 	return nil, nil
 }
-func (m *mockPVEGateway) GetNextID(ctx context.Context) (int, error) {
+func (m *mockPVEGateway) GetNextID(ctx context.Context) (string, error) {
 	if m.getNextID != nil {
 		return m.getNextID(ctx)
 	}
-	return 0, nil
+	return "", nil
 }
 func (m *mockPVEGateway) ListVMs(ctx context.Context, node string) ([]model.VM, error) {
 	if m.listVMs != nil {

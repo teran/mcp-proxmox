@@ -337,10 +337,10 @@ func (g *Gateway) GetClusterResources(ctx context.Context) ([]model.ClusterResou
 }
 
 // GetNextID returns the next free VMID.
-func (g *Gateway) GetNextID(ctx context.Context) (int, error) {
-	var out int
+func (g *Gateway) GetNextID(ctx context.Context) (string, error) {
+	var out string
 	if err := g.do(ctx, http.MethodGet, "/cluster/nextid", nil, &out); err != nil {
-		return 0, err
+		return "", err
 	}
 	return out, nil
 }

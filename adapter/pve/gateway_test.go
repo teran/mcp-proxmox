@@ -94,13 +94,13 @@ func TestGateway_ListNodes_Success(t *testing.T) {
 
 func TestGateway_GetNextID_Success(t *testing.T) {
 	rec := &reqCapture{}
-	srv := mockServer(t, 200, `{"data":201}`, rec)
+	srv := mockServer(t, 200, `{"data":"201"}`, rec)
 	g, _ := newTestGateway(t, srv)
 
 	id, err := g.GetNextID(context.Background())
 	skipIfStub(t, err)
 	require.NoError(t, err)
-	assert.Equal(t, 201, id)
+	assert.Equal(t, "201", id)
 	assert.Equal(t, "/api2/json/cluster/nextid", rec.path)
 }
 

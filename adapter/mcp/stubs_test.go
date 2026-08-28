@@ -22,7 +22,7 @@ type stubPVEGateway struct {
 	getNodeStatus    func(ctx context.Context, node string) (*model.NodeStatus, error)
 	getClusterStatus func(ctx context.Context) ([]model.ClusterStatus, error)
 	getClusterRes    func(ctx context.Context) ([]model.ClusterResource, error)
-	getNextID        func(ctx context.Context) (int, error)
+	getNextID        func(ctx context.Context) (string, error)
 	listVMs          func(ctx context.Context, node string) ([]model.VM, error)
 	getVMConfig      func(ctx context.Context, node string, vmid int) (*model.VMConfig, error)
 	getVMStatus      func(ctx context.Context, node string, vmid int) (*model.VMStatus, error)
@@ -76,14 +76,14 @@ func (s *stubPVEGateway) GetClusterResources(ctx context.Context) ([]model.Clust
 	}
 	return []model.ClusterResource{{ID: "qemu/100", Type: "qemu"}}, nil
 }
-func (s *stubPVEGateway) GetNextID(ctx context.Context) (int, error) {
+func (s *stubPVEGateway) GetNextID(ctx context.Context) (string, error) {
 	if s.fail() {
-		return 0, s.err
+		return "", s.err
 	}
 	if s.getNextID != nil {
 		return s.getNextID(ctx)
 	}
-	return 201, nil
+	return "201", nil
 }
 func (s *stubPVEGateway) ListVMs(ctx context.Context, node string) ([]model.VM, error) {
 	if s.fail() {

@@ -10,7 +10,7 @@ type ClusterStatus struct {
 	Quorum int    `json:"quorate,omitempty"` // Proxmox returns quorate as 0/1
 	Online int    `json:"online,omitempty"`
 	IP     string `json:"ip,omitempty"`
-	Local  bool   `json:"local,omitempty"`
+	Local  int    `json:"local,omitempty"` // Proxmox returns local as 0/1
 }
 
 // ClusterResource is one entry of GET /cluster/resources: a VM, CT or storage

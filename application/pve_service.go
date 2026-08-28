@@ -37,7 +37,7 @@ func (s *PVEService) GetClusterResources(ctx context.Context) ([]model.ClusterRe
 }
 
 // GetNextID returns the next free VMID.
-func (s *PVEService) GetNextID(ctx context.Context) (int, error) {
+func (s *PVEService) GetNextID(ctx context.Context) (string, error) {
 	return s.gw.GetNextID(ctx)
 }
 
