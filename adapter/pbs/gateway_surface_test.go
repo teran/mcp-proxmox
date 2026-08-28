@@ -73,7 +73,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 		{
 			name: "ListBackups",
 			body: `{"data":[{"backup-id":"vm/100/2024","backup-time":1704067200,"backup-type":"vm"}]}`,
-			path: "/api2/json/admin/datastore/backup/snapshot",
+			path: "/api2/json/admin/datastore/backup/snapshots",
 			call: func(g *Gateway) error {
 				bs, err := g.ListBackups(context.Background(), "backup")
 				if assert.NoError(t, err) {

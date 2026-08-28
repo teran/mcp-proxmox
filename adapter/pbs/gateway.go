@@ -317,7 +317,7 @@ func (g *Gateway) GetDatastoreStatus(ctx context.Context, store string) (*model.
 // ListBackups returns the backup snapshots in a datastore.
 func (g *Gateway) ListBackups(ctx context.Context, store string) ([]model.Backup, error) {
 	var out []model.Backup
-	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+store+"/snapshot", &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+store+"/snapshots", &out); err != nil {
 		return nil, err
 	}
 	return out, nil
