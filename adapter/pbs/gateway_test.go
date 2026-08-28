@@ -26,6 +26,7 @@ func (noopLogger) Errorf(string, ...any) {}
 type reqCapture struct {
 	method string
 	path   string
+	query  string
 	auth   string
 	count  int
 }
@@ -58,6 +59,7 @@ func mockServer(t *testing.T, status int, body string, rec *reqCapture) *httptes
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec.method = r.Method
 		rec.path = r.URL.Path
+		rec.query = r.URL.RawQuery
 		rec.auth = r.Header.Get("Authorization")
 		rec.count++
 		w.Header().Set("Content-Type", "application/json")

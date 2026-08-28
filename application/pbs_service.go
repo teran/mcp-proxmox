@@ -29,14 +29,14 @@ func (s *PBSService) ListBackups(ctx context.Context, store string) ([]model.Bac
 	return s.gw.ListBackups(ctx, store)
 }
 
-// GetBackup returns a single backup snapshot.
-func (s *PBSService) GetBackup(ctx context.Context, store, snapshot string) (*model.Backup, error) {
-	return s.gw.GetBackup(ctx, store, snapshot)
+// GetBackup returns all backup snapshots in the datastore matching backupID.
+func (s *PBSService) GetBackup(ctx context.Context, store, backupID string) ([]model.Backup, error) {
+	return s.gw.GetBackup(ctx, store, backupID)
 }
 
-// GetBackupNotes returns the notes of a backup snapshot.
-func (s *PBSService) GetBackupNotes(ctx context.Context, store, snapshot string) (*model.BackupNotes, error) {
-	return s.gw.GetBackupNotes(ctx, store, snapshot)
+// GetBackupNotes returns the notes of a backup group.
+func (s *PBSService) GetBackupNotes(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error) {
+	return s.gw.GetBackupNotes(ctx, store, backupID, backupType)
 }
 
 // GetVerifyStatus returns the status of a verify job by UPID.

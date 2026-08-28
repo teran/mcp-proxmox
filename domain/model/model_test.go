@@ -174,8 +174,8 @@ func TestJSONRoundTrip(t *testing.T) {
 		},
 		{
 			name: "backup-notes",
-			in:   BackupNotes{Snapshot: "vm/100/...", Notes: "keep"},
-			want: `{"snapshot":"vm/100/...","notes":"keep"}`,
+			in:   BackupNotes{Comment: "keep", Notes: "keep forever"},
+			want: `{"comment":"keep","notes":"keep forever"}`,
 		},
 		{
 			name: "verify-status",

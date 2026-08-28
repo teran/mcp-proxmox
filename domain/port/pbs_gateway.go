@@ -17,8 +17,14 @@ type PBSGateway interface {
 
 	// Backups / snapshots & notes.
 	ListBackups(ctx context.Context, store string) ([]model.Backup, error)
-	GetBackup(ctx context.Context, store, snapshot string) (*model.Backup, error)
-	GetBackupNotes(ctx context.Context, store, snapshot string) (*model.BackupNotes, error)
+	// GetBackup returns all snapshots in the datastore whose backup-id matches
+	// backupID (the real grouping key, e.g. a VMID). PBS has no single-snapshot
+	// GET; snapshots are listed and filtered by backup-id. Returns an empty
+	// slice (no error) when nothing matches.
+	GetBackup(ctx context.Context, store, backupID string) ([]model.Backup, error)
+	// GetBackupNotes returns the notes of a backup group identified by
+	// backup-id and backup-type (vm|ct|host).
+	GetBackupNotes(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error)
 
 	// Verify & prune (status polling is read-only).
 	GetVerifyStatus(ctx context.Context, store, upid string) (*model.VerifyStatus, error)

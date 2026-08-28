@@ -37,10 +37,11 @@ func runMethod(t *testing.T, body string, fn func(*Gateway) error) (*reqCapture,
 // path, asserting the returned struct fields and the request method/path.
 func TestGateway_AllMethodSuccess(t *testing.T) {
 	tests := []struct {
-		name string
-		body string
-		path string
-		call func(*Gateway) error
+		name  string
+		body  string
+		path  string
+		query string
+		call  func(*Gateway) error
 	}{
 		{
 			name: "ListDatastores",
@@ -86,24 +87,27 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 		},
 		{
 			name: "GetBackup",
-			body: `{"data":{"backup-id":"vm/100/2024","backup-type":"ct"}}`,
-			path: "/api2/json/admin/datastore/backup/snapshot/snap1",
+			body: `{"data":[{"backup-id":"vm/100/2024","backup-time":1704067200,"backup-type":"vm","owner":"root@pam","size":1024},{"backup-id":"ct/200/2024","backup-time":1704067300,"backup-type":"ct","size":2048}]}`,
+			path: "/api2/json/admin/datastore/backup/snapshots",
 			call: func(g *Gateway) error {
-				b, err := g.GetBackup(context.Background(), "backup", "snap1")
+				bs, err := g.GetBackup(context.Background(), "backup", "vm/100/2024")
 				if assert.NoError(t, err) {
-					assert.Equal(t, "vm/100/2024", b.BackupID)
-					assert.Equal(t, "ct", b.BackupType)
+					require.Len(t, bs, 1)
+					assert.Equal(t, "vm/100/2024", bs[0].BackupID)
+					assert.Equal(t, "vm", bs[0].BackupType)
 				}
 				return err
 			},
 		},
 		{
-			name: "GetBackupNotes",
-			body: `{"data":{"snapshot":"snap1","notes":"keep forever"}}`,
-			path: "/api2/json/admin/datastore/backup/snapshot/snap1/notes",
+			name:  "GetBackupNotes",
+			body:  `{"data":{"comment":"keep","notes":"keep forever"}}`,
+			path:  "/api2/json/admin/datastore/backup/group-notes",
+			query: "backup-id=vm%2F100%2F2024&backup-type=vm",
 			call: func(g *Gateway) error {
-				n, err := g.GetBackupNotes(context.Background(), "backup", "snap1")
+				n, err := g.GetBackupNotes(context.Background(), "backup", "vm/100/2024", "vm")
 				if assert.NoError(t, err) {
+					assert.Equal(t, "keep", n.Comment)
 					assert.Equal(t, "keep forever", n.Notes)
 				}
 				return err
@@ -154,9 +158,34 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, http.MethodGet, rec.method)
 			assert.Equal(t, tt.path, rec.path)
+			assert.Equal(t, tt.query, rec.query)
 			assert.Equal(t, "PVEAPIToken=user@pbs!tokenid=secret", rec.auth)
 		})
 	}
+}
+
+// TestGateway_GetBackupFiltersByBackupID verifies GetBackup lists /snapshots and
+// filters by backup-id, returning a non-nil empty slice (no error) when nothing
+// matches (SPEC: PBS has no single-snapshot GET).
+func TestGateway_GetBackupFiltersByBackupID(t *testing.T) {
+	rec := &reqCapture{}
+	body := `{"data":[{"backup-id":"vm/100/2024","backup-type":"vm"},{"backup-id":"ct/200/2024","backup-type":"ct"},{"backup-id":"vm/100/2024","backup-type":"vm"}]}`
+	srv := mockServer(t, 200, body, rec)
+	g, _ := newTestGateway(t, srv)
+
+	bs, err := g.GetBackup(context.Background(), "backup", "vm/100/2024")
+	require.NoError(t, err)
+	require.Len(t, bs, 2, "only the two vm/100 snapshots should match")
+	for _, b := range bs {
+		assert.Equal(t, "vm/100/2024", b.BackupID)
+	}
+	assert.Equal(t, "/api2/json/admin/datastore/backup/snapshots", rec.path)
+
+	// No match -> empty (non-nil) slice, no error.
+	none, err := g.GetBackup(context.Background(), "backup", "does-not-exist")
+	require.NoError(t, err)
+	assert.Empty(t, none)
+	assert.NotNil(t, none, "should return a non-nil empty slice")
 }
 
 // TestGateway_EmptyDataForGetters verifies null data surfaces EmptyDataError for
@@ -167,8 +196,10 @@ func TestGateway_EmptyDataForGetters(t *testing.T) {
 		call func(*Gateway) error
 	}{
 		{"GetDatastoreStatus", func(g *Gateway) error { _, e := g.GetDatastoreStatus(context.Background(), "backup"); return e }},
-		{"GetBackup", func(g *Gateway) error { _, e := g.GetBackup(context.Background(), "backup", "snap1"); return e }},
-		{"GetBackupNotes", func(g *Gateway) error { _, e := g.GetBackupNotes(context.Background(), "backup", "snap1"); return e }},
+		{"GetBackupNotes", func(g *Gateway) error {
+			_, e := g.GetBackupNotes(context.Background(), "backup", "vm/100/2024", "vm")
+			return e
+		}},
 		{"GetVerifyStatus", func(g *Gateway) error { _, e := g.GetVerifyStatus(context.Background(), "backup", "upid1"); return e }},
 		{"GetPruneStatus", func(g *Gateway) error { _, e := g.GetPruneStatus(context.Background(), "backup", "upid1"); return e }},
 		{"GetPBSVersion", func(g *Gateway) error { _, e := g.GetPBSVersion(context.Background()); return e }},
@@ -194,6 +225,7 @@ func TestGateway_EmptyDataForLists(t *testing.T) {
 	}{
 		{"ListDatastores", func(g *Gateway) error { _, e := g.ListDatastores(context.Background()); return e }},
 		{"ListBackups", func(g *Gateway) error { _, e := g.ListBackups(context.Background(), "backup"); return e }},
+		{"GetBackup", func(g *Gateway) error { _, e := g.GetBackup(context.Background(), "backup", "vm/100/2024"); return e }},
 	}
 
 	for _, tt := range lists {
@@ -215,7 +247,7 @@ func TestGateway_AllMethodErrorBranches(t *testing.T) {
 		{"GetDatastoreStatus", func(g *Gateway) error { _, e := g.GetDatastoreStatus(context.Background(), "s"); return e }},
 		{"ListBackups", func(g *Gateway) error { _, e := g.ListBackups(context.Background(), "s"); return e }},
 		{"GetBackup", func(g *Gateway) error { _, e := g.GetBackup(context.Background(), "s", "snap"); return e }},
-		{"GetBackupNotes", func(g *Gateway) error { _, e := g.GetBackupNotes(context.Background(), "s", "snap"); return e }},
+		{"GetBackupNotes", func(g *Gateway) error { _, e := g.GetBackupNotes(context.Background(), "s", "id", "vm"); return e }},
 		{"GetVerifyStatus", func(g *Gateway) error { _, e := g.GetVerifyStatus(context.Background(), "s", "u"); return e }},
 		{"GetPruneStatus", func(g *Gateway) error { _, e := g.GetPruneStatus(context.Background(), "s", "u"); return e }},
 		{"GetPBSVersion", func(g *Gateway) error { _, e := g.GetPBSVersion(context.Background()); return e }},

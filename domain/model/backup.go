@@ -16,9 +16,10 @@ type Backup struct {
 	Protected   bool            `json:"protected,omitempty"`
 }
 
-// BackupNotes are the notes attached to a backup snapshot from
-// GET /admin/datastore/{store}/snapshot/{snapshot}/notes.
+// BackupNotes are the notes of a backup group as returned by
+// GET /admin/datastore/{store}/group-notes?backup-id=<id>&backup-type=<type>.
+// PBS keeps a comment and free-form notes per backup group.
 type BackupNotes struct {
-	Snapshot string `json:"snapshot"`
-	Notes    string `json:"notes"`
+	Comment string `json:"comment,omitempty"`
+	Notes   string `json:"notes,omitempty"`
 }

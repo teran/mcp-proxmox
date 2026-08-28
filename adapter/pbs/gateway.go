@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"reflect"
 	"strings"
@@ -323,19 +324,37 @@ func (g *Gateway) ListBackups(ctx context.Context, store string) ([]model.Backup
 	return out, nil
 }
 
-// GetBackup returns a single backup snapshot.
-func (g *Gateway) GetBackup(ctx context.Context, store, snapshot string) (*model.Backup, error) {
-	var out model.Backup
-	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+store+"/snapshot/"+snapshot, &out); err != nil {
+// GetBackup returns all backup snapshots in the datastore whose backup-id
+// matches backupID. PBS exposes no single-snapshot GET (the per-snapshot path
+// does not exist); snapshots are listed via GET /admin/datastore/{store}/snapshots
+// and filtered by backup-id, which is the real grouping key (e.g. a VMID).
+// Returns an empty slice (no error) when no snapshot matches.
+func (g *Gateway) GetBackup(ctx context.Context, store, backupID string) ([]model.Backup, error) {
+	all, err := g.ListBackups(ctx, store)
+	if err != nil {
 		return nil, err
 	}
-	return &out, nil
+	out := make([]model.Backup, 0, len(all))
+	for _, b := range all {
+		if b.BackupID == backupID {
+			out = append(out, b)
+		}
+	}
+	return out, nil
 }
 
-// GetBackupNotes returns the notes of a backup snapshot.
-func (g *Gateway) GetBackupNotes(ctx context.Context, store, snapshot string) (*model.BackupNotes, error) {
+// GetBackupNotes returns the notes of a backup group from
+// GET /admin/datastore/{store}/group-notes?backup-id=<id>&backup-type=<type>.
+// The backup-id and backup-type parameters are URL-encoded via url.Values. Only
+// the URL path is logged, never the token or any secrets (SPEC.md §5.4).
+func (g *Gateway) GetBackupNotes(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error) {
+	q := url.Values{}
+	q.Set("backup-id", backupID)
+	q.Set("backup-type", backupType)
+	path := "/admin/datastore/" + store + "/group-notes?" + q.Encode()
+
 	var out model.BackupNotes
-	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+store+"/snapshot/"+snapshot+"/notes", &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, path, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

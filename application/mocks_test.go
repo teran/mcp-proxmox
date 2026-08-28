@@ -146,8 +146,8 @@ type mockPBSGateway struct {
 	listDatastores    func(ctx context.Context) ([]model.Datastore, error)
 	getDatastoreStats func(ctx context.Context, store string) (*model.DatastoreStatus, error)
 	listBackups       func(ctx context.Context, store string) ([]model.Backup, error)
-	getBackup         func(ctx context.Context, store, snapshot string) (*model.Backup, error)
-	getBackupNotes    func(ctx context.Context, store, snapshot string) (*model.BackupNotes, error)
+	getBackup         func(ctx context.Context, store, backupID string) ([]model.Backup, error)
+	getBackupNotes    func(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error)
 	getVerifyStatus   func(ctx context.Context, store, upid string) (*model.VerifyStatus, error)
 	getPruneStatus    func(ctx context.Context, store, upid string) (*model.PruneStatus, error)
 	getPBSVersion     func(ctx context.Context) (*model.PBSVersion, error)
@@ -171,15 +171,15 @@ func (m *mockPBSGateway) ListBackups(ctx context.Context, store string) ([]model
 	}
 	return nil, nil
 }
-func (m *mockPBSGateway) GetBackup(ctx context.Context, store, snapshot string) (*model.Backup, error) {
+func (m *mockPBSGateway) GetBackup(ctx context.Context, store, backupID string) ([]model.Backup, error) {
 	if m.getBackup != nil {
-		return m.getBackup(ctx, store, snapshot)
+		return m.getBackup(ctx, store, backupID)
 	}
 	return nil, nil
 }
-func (m *mockPBSGateway) GetBackupNotes(ctx context.Context, store, snapshot string) (*model.BackupNotes, error) {
+func (m *mockPBSGateway) GetBackupNotes(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error) {
 	if m.getBackupNotes != nil {
-		return m.getBackupNotes(ctx, store, snapshot)
+		return m.getBackupNotes(ctx, store, backupID, backupType)
 	}
 	return nil, nil
 }

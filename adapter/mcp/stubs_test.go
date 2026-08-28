@@ -212,8 +212,8 @@ type stubPBSGateway struct {
 	listDatastores    func(ctx context.Context) ([]model.Datastore, error)
 	getDatastoreStats func(ctx context.Context, store string) (*model.DatastoreStatus, error)
 	listBackups       func(ctx context.Context, store string) ([]model.Backup, error)
-	getBackup         func(ctx context.Context, store, snapshot string) (*model.Backup, error)
-	getBackupNotes    func(ctx context.Context, store, snapshot string) (*model.BackupNotes, error)
+	getBackup         func(ctx context.Context, store, backupID string) ([]model.Backup, error)
+	getBackupNotes    func(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error)
 	getVerifyStatus   func(ctx context.Context, store, upid string) (*model.VerifyStatus, error)
 	getPruneStatus    func(ctx context.Context, store, upid string) (*model.PruneStatus, error)
 	getPBSVersion     func(ctx context.Context) (*model.PBSVersion, error)
@@ -248,23 +248,23 @@ func (s *stubPBSGateway) ListBackups(ctx context.Context, store string) ([]model
 	}
 	return []model.Backup{{BackupID: "vm/100/..."}}, nil
 }
-func (s *stubPBSGateway) GetBackup(ctx context.Context, store, snapshot string) (*model.Backup, error) {
+func (s *stubPBSGateway) GetBackup(ctx context.Context, store, backupID string) ([]model.Backup, error) {
 	if s.fail() {
 		return nil, s.err
 	}
 	if s.getBackup != nil {
-		return s.getBackup(ctx, store, snapshot)
+		return s.getBackup(ctx, store, backupID)
 	}
-	return &model.Backup{BackupID: snapshot}, nil
+	return []model.Backup{{BackupID: backupID}}, nil
 }
-func (s *stubPBSGateway) GetBackupNotes(ctx context.Context, store, snapshot string) (*model.BackupNotes, error) {
+func (s *stubPBSGateway) GetBackupNotes(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error) {
 	if s.fail() {
 		return nil, s.err
 	}
 	if s.getBackupNotes != nil {
-		return s.getBackupNotes(ctx, store, snapshot)
+		return s.getBackupNotes(ctx, store, backupID, backupType)
 	}
-	return &model.BackupNotes{Snapshot: snapshot, Notes: "keep"}, nil
+	return &model.BackupNotes{Comment: "keep", Notes: "keep"}, nil
 }
 func (s *stubPBSGateway) GetVerifyStatus(ctx context.Context, store, upid string) (*model.VerifyStatus, error) {
 	if s.fail() {

@@ -40,21 +40,23 @@ func TestPBSService_Success(t *testing.T) {
 	})
 
 	t.Run("GetBackup", func(t *testing.T) {
-		gw := &mockPBSGateway{getBackup: func(ctx context.Context, store, snapshot string) (*model.Backup, error) {
-			return &model.Backup{BackupID: snapshot}, nil
+		gw := &mockPBSGateway{getBackup: func(ctx context.Context, store, backupID string) ([]model.Backup, error) {
+			return []model.Backup{{BackupID: backupID}}, nil
 		}}
 		got, err := (&PBSService{gw: gw}).GetBackup(context.Background(), "backup", "vm/100/...")
 		require.NoError(t, err)
-		assert.Equal(t, "vm/100/...", got.BackupID)
+		require.Len(t, got, 1)
+		assert.Equal(t, "vm/100/...", got[0].BackupID)
 	})
 
 	t.Run("GetBackupNotes", func(t *testing.T) {
-		gw := &mockPBSGateway{getBackupNotes: func(ctx context.Context, store, snapshot string) (*model.BackupNotes, error) {
-			return &model.BackupNotes{Snapshot: snapshot, Notes: "keep"}, nil
+		gw := &mockPBSGateway{getBackupNotes: func(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error) {
+			return &model.BackupNotes{Comment: "keep", Notes: "keep forever"}, nil
 		}}
-		got, err := (&PBSService{gw: gw}).GetBackupNotes(context.Background(), "backup", "vm/100/...")
+		got, err := (&PBSService{gw: gw}).GetBackupNotes(context.Background(), "backup", "vm/100/...", "vm")
 		require.NoError(t, err)
-		assert.Equal(t, "keep", got.Notes)
+		assert.Equal(t, "keep forever", got.Notes)
+		assert.Equal(t, "keep", got.Comment)
 	})
 
 	t.Run("GetVerifyStatus", func(t *testing.T) {
@@ -95,8 +97,8 @@ func TestPBSService_ErrorPropagation(t *testing.T) {
 		{"ListDatastores", func(s *PBSService) error { _, e := s.ListDatastores(context.Background()); return e }},
 		{"GetDatastoreStatus", func(s *PBSService) error { _, e := s.GetDatastoreStatus(context.Background(), "s"); return e }},
 		{"ListBackups", func(s *PBSService) error { _, e := s.ListBackups(context.Background(), "s"); return e }},
-		{"GetBackup", func(s *PBSService) error { _, e := s.GetBackup(context.Background(), "s", "snap"); return e }},
-		{"GetBackupNotes", func(s *PBSService) error { _, e := s.GetBackupNotes(context.Background(), "s", "snap"); return e }},
+		{"GetBackup", func(s *PBSService) error { _, e := s.GetBackup(context.Background(), "s", "id"); return e }},
+		{"GetBackupNotes", func(s *PBSService) error { _, e := s.GetBackupNotes(context.Background(), "s", "id", "vm"); return e }},
 		{"GetVerifyStatus", func(s *PBSService) error { _, e := s.GetVerifyStatus(context.Background(), "s", "u"); return e }},
 		{"GetPruneStatus", func(s *PBSService) error { _, e := s.GetPruneStatus(context.Background(), "s", "u"); return e }},
 		{"GetPBSVersion", func(s *PBSService) error { _, e := s.GetPBSVersion(context.Background()); return e }},
@@ -106,8 +108,10 @@ func TestPBSService_ErrorPropagation(t *testing.T) {
 	gw.listDatastores = func(ctx context.Context) ([]model.Datastore, error) { return nil, sentinel }
 	gw.getDatastoreStats = func(ctx context.Context, store string) (*model.DatastoreStatus, error) { return nil, sentinel }
 	gw.listBackups = func(ctx context.Context, store string) ([]model.Backup, error) { return nil, sentinel }
-	gw.getBackup = func(ctx context.Context, store, snapshot string) (*model.Backup, error) { return nil, sentinel }
-	gw.getBackupNotes = func(ctx context.Context, store, snapshot string) (*model.BackupNotes, error) { return nil, sentinel }
+	gw.getBackup = func(ctx context.Context, store, backupID string) ([]model.Backup, error) { return nil, sentinel }
+	gw.getBackupNotes = func(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error) {
+		return nil, sentinel
+	}
 	gw.getVerifyStatus = func(ctx context.Context, store, upid string) (*model.VerifyStatus, error) { return nil, sentinel }
 	gw.getPruneStatus = func(ctx context.Context, store, upid string) (*model.PruneStatus, error) { return nil, sentinel }
 	gw.getPBSVersion = func(ctx context.Context) (*model.PBSVersion, error) { return nil, sentinel }

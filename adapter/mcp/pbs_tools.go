@@ -13,11 +13,17 @@ type storeIn struct {
 	Store string `json:"store" jsonschema:"PBS datastore name"`
 }
 
-// backupIn identifies a backup snapshot in a datastore (pbs_backup_get /
-// pbs_backup_notes_get).
+// backupIn identifies a backup group in a datastore (pbs_backup_get).
 type backupIn struct {
 	Store    string `json:"store" jsonschema:"PBS datastore name"`
-	Snapshot string `json:"snapshot" jsonschema:"Backup snapshot ID"`
+	BackupID string `json:"backup_id" jsonschema:"Backup ID / group ID (e.g. a VMID)"`
+}
+
+// backupNotesIn identifies a backup group for notes lookup (pbs_backup_notes_get).
+type backupNotesIn struct {
+	Store      string `json:"store" jsonschema:"PBS datastore name"`
+	BackupID   string `json:"backup_id" jsonschema:"Backup ID / group ID (e.g. a VMID)"`
+	BackupType string `json:"backup_type" jsonschema:"Backup type: vm | ct | host"`
 }
 
 // jobIn identifies a verify/prune job by UPID (pbs_verify_status /
@@ -44,18 +50,18 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 	roTool(s, "pbs_backup_list", "List the backup snapshots in a PBS datastore.", log, func(ctx context.Context, in storeIn) (any, error) {
 		return app.PBS.ListBackups(ctx, in.Store)
 	})
-	roTool(s, "pbs_backup_get", "Get a single backup snapshot.", log, func(ctx context.Context, in backupIn) (any, error) {
-		return app.PBS.GetBackup(ctx, in.Store, in.Snapshot)
+	roTool(s, "pbs_backup_get", "Get all backup snapshots in a PBS datastore for a given backup ID / group ID (e.g. a VMID).", log, func(ctx context.Context, in backupIn) (any, error) {
+		return app.PBS.GetBackup(ctx, in.Store, in.BackupID)
 	})
-	roTool(s, "pbs_backup_notes_get", "Get the notes of a backup snapshot.", log, func(ctx context.Context, in backupIn) (any, error) {
-		return app.PBS.GetBackupNotes(ctx, in.Store, in.Snapshot)
+	roTool(s, "pbs_backup_notes_get", "Get the notes and comment of a PBS backup group (requires backup ID and backup type vm|ct|host).", log, func(ctx context.Context, in backupNotesIn) (any, error) {
+		return app.PBS.GetBackupNotes(ctx, in.Store, in.BackupID, in.BackupType)
 	})
 
 	// --- verify & prune (status polling is read-only) ---
-	roTool(s, "pbs_verify_status", "Get the status of a verify job.", log, func(ctx context.Context, in jobIn) (any, error) {
+	roTool(s, "pbs_verify_status", "Get the status of a PBS verify job by UPID. The UPID comes from a running/known verify job (PBS has no task-list endpoint in this version).", log, func(ctx context.Context, in jobIn) (any, error) {
 		return app.PBS.GetVerifyStatus(ctx, in.Store, in.UPID)
 	})
-	roTool(s, "pbs_prune_status", "Get the status of a prune job.", log, func(ctx context.Context, in jobIn) (any, error) {
+	roTool(s, "pbs_prune_status", "Get the status of a PBS prune job by UPID. The UPID comes from a running/known prune job (PBS has no task-list endpoint in this version).", log, func(ctx context.Context, in jobIn) (any, error) {
 		return app.PBS.GetPruneStatus(ctx, in.Store, in.UPID)
 	})
 
