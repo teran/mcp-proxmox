@@ -86,9 +86,9 @@ func TestJSONRoundTrip(t *testing.T) {
 		{
 			name: "cluster-status",
 			in: ClusterStatus{
-				ID: "cluster/1", Name: "cluster", Type: "cluster", Nodes: 3, Quorum: true, Online: 3,
+				ID: "cluster/1", Name: "cluster", Type: "cluster", Nodes: 3, Quorum: 1, Online: 3,
 			},
-			want: `{"id":"cluster/1","name":"cluster","type":"cluster","nodes":3,"quorate":true,"online":3}`,
+			want: `{"id":"cluster/1","name":"cluster","type":"cluster","nodes":3,"quorate":1,"online":3}`,
 		},
 		{
 			name: "cluster-resource",

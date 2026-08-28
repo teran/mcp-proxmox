@@ -72,13 +72,13 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 		},
 		{
 			name: "GetClusterStatus",
-			body: `{"data":[{"name":"cluster","type":"cluster","quorate":true,"nodes":3}]}`,
+			body: `{"data":[{"name":"cluster","type":"cluster","quorate":1,"nodes":3}]}`,
 			path: "/api2/json/cluster/status",
 			call: func(g *Gateway) error {
 				cs, err := g.GetClusterStatus(context.Background())
 				if assert.NoError(t, err) {
 					require.Len(t, cs, 1)
-					assert.True(t, cs[0].Quorum)
+					assert.Equal(t, 1, cs[0].Quorum)
 				}
 				return err
 			},

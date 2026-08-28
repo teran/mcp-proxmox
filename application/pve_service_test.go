@@ -34,7 +34,7 @@ func TestPVEService_Success(t *testing.T) {
 
 	t.Run("GetClusterStatus", func(t *testing.T) {
 		gw := &mockPVEGateway{getClusterStatus: func(ctx context.Context) ([]model.ClusterStatus, error) {
-			return []model.ClusterStatus{{Name: "cluster", Quorum: true}}, nil
+			return []model.ClusterStatus{{Name: "cluster", Quorum: 1}}, nil
 		}}
 		got, err := (&PVEService{gw: gw}).GetClusterStatus(context.Background())
 		require.NoError(t, err)

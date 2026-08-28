@@ -65,7 +65,7 @@ func (s *stubPVEGateway) GetClusterStatus(ctx context.Context) ([]model.ClusterS
 	if s.getClusterStatus != nil {
 		return s.getClusterStatus(ctx)
 	}
-	return []model.ClusterStatus{{Name: "cluster", Quorum: true}}, nil
+	return []model.ClusterStatus{{Name: "cluster", Quorum: 1}}, nil
 }
 func (s *stubPVEGateway) GetClusterResources(ctx context.Context) ([]model.ClusterResource, error) {
 	if s.fail() {

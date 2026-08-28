@@ -7,7 +7,7 @@ type ClusterStatus struct {
 	Name   string `json:"name"`
 	Type   string `json:"type"`
 	Nodes  int    `json:"nodes,omitempty"`
-	Quorum bool   `json:"quorate,omitempty"`
+	Quorum int    `json:"quorate,omitempty"` // Proxmox returns quorate as 0/1
 	Online int    `json:"online,omitempty"`
 	IP     string `json:"ip,omitempty"`
 	Local  bool   `json:"local,omitempty"`

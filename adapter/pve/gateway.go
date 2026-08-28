@@ -179,14 +179,6 @@ func (g *Gateway) doOnce(ctx context.Context, method, path string, query url.Val
 	req.Header.Set("Authorization", header)
 	req.Header.Set("Accept", "application/json")
 
-	if g.cfg.Logger != nil {
-		// Trace-level request logging logs method + URL path only; the
-		// Authorization header value is never logged (SPEC.md §5.4). Logged via
-		// the ctx-aware logger so lines carry the same session_id/request_id as
-		// the tool and error lines.
-		g.logger.Debugf(ctx, "pve request: %s %s", method, path)
-	}
-
 	client := g.client
 	if client == nil {
 		client = &http.Client{Timeout: defaultTimeout}
@@ -197,12 +189,25 @@ func (g *Gateway) doOnce(ctx context.Context, method, path string, query url.Val
 	}
 	defer resp.Body.Close()
 
+	if g.cfg.Logger != nil {
+		// Request logging carries the upstream HTTP status code so both the
+		// success (2xx) and error paths show it. Method + URL path only; the
+		// Authorization header value is never logged (SPEC.md §5.4). Logged via
+		// the ctx-aware logger so lines carry the same session_id/request_id as
+		// the tool and error lines.
+		g.logger.Debugf(ctx, "pve request: %s %s upstream_http_status_code=%d", method, path, resp.StatusCode)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return &UpstreamError{Op: "read", Err: err}
 	}
 
 	if resp.StatusCode >= http.StatusBadRequest {
+		// Surface the real Proxmox error message at debug level (truncated) so
+		// the journal reveals the exact reason (e.g. an auth/privilege issue).
+		// The body of an error response never contains the API token.
+		g.logger.Debugf(ctx, "pve error response %d: %s", resp.StatusCode, truncate(body))
 		return g.mapHTTPError(resp.StatusCode, body)
 	}
 	return g.decode(body, out)
@@ -481,4 +486,14 @@ func (g *Gateway) GetPVEVersion(ctx context.Context) (*model.PVEVersion, error) 
 		return nil, err
 	}
 	return &out, nil
+}
+
+// truncate bounds an error-response body for debug logging, keeping the log
+// line compact and free of unbounded payloads.
+func truncate(b []byte) string {
+	const max = 300
+	if len(b) <= max {
+		return string(b)
+	}
+	return string(b[:max]) + "..."
 }
