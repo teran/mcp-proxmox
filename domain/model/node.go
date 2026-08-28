@@ -25,7 +25,8 @@ type SwapInfo struct {
 }
 
 // NodeStatus is the status of a single node from GET /nodes/{node}/status.
-type NodeStatus struct {	Node    string    `json:"node"`
+type NodeStatus struct {
+	Node    string    `json:"node"`
 	Status  string    `json:"status"`
 	CPU     float64   `json:"cpu,omitempty"`
 	MaxCPU  int       `json:"maxcpu,omitempty"`
