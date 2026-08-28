@@ -168,9 +168,9 @@ func TestJSONRoundTrip(t *testing.T) {
 			in: Backup{
 				BackupID: "vm/100/2024-01-01T00:00:00Z", BackupTime: 1704067200, BackupType: "vm",
 				Owner: "root@pam", Comment: "nightly", Size: 1024,
-				Files: []string{"vm/100/2024.did", "vm/100/2024.blob"}, Protected: false,
+				Files: json.RawMessage(`[{"filename":"vm/100/2024.did","size":512}]`), Protected: false,
 			},
-			want: `{"backup-id":"vm/100/2024-01-01T00:00:00Z","backup-time":1704067200,"backup-type":"vm","owner":"root@pam","comment":"nightly","size":1024,"files":["vm/100/2024.did","vm/100/2024.blob"]}`,
+			want: `{"backup-id":"vm/100/2024-01-01T00:00:00Z","backup-time":1704067200,"backup-type":"vm","owner":"root@pam","comment":"nightly","size":1024,"files":[{"filename":"vm/100/2024.did","size":512}]}`,
 		},
 		{
 			name: "backup-notes",
