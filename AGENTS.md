@@ -27,13 +27,13 @@ contradiction, raise it with the architect.
   `port.TokenSource` / transport seams (local stdio now, remote OAuth2 later).
 - Reviews structural changes: new packages, cross-layer imports, port/interface
   boundaries. Maintains `SPEC.md` and the architecture invariants (verified by
-  `make arch` / `go-arch-lint`).
+  `go-arch-lint`).
 
 ### Developer
 - Implements features following the layer rules: domain → application → adapter,
   with dependency inversion (application depends only on domain ports).
 - Writes code covered by unit tests (target **95%+** on `cover-core`).
-- Runs `make lint`, `make test`, `make arch`, `make mutation` locally before pushing.
+- Runs `golangci-lint`, `go test`, `go-arch-lint`, and gremlins locally before pushing.
 - Registers MCP tools only in `adapter/mcp`; a backend's tools only when its
   service is non-nil. Read-only (query) tools are always registered for an
   enabled backend; mutation tools are registered only when `Deps.EnableMutations`
@@ -42,7 +42,7 @@ contradiction, raise it with the architect.
 ### QA
 - Owns the test strategy: hermetic unit tests (port mocks), `httptest` mocks of
   the **real** Proxmox VE / PBS JSON APIs, and coverage gates.
-- Ensures **95%+** coverage (`make cover-core`) and acceptable gremlins mutation
+- Ensures **95%+** coverage (`cover-core`) and acceptable gremlins mutation
   score (≥80% on `domain` and `application`).
 - Reviews test quality, not just quantity; adds tests where mutation shows gaps.
 
@@ -58,8 +58,8 @@ contradiction, raise it with the architect.
 - Verifies the auth adapters don't leak credentials via error messages or logs.
 
 ### DevOps
-- Owns `Makefile`, CI pipeline (lint → arch → test → cover → mutation → build → sec).
-- Maintains reproducible local run (`make build` / `go run ./cmd/mcp-proxmox`) over stdio.
+- Owns the CI pipeline (lint → arch → test → cover → mutation → build → sec).
+- Maintains reproducible local run (goreleaser build / `go run ./cmd/mcp-proxmox`) over stdio.
 - Owns **release/build via [goreleaser](https://goreleaser.com/)** (`.goreleaser.yml`):
   cross-compiles binaries/archives and auto-releases from git tags; the `Dockerfile`
   consumes the goreleaser artifact (it does **not** compile).
@@ -148,7 +148,7 @@ contradiction, raise it with the architect.
   **never** logged.
 
 ### Tests
-- Coverage target: **95%+** across real code (`make cover-core`, which excludes
+- Coverage target: **95%+** across real code (`cover-core`, which excludes
   generated mocks and the `cmd/mcp-proxmox` composition root) — deliberately
   stricter than the org's 85% reference.
 - Use mocks for `domain/port` interfaces in application/interface tests.
@@ -174,7 +174,7 @@ contradiction, raise it with the architect.
 - `golangci-lint run` must pass with no findings (`.golangci.yml`, v2; linters
   incl. `errcheck`, `govet`, `staticcheck`, `ineffassign`, `unused`, `revive`,
   `depguard`, `nakedret`, plus `gosec`).
-- `gosec` must pass (`make sec`).
+- `gosec` must pass.
 - Coverage must meet the **95%** threshold on `cover-core`.
 - gremlins mutation score must not regress below 80% on `domain`/`application`.
 - No secrets in code, config, logs, or tool output.
@@ -183,57 +183,36 @@ contradiction, raise it with the architect.
 
 ## 3. Commands
 
-All commands are wrapped in a `Makefile`. Prefer `make <target>`.
-
-```makefile
-build       # CGO_ENABLED=0 go build -o bin/mcp-proxmox ./cmd/mcp-proxmox
-test        # go test ./... -cover
-coverage    # go test ./... -coverprofile=coverage.out && go tool cover -func=coverage.out
-coverage-html # go tool cover -html=coverage.out
-cover-core  # real-code coverage excluding generated mocks and cmd/mcp-proxmox (awk-filtered into coverage-core.out)
-lint        # golangci-lint run ./...
-fmt         # gofmt -l .
-vet         # go vet ./...
-arch        # go-arch-lint check   (architecture / dependency rule)
-mutation    # gremlins unleash on ./application then ./domain (generated mocks excluded)
-sec         # gosec ./...
-format      # gofmt -w . && goimports -w .
-tidy        # go mod tidy
-image       # goreleaser build into dist/mcp-proxmox, then docker build (isolated, no compile)
-clean       # remove build artifacts
-ci          # lint arch test cover mutation build  (full pipeline)
-```
-
-Example manual commands:
+There is **no Makefile** — builds are done with **goreleaser** (`.goreleaser.yml`),
+and the quality gates are run directly.
 
 ```bash
-# build
-go build ./...
+# build / release (goreleaser)
+goreleaser build --snapshot --clean     # local snapshot build into dist/
+goreleaser release --clean              # release from a git tag
+go build ./...                          # quick compile check
 
-# vet
+# quality gates
+golangci-lint run ./...                 # lint
+go-arch-lint check                      # architecture / dependency rule
+go test ./...                           # hermetic tests (no network)
 go vet ./...
+gofmt -l .                              # formatting check
+gosec ./...                             # security scan
+gremlins unleash --workers 4 --timeout-coefficient 50 ./application -E '.*mocks.*'
+gremlins unleash --workers 4 --timeout-coefficient 50 ./domain   # mutation on core
 
-# architecture boundaries (inward-only) via go-arch-lint
-make arch   # or: go-arch-lint check
-
-# tests + coverage (hermetic, no network)
-make cover
-
-# single package
-go test ./adapter/mcp -cover
-
-# lint
-make lint
-
-# mutation testing
-make mutation
+# real-code coverage (excludes generated mocks and cmd/mcp-proxmox)
+go test ./... -coverprofile=coverage.out
+awk '!/\/cmd\/mcp-proxmox\//' coverage.out > coverage-core.out
+go tool cover -func=coverage-core.out | tail -1
 ```
 
 **Version/build:** the version is injected via ldflags from the nearest git tag
-(`make build VERSION=x.y.z` to override; default `v0.0.0-dev`) and printed by the
-`-version` flag (`mcp-proxmox <version>`). `make image` builds the linux/amd64
-binary with goreleaser into `dist/mcp-proxmox`, then `docker build` consumes it
-(the `Dockerfile` does **not** compile).
+(`main.version={{ .Version }}` in `.goreleaser.yml`; default `v0.0.0-dev`) and
+printed by the `-version` flag (`mcp-proxmox <version>`). The `Dockerfile`
+consumes the goreleaser artifact from `dist/` — it does **not** compile; build
+the binary first with `goreleaser build --snapshot --clean`.
 
 ---
 

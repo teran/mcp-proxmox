@@ -63,49 +63,41 @@ and the composition root; the core never sees it.
 
 ## Build
 
-A `Makefile` wraps the common tasks; you can also use the Go toolchain directly.
+Builds use **goreleaser** (`.goreleaser.yml`); you can also use the Go toolchain
+directly.
 
 ```sh
-# Build the binary into ./bin/mcp-proxmox
-make build
+# Local snapshot build via goreleaser into dist/
+goreleaser build --snapshot --clean
 
-# Build everything
+# Release from a git tag
+goreleaser release --clean
+
+# Quick compile check / plain build
 go build ./...
-
-# Build the binary into ./mcp-proxmox (plain Go)
 go build -o mcp-proxmox ./cmd/mcp-proxmox
 ```
 
-The resulting binary is `./bin/mcp-proxmox` (or `./mcp-proxmox` for the plain `go build`).
-
 ### Version injection
 
-The build version is injected via the linker (`-ldflags "-X main.version=..."`).
-It is taken from the nearest git tag (semver) with a `v0.0.0-dev` fallback, and
-can be overridden explicitly:
-
-```sh
-make build                        # version from git tag, or v0.0.0-dev
-make build VERSION=v1.2.3         # force a specific version
-```
-
-`goreleaser` injects the version automatically (`.goreleaser.yml` sets
-`-X main.version={{ .Version }}`). A plain `go build ./cmd/mcp-proxmox` without
-ldflags uses the `v0.0.0-dev` default.
+The build version is injected via the linker. `goreleaser` injects it
+automatically (`.goreleaser.yml` sets `-X main.version={{ .Version }}`), taken
+from the nearest git tag (semver) with a `v0.0.0-dev` fallback. A plain
+`go build ./cmd/mcp-proxmox` without ldflags uses the `v0.0.0-dev` default.
 
 Query the version at runtime with the `-version` flag:
 
 ```sh
-./bin/mcp-proxmox -version   # prints e.g. "mcp-proxmox v0.0.0-dev" and exits 0
+./dist/mcp-proxmox_linux_amd64/mcp-proxmox -version   # e.g. "mcp-proxmox v0.0.0-dev"
 ```
 
 ### Lint, format, vet and architecture
 
 ```sh
-make lint        # golangci-lint run (config: .golangci.yml)
-make fmt         # gofmt -l .
-make vet         # go vet ./...
-make arch        # go-arch-lint check  (clean-architecture boundaries)
+golangci-lint run ./...   # golangci-lint run (config: .golangci.yml)
+gofmt -l .                # formatting check
+go vet ./...              # vet
+go-arch-lint check        # clean-architecture boundaries
 ```
 
 ---
@@ -320,18 +312,25 @@ client as a subprocess (see the client configuration below).
 ## Testing and lint
 
 ```sh
-make test         # go test ./...
-make coverage     # tests + total coverage line
-make coverage-html # coverage report in the browser
-make cover-core   # real-code coverage excluding generated mocks + cmd composition root
-make mutation     # gremlins mutation testing on domain + application
-make sec          # gosec ./...
-
-# Raw commands
+# hermetic tests (no network)
 go test ./...
+
+# coverage
 go test ./... -cover
 go test ./... -coverprofile=coverage.out
 go tool cover -html=coverage.out
+
+# real-code coverage (excludes generated mocks + cmd composition root)
+go test ./... -coverprofile=coverage.out
+awk '!/\/cmd\/mcp-proxmox\//' coverage.out > coverage-core.out
+go tool cover -func=coverage-core.out | tail -1
+
+# quality gates
+golangci-lint run ./...
+go-arch-lint check
+gosec ./...
+gremlins unleash --workers 4 --timeout-coefficient 50 ./application -E '.*mocks.*'
+gremlins unleash --workers 4 --timeout-coefficient 50 ./domain
 ```
 
 Design coverage target is **95%+** (measured by `cover-core`, excluding generated
@@ -355,9 +354,6 @@ GOOS=linux GOARCH=amd64 goreleaser build --snapshot --clean \
 
 # 2) Build the image (no go build inside)
 docker build -t mcp-proxmox .
-
-# Or do both in one step
-make image
 ```
 
 ```sh

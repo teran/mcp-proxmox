@@ -38,7 +38,7 @@ mcp-proxmox/
 │   ├── logging/                 # logrus setup, AppLogger, slog→logrus, WithSession
 │   └── mcp/                     # go-sdk server assembly + tool registry
 ├── go.mod / go.sum              # module github.com/teran/mcp-proxmox, go 1.27.0
-├── Makefile, .golangci.yml, .go-arch-lint.yml, gremlins.toml,
+├── .golangci.yml, .go-arch-lint.yml, gremlins.toml,
 ├── Dockerfile, .goreleaser.yml, .dockerignore, .gitignore,
 ├── .gitlab-ci.yml, .forgejo/workflows/ci.yml
 ├── SPEC.md (authoritative), AGENTS.md, README.md, ARCHITECTURE.md (this file)
@@ -52,7 +52,7 @@ lives at the repo root. Dependency rule points **inward only**:
 domain/model ← domain/port ← application ← adapter/* ← cmd/mcp-proxmox
 ```
 
-Constraints enforced by `make arch` (`.go-arch-lint.yml`) and the `depguard`
+Constraints enforced by `go-arch-lint check` (`.go-arch-lint.yml`) and the `depguard`
 rule in `.golangci.yml`:
 
 - `domain/*`, `application/*` never import go-sdk, `net/http`, logrus,

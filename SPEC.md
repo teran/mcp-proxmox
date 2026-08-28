@@ -117,10 +117,9 @@ mcp-proxmox/
 │   ├── logging/                 # logrus setup + slog→logrus adapter + AppLogger
 │   └── mcp/                     # go-sdk server assembly + tool registry
 ├── go.mod / go.sum
-├── Makefile                     # build/test/coverage/lint/fmt/vet/arch/mutation/sec/image/clean
 ├── Dockerfile                   # minimal scratch runtime (consumes goreleaser artifact)
 ├── .goreleaser.yml              # cross-compile + semver version injection (ldflags)
-├── .go-arch-lint.yml            # clean-architecture boundaries (make arch)
+├── .go-arch-lint.yml            # clean-architecture boundaries (go-arch-lint check)
 ├── .golangci.yml                # golangci-lint v2 + depguard clean-arch rule
 ├── gremlins.toml                # mutation-testing config (domain/application)
 ├── .gitlab-ci.yml               # GitLab pipeline (lint → arch → test → cover → mutation → build)
@@ -136,7 +135,7 @@ mcp-proxmox/
 **Clean architecture without `internal`.** Every package lives at the repo root
 and is public; the core (`domain` + `application`) has zero dependencies on the
 go-sdk, `net/http`, logrus, or any Proxmox client. This is a customer requirement
-and is enforced by `.go-arch-lint.yml` (`make arch` / `go-arch-lint check`), not
+and is enforced by `.go-arch-lint.yml` (`go-arch-lint check`), not
 by a hidden `internal/` directory. Dependencies point inward only through the
 `domain/port` interfaces.
 
@@ -346,16 +345,14 @@ type Config struct {
 ### 4.6 Version and build
 
 The binary version is a semver injected at build time via the linker
-(`-X main.version={{ .Version }}` in `.goreleaser.yml`, or
-`-X main.version=$(VERSION)` in the `Makefile`, where `VERSION ?=` is the
-nearest git tag with a `v0.0.0-dev` fallback). A plain `go build` without
-ldflags uses the `v0.0.0-dev` default. The `-version` flag prints
-`mcp-proxmox <version>` and exits 0.
+(`-X main.version={{ .Version }}` in `.goreleaser.yml`), using the nearest git
+tag with a `v0.0.0-dev` fallback. A plain `go build` without ldflags uses the
+`v0.0.0-dev` default. The `-version` flag prints `mcp-proxmox <version>` and
+exits 0.
 
 The container image build is **isolated**: the `Dockerfile` does not compile —
-it consumes a goreleaser artifact from `dist/mcp-proxmox` (see `make image`),
-producing a minimal `FROM scratch` runtime with only the static binary and the
-CA bundle.
+it consumes a goreleaser artifact from `dist/mcp-proxmox`, producing a minimal
+`FROM scratch` runtime with only the static binary and the CA bundle.
 
 ---
 
@@ -611,32 +608,45 @@ requirement). The table-driven tests cover success, API `errors`, `401 →
 ErrUnauthorized`, `500 → retry then UpstreamError`, empty `data`, invalid JSON,
 missing token, and (for `adapter/mcp`) backend-disabled tool absence.
 
-`make cover-core` reports real-code coverage excluding generated mocks and the
-`cmd/mcp-proxmox` composition root (see Makefile), so the 95%+ gate is measured
-on the logic that matters. Mutation testing (gremlins) targets `domain` and
-`application`.
+`cover-core` reports real-code coverage excluding generated mocks and the
+`go test ./... -coverprofile=coverage.out` filtered via awk into
+`coverage-core.out` (excludes generated mocks and the `cmd/mcp-proxmox`
+composition root), so the 95%+ gate is measured on the logic that matters.
+Mutation testing (gremlins) targets `domain` and `application`.
 
 ### 8.3 Lint and conventions
 
 - `gofmt` / `go vet` clean; `golangci-lint` v2 per `.golangci.yml` with
   `errcheck`, `govet`, `staticcheck`, `ineffassign`, `unused`, `revive`,
-  `depguard`, `nakedret`, plus `gosec` (security). `make sec` runs `gosec ./...`.
+  `depguard`, `nakedret`, plus `gosec` (security).
 - Comments and code in English; package-level doc comments on exported types.
 - No `internal` package (customer requirement); all packages public.
 - `domain/*` and `application/*` must not import the MCP SDK, logrus, `net/http`,
-  or any Proxmox client (enforced by review, by `.go-arch-lint.yml` / `make arch`,
-  and by the `depguard` clean-arch rule in `.golangci.yml`). `net/http` is
-  confined to `adapter/pve` + `adapter/pbs`; logrus to `adapter/logging`;
-  go-sdk to `adapter/mcp` + `cmd/mcp-proxmox`.
+  or any Proxmox client (enforced by review, by `.go-arch-lint.yml` /
+  `go-arch-lint check`, and by the `depguard` clean-arch rule in
+  `.golangci.yml`). `net/http` is confined to `adapter/pve` + `adapter/pbs`;
+  logrus to `adapter/logging`; go-sdk to `adapter/mcp` + `cmd/mcp-proxmox`.
 - **Mutation testing:** `gremlins unleash` on `domain` + `application` with
   efficacy ≥ 80% (config in `gremlins.toml`; generated mocks excluded).
 
-### 8.4 Makefile targets
+### 8.4 Build and quality gates
 
-`build`, `test`, `coverage`, `coverage-html`, `cover-core`, `lint`, `fmt`, `vet`,
-`arch`, `mutation`, `sec`, `image`, `clean` — mirroring `mcp-regcloud` and
-`mcp-entertainment` (the gremlins `mutation` target and `cover-core` are adopted
-from `mcp-entertainment`).
+There is **no Makefile**. Builds use **goreleaser** (`.goreleaser.yml`);
+quality gates run directly:
+
+```bash
+golangci-lint run ./...   # lint
+go-arch-lint check        # architecture / dependency rule
+go test ./...             # hermetic tests
+go vet ./... && gofmt -l .
+gosec ./...               # security
+gremlins unleash --workers 4 --timeout-coefficient 50 ./application -E '.*mocks.*'
+gremlins unleash --workers 4 --timeout-coefficient 50 ./domain
+```
+
+The CI pipeline (`.gitlab-ci.yml`, `.forgejo/workflows/ci.yml`) runs lint →
+test → cover → mutation → build; releases are built and published by
+`goreleaser release --clean` on git tags.
 
 ---
 
