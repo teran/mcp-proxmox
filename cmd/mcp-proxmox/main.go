@@ -94,7 +94,7 @@ func main() {
 	}
 
 	if cfg.PBSEnabled() {
-		pbsToken := token.NewStaticTokenSource(cfg.PBSToken)
+		pbsToken := token.NewPBSStaticTokenSource(cfg.PBSToken)
 		pbsGW := pbs.NewGateway(pbs.Config{
 			Endpoint:     cfg.PBSEndpoint,
 			TokenSource:  pbsToken,

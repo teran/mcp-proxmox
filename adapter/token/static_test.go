@@ -16,6 +16,7 @@ func TestStaticTokenSource_AuthorizationHeader(t *testing.T) {
 		raw  string
 		want string
 		werr bool
+		pbs  bool
 	}{
 		{
 			name: "valid pve token",
@@ -23,9 +24,10 @@ func TestStaticTokenSource_AuthorizationHeader(t *testing.T) {
 			want: "PVEAPIToken=user@pam!tokenid=secret",
 		},
 		{
-			name: "valid pbs token",
+			name: "valid pbs token uses pbs scheme",
 			raw:  "user@pbs!tokenid=secret",
-			want: "PVEAPIToken=user@pbs!tokenid=secret",
+			want: "PBSAPIToken=user@pbs!tokenid=secret",
+			pbs:  true,
 		},
 		{
 			name: "token with leading/trailing spaces is trimmed only for emptiness check",
@@ -46,7 +48,12 @@ func TestStaticTokenSource_AuthorizationHeader(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewStaticTokenSource(tt.raw)
+			var s *StaticTokenSource
+			if tt.pbs {
+				s = NewPBSStaticTokenSource(tt.raw)
+			} else {
+				s = NewStaticTokenSource(tt.raw)
+			}
 			got, err := s.AuthorizationHeader(context.Background())
 			if tt.werr {
 				require.Error(t, err)
