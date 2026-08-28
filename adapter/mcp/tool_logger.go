@@ -57,3 +57,15 @@ func (t toolLogger) Errorf(ctx context.Context, format string, args ...any) {
 	}
 	t.log.Errorf(format, args...)
 }
+
+// ErrorfStatus logs an error line, additionally tagging it with the upstream
+// HTTP status code (as the upstream_http_status_code field) so the real
+// Proxmox/PBS status is visible in the journal alongside the message. When no
+// logrus logger is available it falls back to the plain AppLogger.
+func (t toolLogger) ErrorfStatus(ctx context.Context, status int, format string, args ...any) {
+	if e := t.entry(ctx); e != nil {
+		e.WithField("upstream_http_status_code", status).Errorf(format, args...)
+		return
+	}
+	t.log.Errorf(format, args...)
+}

@@ -4,6 +4,8 @@ import (
 	"context"
 
 	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/teran/mcp-proxmox/domain/port"
 )
 
 // roTool registers a read-only tool. It wraps mcpSDK.AddTool so every read-only
@@ -15,7 +17,11 @@ func roTool[In any, Out any](s *mcpSDK.Server, name, desc string, log toolLogger
 	mcpSDK.AddTool(s, &mcpSDK.Tool{Name: name, Description: desc}, func(ctx context.Context, _ *mcpSDK.CallToolRequest, in In) (*mcpSDK.CallToolResult, Out, error) {
 		out, err := fn(ctx, in)
 		if err != nil {
-			log.Errorf(ctx, "%s: %v", name, err)
+			if status, ok := port.HTTPStatus(err); ok {
+				log.ErrorfStatus(ctx, status, "%s: %v", name, err)
+			} else {
+				log.Errorf(ctx, "%s: %v", name, err)
+			}
 			var zero Out
 			return nil, zero, err
 		}

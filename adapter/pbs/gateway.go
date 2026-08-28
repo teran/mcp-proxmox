@@ -43,14 +43,15 @@ type Config struct {
 type Gateway struct {
 	cfg    Config
 	client *http.Client
-	tlsErr error // set when CACertPath is configured but fails to load/parse
+	logger port.CtxLogger // ctx-aware (session_id/request_id) logging; nil-safe
+	tlsErr error          // set when CACertPath is configured but fails to load/parse
 }
 
 // NewGateway creates a Gateway. When CACertPath is set, a client whose
 // transport carries the custom CA in its TLS RootCAs is prepared (TLS
 // verification is always on — there is no insecure_skip_verify switch).
 func NewGateway(cfg Config) *Gateway {
-	g := &Gateway{cfg: cfg}
+	g := &Gateway{cfg: cfg, logger: port.NewCtxLogger(cfg.Logger)}
 	g.client, g.tlsErr = buildClient(cfg)
 	return g
 }
@@ -176,8 +177,10 @@ func (g *Gateway) doOnce(ctx context.Context, method, path string, out any) erro
 
 	if g.cfg.Logger != nil {
 		// Trace-level request logging logs method + URL path only; the
-		// Authorization header value is never logged (SPEC.md §5.4).
-		g.cfg.Logger.Debugf("pbs request: %s %s", method, path)
+		// Authorization header value is never logged (SPEC.md §5.4). Logged via
+		// the ctx-aware logger so lines carry the same session_id/request_id as
+		// the tool and error lines.
+		g.logger.Debugf(ctx, "pbs request: %s %s", method, path)
 	}
 
 	client := g.client
@@ -240,11 +243,11 @@ func (g *Gateway) decode(body []byte, out any) error {
 func (g *Gateway) mapHTTPError(status int, body []byte) error {
 	switch status {
 	case http.StatusUnauthorized:
-		return port.ErrUnauthorized
+		return &port.HTTPStatusError{Status: status, Err: port.ErrUnauthorized}
 	case http.StatusForbidden:
-		return port.ErrForbidden
+		return &port.HTTPStatusError{Status: status, Err: port.ErrForbidden}
 	case http.StatusNotFound:
-		return port.ErrNotFound
+		return &port.HTTPStatusError{Status: status, Err: port.ErrNotFound}
 	}
 	if status >= 500 {
 		return &UpstreamError{Op: "http", Status: status, Err: fmt.Errorf("pbs: HTTP status %d", status)}

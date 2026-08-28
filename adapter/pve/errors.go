@@ -29,6 +29,10 @@ func (e *UpstreamError) Error() string {
 
 func (e *UpstreamError) Unwrap() error { return e.Err }
 
+// StatusCode exposes the upstream HTTP status (0 for non-HTTP ops, so
+// port.HTTPStatus filters it out).
+func (e *UpstreamError) StatusCode() int { return e.Status }
+
 // APIError is a semantic error from the Proxmox JSON body ({"errors": {...}} or
 // the data/message envelope). It is never retried.
 type APIError struct {
