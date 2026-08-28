@@ -44,13 +44,13 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 	}{
 		{
 			name: "ListDatastores",
-			body: `{"data":[{"name":"backup","path":"/backup","keep-daily":7}]}`,
+			body: `{"data":[{"store":"backup","path":"/backup","keep-daily":7}]}`,
 			path: "/api2/json/admin/datastore",
 			call: func(g *Gateway) error {
 				ds, err := g.ListDatastores(context.Background())
 				if assert.NoError(t, err) {
 					require.Len(t, ds, 1)
-					assert.Equal(t, "backup", ds[0].Name)
+					assert.Equal(t, "backup", ds[0].Store)
 					assert.Equal(t, 7, ds[0].KeepDaily)
 				}
 				return err

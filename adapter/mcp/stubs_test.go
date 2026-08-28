@@ -228,7 +228,7 @@ func (s *stubPBSGateway) ListDatastores(ctx context.Context) ([]model.Datastore,
 	if s.listDatastores != nil {
 		return s.listDatastores(ctx)
 	}
-	return []model.Datastore{{Name: "backup"}}, nil
+	return []model.Datastore{{Store: "backup"}}, nil
 }
 func (s *stubPBSGateway) GetDatastoreStatus(ctx context.Context, store string) (*model.DatastoreStatus, error) {
 	if s.fail() {

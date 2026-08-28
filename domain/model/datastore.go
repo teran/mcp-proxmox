@@ -2,9 +2,13 @@ package model
 
 // Datastore is a PBS datastore as returned by GET /admin/datastore.
 type Datastore struct {
-	Name        string `json:"name"`
-	Path        string `json:"path,omitempty"`
-	Comment     string `json:"comment,omitempty"`
+	Store   string `json:"store"` // datastore name (the "store" field)
+	Path    string `json:"path,omitempty"`
+	Comment string `json:"comment,omitempty"`
+
+	BackendType string `json:"backend-type,omitempty"`
+	MountStatus string `json:"mount-status,omitempty"`
+
 	KeepDaily   int    `json:"keep-daily,omitempty"`
 	KeepWeekly  int    `json:"keep-weekly,omitempty"`
 	KeepMonthly int    `json:"keep-monthly,omitempty"`

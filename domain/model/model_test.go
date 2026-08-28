@@ -151,10 +151,10 @@ func TestJSONRoundTrip(t *testing.T) {
 		{
 			name: "datastore",
 			in: Datastore{
-				Name: "backup", Path: "/backup", Comment: "primary", KeepDaily: 7, KeepWeekly: 4,
+				Store: "backup", Path: "/backup", Comment: "primary", KeepDaily: 7, KeepWeekly: 4,
 				KeepMonthly: 6, KeepYearly: 2, NotifyUser: "root@pam", GC: "sun", Verify: "mon",
 			},
-			want: `{"name":"backup","path":"/backup","comment":"primary","keep-daily":7,"keep-weekly":4,"keep-monthly":6,"keep-yearly":2,"notify-user":"root@pam","gc-schedule":"sun","verify-new":"mon"}`,
+			want: `{"store":"backup","path":"/backup","comment":"primary","keep-daily":7,"keep-weekly":4,"keep-monthly":6,"keep-yearly":2,"notify-user":"root@pam","gc-schedule":"sun","verify-new":"mon"}`,
 		},
 		{
 			name: "datastore-status",

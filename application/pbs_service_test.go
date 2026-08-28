@@ -14,7 +14,7 @@ import (
 func TestPBSService_Success(t *testing.T) {
 	t.Run("ListDatastores", func(t *testing.T) {
 		gw := &mockPBSGateway{listDatastores: func(ctx context.Context) ([]model.Datastore, error) {
-			return []model.Datastore{{Name: "backup"}}, nil
+			return []model.Datastore{{Store: "backup"}}, nil
 		}}
 		got, err := (&PBSService{gw: gw}).ListDatastores(context.Background())
 		require.NoError(t, err)

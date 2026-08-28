@@ -53,7 +53,7 @@ func TestAppServicesWired(t *testing.T) {
 	app := New(nopAppLogger{}, "v1.0.0",
 		WithPVE(&mockPVEGateway{getNextID: func(ctx context.Context) (string, error) { return "42", nil }}),
 		WithPBS(&mockPBSGateway{listDatastores: func(ctx context.Context) ([]model.Datastore, error) {
-			return []model.Datastore{{Name: "backup"}}, nil
+			return []model.Datastore{{Store: "backup"}}, nil
 		}}),
 	)
 

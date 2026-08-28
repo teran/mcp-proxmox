@@ -70,14 +70,14 @@ func mockServer(t *testing.T, status int, body string, rec *reqCapture) *httptes
 
 func TestGateway_ListDatastores_Success(t *testing.T) {
 	rec := &reqCapture{}
-	srv := mockServer(t, 200, `{"data":[{"name":"backup","path":"/backup"}]}`, rec)
+	srv := mockServer(t, 200, `{"data":[{"store":"backup","path":"/backup"}]}`, rec)
 	g, _ := newTestGateway(t, srv)
 
 	ds, err := g.ListDatastores(context.Background())
 	skipIfStub(t, err)
 	require.NoError(t, err)
 	require.Len(t, ds, 1)
-	assert.Equal(t, "backup", ds[0].Name)
+	assert.Equal(t, "backup", ds[0].Store)
 
 	assert.Equal(t, http.MethodGet, rec.method)
 	assert.Equal(t, "/api2/json/admin/datastore", rec.path)
