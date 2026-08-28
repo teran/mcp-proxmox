@@ -28,7 +28,7 @@ type VMConfig struct {
 	OSType   string            `json:"ostype,omitempty"`
 	Boot     string            `json:"boot,omitempty"`
 	Template int               `json:"template,omitempty"`
-	Agent    int               `json:"agent,omitempty"`
+	Agent    string            `json:"agent,omitempty"`
 	Networks map[string]string `json:"net,omitempty"`
 	Disks    map[string]string `json:"scsi,omitempty"`
 	Storage  map[string]string `json:"ide,omitempty"`
@@ -50,5 +50,5 @@ type VMStatus struct {
 	MaxDisk   int64   `json:"maxdisk,omitempty"`
 	QMPStatus string  `json:"qmpstatus,omitempty"`
 	Lock      string  `json:"lock,omitempty"`
-	Agent     string  `json:"agent,omitempty"`
+	Agent     int     `json:"agent,omitempty"` // Proxmox returns agent as 0/1 in status
 }

@@ -45,19 +45,19 @@ func TestJSONRoundTrip(t *testing.T) {
 			name: "vm-config",
 			in: VMConfig{
 				VMID: 100, Name: "web", Cores: 2, Sockets: 1, Memory: 1024, Balloon: 512,
-				OSType: "l26", Boot: "order=scsi0", Template: 0, Agent: 1,
+				OSType: "l26", Boot: "order=scsi0", Template: 0, Agent: "enabled",
 				Networks: map[string]string{"net0": "virtio=AA:BB:CC"}, Disks: map[string]string{"scsi0": "local:32"},
 				Storage: map[string]string{"ide2": "local:iso.iso"}, Tags: "web",
 			},
-			want: `{"vmid":100,"name":"web","cores":2,"sockets":1,"memory":1024,"balloon":512,"ostype":"l26","boot":"order=scsi0","agent":1,"net":{"net0":"virtio=AA:BB:CC"},"scsi":{"scsi0":"local:32"},"ide":{"ide2":"local:iso.iso"},"tags":"web"}`,
+			want: `{"vmid":100,"name":"web","cores":2,"sockets":1,"memory":1024,"balloon":512,"ostype":"l26","boot":"order=scsi0","agent":"enabled","net":{"net0":"virtio=AA:BB:CC"},"scsi":{"scsi0":"local:32"},"ide":{"ide2":"local:iso.iso"},"tags":"web"}`,
 		},
 		{
 			name: "vm-status",
 			in: VMStatus{
 				VMID: 100, Status: "running", Name: "web", Node: "pve1", Uptime: 500,
-				CPU: 0.25, Mem: 256, MaxMem: 1024, Disk: 5, MaxDisk: 32, QMPStatus: "running", Lock: "", Agent: "running",
+				CPU: 0.25, Mem: 256, MaxMem: 1024, Disk: 5, MaxDisk: 32, QMPStatus: "running", Lock: "", Agent: 1,
 			},
-			want: `{"vmid":100,"status":"running","name":"web","node":"pve1","uptime":500,"cpu":0.25,"mem":256,"maxmem":1024,"disk":5,"maxdisk":32,"qmpstatus":"running","agent":"running"}`,
+			want: `{"vmid":100,"status":"running","name":"web","node":"pve1","uptime":500,"cpu":0.25,"mem":256,"maxmem":1024,"disk":5,"maxdisk":32,"qmpstatus":"running","agent":1}`,
 		},
 		{
 			name: "lxc",
@@ -103,7 +103,7 @@ func TestJSONRoundTrip(t *testing.T) {
 			name: "storage",
 			in: Storage{
 				Storage: "local", Type: "dir", Status: "available", Content: "images,rootdir",
-				Nodes: "pve1", Shared: false, Active: true, Enabled: true, Path: "/var/lib/vz",
+				Nodes: "pve1", Shared: 0, Active: true, Enabled: true, Path: "/var/lib/vz",
 			},
 			want: `{"storage":"local","type":"dir","status":"available","content":"images,rootdir","nodes":"pve1","active":true,"enabled":true,"path":"/var/lib/vz"}`,
 		},

@@ -7,7 +7,7 @@ type Storage struct {
 	Status  string `json:"status,omitempty"`
 	Content string `json:"content,omitempty"`
 	Nodes   string `json:"nodes,omitempty"`
-	Shared  bool   `json:"shared,omitempty"`
+	Shared  int    `json:"shared,omitempty"` // Proxmox returns shared as 0/1
 	Active  bool   `json:"active,omitempty"`
 	Enabled bool   `json:"enabled,omitempty"`
 	Path    string `json:"path,omitempty"`
