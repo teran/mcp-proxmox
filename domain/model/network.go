@@ -12,7 +12,7 @@ type NetworkInterface struct {
 	Gateway     string `json:"gateway,omitempty"`
 	Method      string `json:"method,omitempty"`
 	VLANID      int    `json:"vlan-id,omitempty"`
-	Active      bool   `json:"active,omitempty"`
+	Active      int    `json:"active,omitempty"` // Proxmox returns active as 0/1
 	Status      string `json:"status,omitempty"`
 	Comments    string `json:"comments,omitempty"`
 }

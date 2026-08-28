@@ -8,7 +8,7 @@ type Storage struct {
 	Content string `json:"content,omitempty"`
 	Nodes   string `json:"nodes,omitempty"`
 	Shared  int    `json:"shared,omitempty"` // Proxmox returns shared as 0/1
-	Active  bool   `json:"active,omitempty"`
+	Active  int    `json:"active,omitempty"` // Proxmox returns active as 0/1
 	Enabled bool   `json:"enabled,omitempty"`
 	Path    string `json:"path,omitempty"`
 }
@@ -23,5 +23,5 @@ type StorageStatus struct {
 	Avail    int64   `json:"avail,omitempty"`
 	UsedFrac float64 `json:"used_fraction,omitempty"`
 	Enabled  bool    `json:"enabled,omitempty"`
-	Active   bool    `json:"active,omitempty"`
+	Active   int     `json:"active,omitempty"` // Proxmox returns active as 0/1
 }

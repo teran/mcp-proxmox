@@ -185,7 +185,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 		},
 		{
 			name: "ListStorage",
-			body: `{"data":[{"storage":"local","type":"dir","active":true}]}`,
+			body: `{"data":[{"storage":"local","type":"dir","active":1}]}`,
 			path: "/api2/json/storage",
 			call: func(g *Gateway) error {
 				ss, err := g.ListStorage(context.Background())

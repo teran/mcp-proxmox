@@ -17,9 +17,15 @@ type Node struct {
 	Type           string  `json:"type,omitempty"`
 }
 
+// SwapInfo is the swap usage of a node from GET /nodes/{node}/status.
+type SwapInfo struct {
+	Total int64 `json:"total,omitempty"`
+	Used  int64 `json:"used,omitempty"`
+	Free  int64 `json:"free,omitempty"`
+}
+
 // NodeStatus is the status of a single node from GET /nodes/{node}/status.
-type NodeStatus struct {
-	Node    string    `json:"node"`
+type NodeStatus struct {	Node    string    `json:"node"`
 	Status  string    `json:"status"`
 	CPU     float64   `json:"cpu,omitempty"`
 	MaxCPU  int       `json:"maxcpu,omitempty"`
@@ -29,9 +35,9 @@ type NodeStatus struct {
 	MaxDisk int64     `json:"maxdisk,omitempty"`
 	Uptime  int64     `json:"uptime,omitempty"`
 	LoadAvg []float64 `json:"loadavg,omitempty"`
-	KVM     bool      `json:"kvm,omitempty"`
-	PVE     bool      `json:"pve,omitempty"`
-	Swap    int64     `json:"swap,omitempty"`
+	KVM     int       `json:"kvm,omitempty"` // Proxmox returns kvm as 0/1
+	PVE     int       `json:"pve,omitempty"` // Proxmox returns pve as 0/1
+	Swap    SwapInfo  `json:"swap,omitempty"`
 	KSmem   int64     `json:"ksm,omitempty"`
 	Wait    float64   `json:"wait,omitempty"`
 }

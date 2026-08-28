@@ -29,9 +29,9 @@ func TestJSONRoundTrip(t *testing.T) {
 			in: NodeStatus{
 				Node: "pve1", Status: "online", CPU: 0.5, MaxCPU: 8, Mem: 512, MaxMem: 16384,
 				Disk: 200, MaxDisk: 512, Uptime: 7200, LoadAvg: []float64{0.1, 0.2, 0.3},
-				KVM: true, PVE: true, Swap: 64, KSmem: 16, Wait: 0.01,
+				KVM: 1, PVE: 1, Swap: SwapInfo{Total: 64}, KSmem: 16, Wait: 0.01,
 			},
-			want: `{"node":"pve1","status":"online","cpu":0.5,"maxcpu":8,"mem":512,"maxmem":16384,"disk":200,"maxdisk":512,"uptime":7200,"loadavg":[0.1,0.2,0.3],"kvm":true,"pve":true,"swap":64,"ksm":16,"wait":0.01}`,
+			want: `{"node":"pve1","status":"online","cpu":0.5,"maxcpu":8,"mem":512,"maxmem":16384,"disk":200,"maxdisk":512,"uptime":7200,"loadavg":[0.1,0.2,0.3],"kvm":1,"pve":1,"swap":{"total":64},"ksm":16,"wait":0.01}`,
 		},
 		{
 			name: "vm",
@@ -103,24 +103,24 @@ func TestJSONRoundTrip(t *testing.T) {
 			name: "storage",
 			in: Storage{
 				Storage: "local", Type: "dir", Status: "available", Content: "images,rootdir",
-				Nodes: "pve1", Shared: 0, Active: true, Enabled: true, Path: "/var/lib/vz",
+				Nodes: "pve1", Shared: 0, Active: 1, Enabled: true, Path: "/var/lib/vz",
 			},
-			want: `{"storage":"local","type":"dir","status":"available","content":"images,rootdir","nodes":"pve1","active":true,"enabled":true,"path":"/var/lib/vz"}`,
+			want: `{"storage":"local","type":"dir","status":"available","content":"images,rootdir","nodes":"pve1","active":1,"enabled":true,"path":"/var/lib/vz"}`,
 		},
 		{
 			name: "storage-status",
 			in: StorageStatus{
-				Storage: "local", Type: "dir", Total: 1000, Used: 400, Avail: 600, UsedFrac: 0.4, Enabled: true, Active: true,
+				Storage: "local", Type: "dir", Total: 1000, Used: 400, Avail: 600, UsedFrac: 0.4, Enabled: true, Active: 1,
 			},
-			want: `{"storage":"local","type":"dir","total":1000,"used":400,"avail":600,"used_fraction":0.4,"enabled":true,"active":true}`,
+			want: `{"storage":"local","type":"dir","total":1000,"used":400,"avail":600,"used_fraction":0.4,"enabled":true,"active":1}`,
 		},
 		{
 			name: "network-interface",
 			in: NetworkInterface{
 				Iface: "eth0", Type: "eth", Bridge: "vmbr0", Address: "10.0.0.1", Netmask: "255.255.255.0",
-				Gateway: "10.0.0.254", Method: "static", VLANID: 10, Active: true, Status: "up", Comments: "uplink",
+				Gateway: "10.0.0.254", Method: "static", VLANID: 10, Active: 1, Status: "up", Comments: "uplink",
 			},
-			want: `{"iface":"eth0","type":"eth","bridge":"vmbr0","address":"10.0.0.1","netmask":"255.255.255.0","gateway":"10.0.0.254","method":"static","vlan-id":10,"active":true,"status":"up","comments":"uplink"}`,
+			want: `{"iface":"eth0","type":"eth","bridge":"vmbr0","address":"10.0.0.1","netmask":"255.255.255.0","gateway":"10.0.0.254","method":"static","vlan-id":10,"active":1,"status":"up","comments":"uplink"}`,
 		},
 		{
 			name: "task",
