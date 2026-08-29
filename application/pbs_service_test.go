@@ -51,12 +51,11 @@ func TestPBSService_Success(t *testing.T) {
 
 	t.Run("GetBackupNotes", func(t *testing.T) {
 		gw := &mockPBSGateway{getBackupNotes: func(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error) {
-			return &model.BackupNotes{Comment: "keep", Notes: "keep forever"}, nil
+			return &model.BackupNotes{Notes: "keep forever"}, nil
 		}}
 		got, err := (&PBSService{gw: gw}).GetBackupNotes(context.Background(), "backup", "vm/100/...", "vm")
 		require.NoError(t, err)
 		assert.Equal(t, "keep forever", got.Notes)
-		assert.Equal(t, "keep", got.Comment)
 	})
 
 	t.Run("GetVerifyStatus", func(t *testing.T) {

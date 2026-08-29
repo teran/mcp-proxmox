@@ -264,7 +264,7 @@ func (s *stubPBSGateway) GetBackupNotes(ctx context.Context, store, backupID, ba
 	if s.getBackupNotes != nil {
 		return s.getBackupNotes(ctx, store, backupID, backupType)
 	}
-	return &model.BackupNotes{Comment: "keep", Notes: "keep"}, nil
+	return &model.BackupNotes{Notes: "keep"}, nil
 }
 func (s *stubPBSGateway) GetVerifyStatus(ctx context.Context, store, upid string) (*model.VerifyStatus, error) {
 	if s.fail() {

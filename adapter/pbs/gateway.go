@@ -353,11 +353,12 @@ func (g *Gateway) GetBackupNotes(ctx context.Context, store, backupID, backupTyp
 	q.Set("backup-type", backupType)
 	path := "/admin/datastore/" + store + "/group-notes?" + q.Encode()
 
-	var out model.BackupNotes
-	if err := g.do(ctx, http.MethodGet, path, &out); err != nil {
+	// GET /group-notes returns the notes as a plain string, not an object.
+	var notes string
+	if err := g.do(ctx, http.MethodGet, path, &notes); err != nil {
 		return nil, err
 	}
-	return &out, nil
+	return &model.BackupNotes{Notes: notes}, nil
 }
 
 // GetVerifyStatus returns the status of a verify job by UPID.

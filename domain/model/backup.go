@@ -18,8 +18,7 @@ type Backup struct {
 
 // BackupNotes are the notes of a backup group as returned by
 // GET /admin/datastore/{store}/group-notes?backup-id=<id>&backup-type=<type>.
-// PBS keeps a comment and free-form notes per backup group.
+// PBS returns the notes as a plain string.
 type BackupNotes struct {
-	Comment string `json:"comment,omitempty"`
-	Notes   string `json:"notes,omitempty"`
+	Notes string `json:"notes,omitempty"`
 }

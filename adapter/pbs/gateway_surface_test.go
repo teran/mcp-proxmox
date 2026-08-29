@@ -101,13 +101,12 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 		},
 		{
 			name:  "GetBackupNotes",
-			body:  `{"data":{"comment":"keep","notes":"keep forever"}}`,
+			body:  `{"data":"keep forever"}`,
 			path:  "/api2/json/admin/datastore/backup/group-notes",
 			query: "backup-id=vm%2F100%2F2024&backup-type=vm",
 			call: func(g *Gateway) error {
 				n, err := g.GetBackupNotes(context.Background(), "backup", "vm/100/2024", "vm")
 				if assert.NoError(t, err) {
-					assert.Equal(t, "keep", n.Comment)
 					assert.Equal(t, "keep forever", n.Notes)
 				}
 				return err
