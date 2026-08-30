@@ -261,6 +261,25 @@ A future **remote mode** (Streamable HTTP) is designed for but not implemented
 yet: the composition root selects the transport and token source; `domain` and
 `application` are unaware of the transport. See §2.4.
 
+**Transport decision (stdio now, HTTP later).** The task is a local companion
+for managing a homelab Proxmox cluster from an editor/CLI: short-lived, launched
+as a subprocess by the MCP client, no public listener, credentials supplied via
+local environment variables. **STDIO** is therefore the right transport today —
+it requires no TLS termination, no session management, and matches the MCP
+client's model for local servers. A remote mode (Streamable HTTP) is only worth
+adding when the server must serve remote/untrusted clients; that is out of scope
+for this milestone, so the transport is chosen by the composition root behind an
+interface to allow it later. **TLS is never implemented inside the server** — if
+an HTTP mode is added, TLS termination is the reverse proxy's job (§8 security).
+
+**Auth / OAuth2 decision (no OAuth2 now).** The server only trusts credentials
+(Proxmox API tokens) that the operator supplies locally via environment
+variables; it serves no untrusted remote clients. There is **no OAuth2** in the
+local stdio mode — delegated authorization would add complexity with no remote
+audience. The seam for it is preserved: auth is behind `port.TokenSource`
+(§4.2), so a future remote mode can swap in an `OAuth2TokenSource` /
+header-relay that returns `Bearer <token>` without touching `domain`/`application`.
+
 | Transport (now) | Token source |
 |---|---|
 | stdio (stdin/stdout) | `StaticTokenSource` — API tokens from environment variables (`PVE_TOKEN` / `PBS_TOKEN`, per backend) |
@@ -644,9 +663,24 @@ gremlins unleash --workers 4 --timeout-coefficient 50 ./application -E '.*mocks.
 gremlins unleash --workers 4 --timeout-coefficient 50 ./domain
 ```
 
-The CI pipeline (`.gitlab-ci.yml`, `.forgejo/workflows/ci.yml`) runs lint →
-test → cover → mutation → build; releases are built and published by
-`goreleaser release --clean` on git tags.
+The CI pipeline (`.gitlab-ci.yml`, `.forgejo/workflows/ci.yml`) runs, and
+**fails the build on any violation**: lint (`golangci-lint`), architecture
+(`go-arch-lint`), **`go test -race`**, **gosec**, **govulncheck**, and a **hard
+coverage gate** — total `cover-core` below **95%** fails the pipeline. Releases
+are built and published by `goreleaser release --clean` on git tags. All
+findings are fixed, never suppressed (no blanket `#nosec` / default excludes).
+
+### 8.5 TDD workflow
+
+All fixes and features follow a **TDD workflow** with **isolated contexts**:
+
+- **@qa** writes the tests (isolated context) against the `domain/port` contract
+  and the architecture blueprint; QA owns `*_test.go`.
+- **@developer** writes the implementation (isolated context) against the same
+  contract; the developer owns non-test `.go` code.
+- The two run in parallel; the task manager reconciles and runs the quality
+  gates (lint → arch → test → cover ≥95% → mutation → build → sec → govulncheck)
+  before merge. Neither agent edits the other's files.
 
 ---
 

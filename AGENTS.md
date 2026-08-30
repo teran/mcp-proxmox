@@ -175,9 +175,28 @@ contradiction, raise it with the architect.
   incl. `errcheck`, `govet`, `staticcheck`, `ineffassign`, `unused`, `revive`,
   `depguard`, `nakedret`, plus `gosec`).
 - `gosec` must pass.
-- Coverage must meet the **95%** threshold on `cover-core`.
+- `govulncheck ./...` must report no vulnerabilities affecting the code.
+- `go test -race ./...` must pass (race detector is part of CI).
+- Coverage must meet the **95%** threshold on `cover-core`. **The CI pipeline
+  fails the build when total `cover-core` is below 95%** — it is a hard gate,
+  not just a local convention (both `.gitlab-ci.yml` and
+  `.forgejo/workflows/ci.yml` enforce it).
 - gremlins mutation score must not regress below 80% on `domain`/`application`.
 - No secrets in code, config, logs, or tool output.
+
+---
+
+### TDD workflow
+
+All fixes and features follow a **TDD workflow** with **isolated contexts**:
+- **@qa** writes the tests (in an isolated context) against the `domain/port`
+  contract and the architecture blueprint.
+- **@developer** writes the implementation (in an isolated context) against the
+  same contract.
+- The two run in parallel; the task manager reconciles them and runs the quality
+  gates (lint → arch → test → cover ≥95% → mutation → build → sec → govulncheck)
+  before merge. Neither agent edits the other's files: QA owns `*_test.go`, the
+  developer owns non-test `.go` code.
 
 ---
 

@@ -335,7 +335,11 @@ gremlins unleash --workers 4 --timeout-coefficient 50 ./domain
 
 Design coverage target is **95%+** (measured by `cover-core`, excluding generated
 mocks and the composition root); tests are hermetic (mocks / `httptest` / stubs —
-no real network).
+no real network). `go test -race ./...` and `govulncheck ./...` are part of CI.
+
+Development follows a **TDD workflow**: QA writes the tests and the developer
+writes the implementation in parallel, each in an isolated context, reconciled
+by the task manager before merge (see `AGENTS.md`).
 
 ---
 
@@ -383,10 +387,13 @@ goreleaser release --snapshot  # local test build without a tag
 
 ## CI/CD
 
-Two CI pipelines run the same quality gates — **lint → arch → test → cover (95%) →
-mutation → build → sec** — depending on where the repository is hosted:
+Two CI pipelines run the same quality gates — **lint → arch → test (`-race`) →
+cover (95% gate) → mutation → build → sec → govulncheck** — depending on where
+the repository is hosted:
 
-- **GitLab** (`.gitlab-ci.yml`): stages `lint → arch → test → cover → mutation → build`.
+- **GitLab** (`.gitlab-ci.yml`): stages `lint → test → build → release`; the
+  test stage enforces `go test -race`, golangci-lint, go-arch-lint, gosec,
+  govulncheck, and a **hard 95% `cover-core` gate** (the build fails below it).
 - **Forgejo Actions** (`.forgejo/workflows/ci.yml`, GitHub-Actions-compatible):
   the same checks on every push/PR.
 

@@ -31,9 +31,21 @@ test:
   tags:
     - cloud-infra-runner.msk1
   script:
-    - go test ./...
+    - go test -race ./...
     - go vet ./...
     - gofmt -l .
+    - golangci-lint run ./...
+    - go-arch-lint check
+    - gosec ./...
+    - govulncheck ./...
+    - |
+      go test ./... -coverprofile=coverage.out
+      awk '!/\/cmd\/mcp-proxmox\//' coverage.out > coverage-core.out
+      cov=$(go tool cover -func=coverage-core.out | tail -1 | awk '{print $NF}' | tr -d '%')
+      echo "cover-core: ${cov}%"
+      if ! awk -v c="$cov" 'BEGIN { exit !(c >= 95) }'; then
+        echo "coverage ${cov}% is below the 95% gate"; exit 1
+      fi
   rules:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
