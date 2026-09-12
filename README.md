@@ -4,6 +4,17 @@
 
 # mcp-proxmox
 
+[![CI](https://img.shields.io/github/actions/workflow/status/teran/mcp-proxmox/ci.yml?branch=master&label=CI&logo=github)](https://git.homelab.teran.dev/teran/mcp-proxmox/actions)
+[![Latest Release](https://img.shields.io/github/v/release/teran/mcp-proxmox?label=release)](https://git.homelab.teran.dev/teran/mcp-proxmox/releases)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![MCP: stdio Local server](https://img.shields.io/badge/MCP-stdio%20Local-orange)](SPEC.md)
+[![Go Reference](https://img.shields.io/badge/godoc-reference-blue.svg)](https://pkg.go.dev/github.com/teran/mcp-proxmox)
+[![Go Version](https://img.shields.io/badge/Go-1.27.0-blue)](https://go.dev/dl/)
+[![Coverage](https://img.shields.io/badge/coverage-%3E%3D95%25-brightgreen)]()
+[![gosec](https://img.shields.io/badge/gosec-passing-brightgreen)]()
+[![govulncheck](https://img.shields.io/badge/govulncheck-passing-brightgreen)]()
+[![gremlins mutation](https://img.shields.io/badge/gremlins-%3E%3D80%25-brightgreen)]()
+
 An **MCP (Model Context Protocol) server** that exposes the REST APIs of
 **Proxmox VE** and **Proxmox Backup Server (PBS)** as a set of callable tools
 for LLM agents, IDEs, and assistants.
@@ -118,7 +129,9 @@ disabled and its tools are not registered.
 | `PBS_ENDPOINT` | PBS API endpoint (e.g. `https://pbs.example.com:8007`). Non-empty enables the PBS backend. |
 | `PBS_TOKEN` | PBS API token (`user@pbs!tokenid=uuid`). Non-empty enables the PBS backend. |
 | `PBS_CA_CERT_PATH` | Optional custom CA (PEM) for the PBS endpoint. Empty = system roots. |
-| `LOG_LEVEL` | Log level (`trace`, `debug`, `info`, `warn`, `error`). Default `info`. |
+| `LOG_LEVEL` | Log level (`trace`, `debug`, `info`, `warn`, `error`). **When set, logging is enabled**; when unset, logging is **disabled** (no logs are emitted anywhere). |
+| `LOG_FILENAME` | Path of the log file used when `LOG_LEVEL` is set (default `/tmp/mcp-proxmox.log`, mode `0600`). |
+| `LOG_FORMAT` | Log format: `text` (default) or `json`. |
 
 These are the **only** environment variables the server reads. Proxmox API
 tokens are long-lived, privilege-scoped credentials configured once per backend
@@ -128,16 +141,26 @@ is **always on**; a self-signed/custom CA is supported only via the per-backend
 
 ### Logging
 
-Logging is handled by [logrus](https://github.com/sirupsen/logrus). Use
-`LOG_LEVEL=trace` or `LOG_LEVEL=debug` for request-level diagnostics
+Logging is handled by [logrus](https://github.com/sirupsen/logrus) and is
+**disabled by default**: unless `LOG_LEVEL` is set, no logs are emitted at all
+(a stdio server must not pollute the protocol channel). When `LOG_LEVEL` is set,
+logs are written to `LOG_FILENAME` (default `/tmp/mcp-proxmox.log`) at that
+level and in `LOG_FORMAT` (text or JSON). When enabled, the **very first** log
+line is the startup banner:
+`Starting mcp-proxmox/<version> (commit: <commit>; built at <ts>) ...`.
+
+Use `LOG_LEVEL=trace` or `LOG_LEVEL=debug` for request-level diagnostics
 (`trace` logs method + URL path only). **API tokens and `ca_cert_path` content
-are never logged** — at most the header *name* may appear at trace level.
+are never logged** — at most the header *name* may appear at trace level. Tool
+arguments that look sensitive (token/password/secret/…) are redacted in logs.
 
 Because the server runs over stdio (clients launch it as a subprocess and don't
 capture stderr), setting `LOG_LEVEL` writes the log to a file you can tail:
 
 ```sh
 export LOG_LEVEL=debug
+# optional: export LOG_FILENAME=/var/log/mcp-proxmox.log
+# optional: export LOG_FORMAT=json
 tail -f /tmp/mcp-proxmox.log
 ```
 
@@ -153,7 +176,7 @@ export PVE_TOKEN="user@pam!tokenid=abc123=deadbeef"
 export PBS_ENDPOINT="https://pbs.example.com:8007"
 export PBS_TOKEN="user@pbs!tokenid=xyz789=deadbeef"
 
-./bin/mcp-proxmox   # level via LOG_LEVEL env (default info)
+./bin/mcp-proxmox   # logging off by default; enable via LOG_LEVEL env
 ```
 
 The server speaks the MCP protocol over **stdin/stdout**. Launch it from your MCP

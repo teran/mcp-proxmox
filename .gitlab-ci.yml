@@ -3,11 +3,13 @@
 # Stages:
 #   lint    — static analysis on master and MRs
 #   test    — hermetic unit tests on EVERY commit (any branch + MR)
+#   mutation— gremlins mutation testing as a HARD gate (fails on survivors)
 #   build   — goreleaser snapshot build on master and MRs
 #   release — goreleaser release on tags
 stages:
   - lint
   - test
+  - mutation
   - build
   - release
 
@@ -48,6 +50,20 @@ test:
       fi
   rules:
     - if: $CI_COMMIT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# Mutation testing (gremlins) is a HARD gate: survivors fail the build
+# (SPEC.md C7/C8, N15/N19). No allow_failure / continue-on-error here.
+mutation:
+  stage: mutation
+  image: harbor.hosting.reg.ru/cloud-platform-api/infra/cicd/ci:latest
+  tags:
+    - cloud-infra-runner.msk1
+  script:
+    - gremlins unleash --workers 4 --timeout-coefficient 50 ./application -E '.*mocks.*'
+    - gremlins unleash --workers 4 --timeout-coefficient 50 ./domain
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 build-master:

@@ -80,12 +80,17 @@ contradiction, raise it with the architect.
   `port.CtxLogger`. Use `Infof` for lifecycle events and `Warnf` for anomalies in
   use cases; tool handlers log errors via `Errorf` with the tool name
    (`"pve_vm_start: %v"`). `domain/model` never logs (pure types).
- - Log destination: the server runs over stdio (clients launch it as a subprocess
-   and don't capture stderr), so when `LOG_LEVEL` is set, logs are written to
-   `/tmp/mcp-proxmox.log` (`O_APPEND|O_CREATE|O_WRONLY`, mode `0600`) at that
-   level; otherwise the default `info` level and default output are used. One
+ - Log destination & gating: the server runs over stdio (clients launch it as a
+   subprocess and don't capture stderr). Logging is **disabled by default (L2)**:
+   when `LOG_LEVEL` is unset the logger discards all output (`io.Discard`). When
+   `LOG_LEVEL` is set, logs are written to `LOG_FILENAME` (default
+   `/tmp/mcp-proxmox.log`, `O_APPEND|O_CREATE|O_WRONLY`, mode `0600`) at that
+   level in `LOG_FORMAT` (text|json). When enabled, the **very first** log line
+   is the B5 banner `Starting {appName}/{appVersion} (commit: {appCommit}; built
+   at {appTimestamp}) ...` (build metadata injected via ldflags). One
    `session_id` per MCP session is shared between the stdio transport and the
-   request context; per-request `request_id` is added by `WithSession`.
+   request context; per-request `request_id` is added by `WithSession` and
+   forwarded upstream as an `X-Request-ID` header (SPEC L8).
  - Context-aware logging: application services log via `port.CtxLogger`, which
   type-asserts to the optional `port.RequestAwareLogger` and tags lines with the
   MCP `session_id`/`request_id` from `ctx`; it falls back to the plain `AppLogger`
@@ -111,9 +116,11 @@ contradiction, raise it with the architect.
   logging, MCP tool registry); depends on domain + (each) its own external lib.
 - `cmd/mcp-proxmox` — composition root: flags, config, mode selection, wiring.
 - **Dependency rule:** dependencies point inward only. `application` never imports
-  `adapter/*`; `net/http` is confined to `adapter/pve` and `adapter/pbs`; logrus is
-  confined to `adapter/logging` (plus select adapter files for trace/debug); the
-  go-sdk is confined to `adapter/mcp` and `cmd/mcp-proxmox`.
+  `adapter/*`; outbound HTTP is done exclusively via **`resty.dev/v3`** confined
+  to `adapter/pve` and `adapter/pbs` (never a bare `http.Client{}` /
+  `http.NewRequestWithContext`); logrus is confined to `adapter/logging` (plus
+  select adapter files for trace/debug); the go-sdk is confined to `adapter/mcp`
+  and `cmd/mcp-proxmox`.
 - Composition/DI wiring happens only in `cmd/` (the composition root).
 - Structural boundaries are enforced by `go-arch-lint` + `depguard` + code review.
 
@@ -161,8 +168,9 @@ contradiction, raise it with the architect.
 ### Config & secrets
 - Configuration is read from **environment variables** via
   `kelseyhightower/envconfig` (`adapter/config`): `PVE_ENDPOINT`/`PVE_TOKEN`
-  (/`PVE_CA_CERT_PATH`), `PBS_ENDPOINT`/`PBS_TOKEN` (/`PBS_CA_CERT_PATH`), and
-  `LOG_LEVEL`. There is **no YAML/config file**.
+  (/`PVE_CA_CERT_PATH`), `PBS_ENDPOINT`/`PBS_TOKEN` (/`PBS_CA_CERT_PATH`),
+  `LOG_LEVEL`, `LOG_FILENAME` (default `/tmp/mcp-proxmox.log`), and `LOG_FORMAT`
+  (text|json). There is **no YAML/config file**.
 - **Dynamic availability:** a backend is active only if **both** its `endpoint`
   and its `token` are present; otherwise it is **disabled** and its tools must
   **not** be registered. Nothing fails when a backend is absent.
@@ -181,7 +189,7 @@ contradiction, raise it with the architect.
   fails the build when total `cover-core` is below 95%** — it is a hard gate,
   not just a local convention (both `.gitlab-ci.yml` and
   `.forgejo/workflows/ci.yml` enforce it).
-- gremlins mutation score must not regress below 80% on `domain`/`application`.
+- gremlins mutation score must not regress below 80% on `domain`/`application`; **it is a hard gate in CI** (fails the build on survivors — no `allow_failure`/`continue-on-error`, C7/C8/N15/N19).
 - No secrets in code, config, logs, or tool output.
 
 ---

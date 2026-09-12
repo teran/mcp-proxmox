@@ -52,7 +52,7 @@ later without rearchitecting (see §2.4 and §4).
 **dependency rule that points inward only**. A hard customer constraint is that
 **no `internal` package is used** — every package lives at the repo root and is
 public, and the core (`domain` + `application`) must not depend on the MCP SDK,
-`net/http`, logrus, or any Proxmox client.
+the low-level `net/http`, logrus, or any Proxmox client.
 
 ### 2.1 Layers and responsibility
 
@@ -78,8 +78,8 @@ cmd/mcp-proxmox ── application, adapter/{pve,pbs,token,logging,mcp},
 
 application ── domain/port, domain/model
 
-adapter/pve      ── domain/port, domain/model     (net/http, encoding/json — ONLY here)
-adapter/pbs      ── domain/port, domain/model     (net/http, encoding/json — ONLY here)
+adapter/pve      ── domain/port, domain/model     (resty.dev/v3, encoding/json — ONLY here)
+adapter/pbs      ── domain/port, domain/model     (resty.dev/v3, encoding/json — ONLY here)
 adapter/token    ── domain/port                   (os, context)
 adapter/logging  ── domain/port                   (logrus, log/slog)
 adapter/mcp      ── application, domain/{model,port}, go-sdk/mcp
@@ -88,10 +88,11 @@ domain/model     ── (std only)
 ```
 
 There are **no import cycles**: ports never reference adapters; `application`
-never imports `adapter/*`; `net/http` is confined to `adapter/pve` and
-`adapter/pbs`; logrus is confined to `adapter/logging` (plus select adapter
-files for trace/debug); the go-sdk is confined to `adapter/mcp` and
-`cmd/mcp-proxmox`.
+never imports `adapter/*`; outbound HTTP is done exclusively via
+**`resty.dev/v3`** confined to `adapter/pve` and `adapter/pbs` (never a bare
+`http.Client{}`/`http.NewRequestWithContext` — SPEC G9/N23); logrus is confined
+to `adapter/logging` (plus select adapter files for trace/debug); the go-sdk is
+confined to `adapter/mcp` and `cmd/mcp-proxmox`.
 
 ### 2.3 Package layout
 
@@ -134,7 +135,7 @@ mcp-proxmox/
 
 **Clean architecture without `internal`.** Every package lives at the repo root
 and is public; the core (`domain` + `application`) has zero dependencies on the
-go-sdk, `net/http`, logrus, or any Proxmox client. This is a customer requirement
+go-sdk, the low-level `net/http`, logrus, or any Proxmox client. This is a customer requirement
 and is enforced by `.go-arch-lint.yml` (`go-arch-lint check`), not
 by a hidden `internal/` directory. Dependencies point inward only through the
 `domain/port` interfaces.
@@ -337,7 +338,9 @@ disabled and its tools are not registered.
 | `PBS_ENDPOINT` | PBS API endpoint (e.g. `https://pbs.example.com:8007`); enables PBS when non-empty |
 | `PBS_TOKEN` | PBS API token (`user@pbs!tokenid=uuid`); enables PBS when non-empty |
 | `PBS_CA_CERT_PATH` | optional custom CA (PEM) for the PBS endpoint; empty = system roots |
-| `LOG_LEVEL` | log level `trace\|debug\|info\|warn\|error` (default `info`); when set, logs go to `/tmp/mcp-proxmox.log` |
+| `LOG_LEVEL` | log level `trace\|debug\|info\|warn\|error`; **when set, logging is enabled** (to `LOG_FILENAME`); when unset, logging is **disabled** (L2) |
+| `LOG_FILENAME` | log file path used when `LOG_LEVEL` is set (default `/tmp/mcp-proxmox.log`, mode `0600`) (L3) |
+| `LOG_FORMAT` | log format `text` (default) \| `json` (L4) |
 
 These are the **only** environment variables the server reads. The tokens are
 read once per backend from the environment and re-used on every call; they are
@@ -347,13 +350,15 @@ in `adapter/config/config.go` (`config.Load()` → `config.Config` with
 
 ### 4.5 Gateway configuration
 
-Each gateway adapter exposes a config struct:
+Each gateway adapter exposes a config struct. Outbound HTTP is performed
+exclusively via **`resty.dev/v3`** (SPEC G9/N23); the `HTTPClient` field is a
+test-only seam whose transport/timeout the Resty client is derived from.
 
 ```go
 type Config struct {
     Endpoint    string            // e.g. https://pve.example.com:8006
     TokenSource port.TokenSource  // returns the Authorization header
-    HTTPClient  *http.Client      // timeout 30s; transport replaceable for tests
+    HTTPClient  *http.Client      // TEST seam only: transport/timeout Resty derives from (default 30s)
     CACertPath  string            // optional custom CA (PEM); empty = system roots
     Logger      port.AppLogger
     Retries     int               // 2 (read-only idempotent requests)
@@ -363,11 +368,13 @@ type Config struct {
 
 ### 4.6 Version and build
 
-The binary version is a semver injected at build time via the linker
-(`-X main.version={{ .Version }}` in `.goreleaser.yml`), using the nearest git
-tag with a `v0.0.0-dev` fallback. A plain `go build` without ldflags uses the
-`v0.0.0-dev` default. The `-version` flag prints `mcp-proxmox <version>` and
-exits 0.
+The binary embeds **build metadata** via ldflags (B2): `appName`, `appVersion`,
+`appCommitHash`, `appTimestamp` (plus `version`). `.goreleaser.yml` injects them
+as `-X main.appName=... -X main.appVersion={{ .Version }}
+-X main.appCommitHash={{ .ShortCommit }} -X main.appTimestamp={{ .Date }}`.
+A plain `go build` without ldflags uses defaults (`mcp-proxmox`,
+`v0.0.0-dev`, `unknown`, `unknown`). The `-version` flag prints
+`mcp-proxmox <version>` and exits 0.
 
 The container image build is **isolated**: the `Dockerfile` does not compile —
 it consumes a goreleaser artifact from `dist/mcp-proxmox`, producing a minimal
@@ -381,10 +388,10 @@ All logging goes through **logrus** (`github.com/sirupsen/logrus`).
 
 ### 5.1 Components (`adapter/logging`)
 
-- `NewLogger(level, format)` → `*logrus.Logger` (level `info` default; format
-  `text` default or `json`). The text formatter uses `FullTimestamp: true` so
-  lines carry absolute wall-clock time instead of the relative `INFO[0002]`
-  elapsed duration — convenient for correlating logs across sessions/requests.
+- `NewLogger(level, format)` → `*logrus.Logger` (format `text` default or `json`).
+  The text formatter uses `FullTimestamp: true` so lines carry absolute
+  wall-clock time instead of the relative `INFO[0002]` elapsed duration —
+  convenient for correlating logs across sessions/requests.
 - `NewAppLogger(l)` → `port.AppLogger` (`Debugf/Infof/Warnf/Errorf`). This is the
   **only** logging interface the core sees — the core never imports logrus.
 - `NewSlogLogger(l)` → `*slog.Logger`. go-sdk accepts only a `*slog.Logger`, so a
@@ -399,17 +406,34 @@ All logging goes through **logrus** (`github.com/sirupsen/logrus`).
 The server runs over **stdio**, so MCP clients launch it as a subprocess and
 typically do **not** capture its stderr. To keep the journal inspectable:
 
-- When `LOG_LEVEL` is set (any non-empty value), logs are written to
-  **`/tmp/mcp-proxmox.log`** (`O_APPEND|O_CREATE|O_WRONLY`, mode `0600`) at that
-  level. This is the file sink that makes stdio-mode logs easy to tail:
+- **Disabled by default (L2).** When `LOG_LEVEL` is **unset**, the logger
+  discards all output (`io.Discard`) — no logs are emitted anywhere, so nothing
+  pollutes the stdio protocol channel.
+- When `LOG_LEVEL` is set (any non-empty value), logs are **enabled** and written
+  to **`LOG_FILENAME`** (default `/tmp/mcp-proxmox.log`,
+  `O_APPEND|O_CREATE|O_WRONLY`, mode `0600`) at that level, in `LOG_FORMAT`
+  (text or JSON). This is the file sink that makes stdio-mode logs easy to tail:
   `tail -f /tmp/mcp-proxmox.log`.
-- When `LOG_LEVEL` is unset, the logger uses the default `info` level and the
-  default output destination.
+- **Banner (B5/L6).** When enabled, the **very first** log line is the startup
+  banner: `Starting {appName}/{appVersion} (commit: {appCommit}; built at
+  {appTimestamp}) ...`, using the build metadata from §4.6. No banner is emitted
+  when logging is disabled.
 - A single **session ID** is created per MCP session (one process run in stdio
   mode) and shared between the stdio transport connection (so the SDK logs a
   non-empty `session_id` on connect/disconnect) and the request context (so tool
   and application log lines carry the same `session_id`). Per-request
   `request_id` is added by `WithSession`.
+
+### 5.1c Per-request tool-call logging (L8)
+
+When logging is enabled at **debug/trace**, the server middleware emits a
+structured per-request line for every incoming MCP call with fields: `tool`
+(name, for `tools/call`), `source` (`"STDIO"`), `duration_ms`, `outcome`
+(`ok`/`error`), and (only at trace) `args` — with sensitive keys redacted — plus
+`in_bytes`/`out_bytes`. Every line carries `session_id`/`request_id` from `ctx`.
+For outbound upstream requests, each gateway **forwards the `request_id` as an
+`X-Request-ID` header** and logs method/path/status/duration/in_bytes/out_bytes
+with the same `request_id` (SPEC §5.5).
 
 ### 5.2 Context-aware logging (`port.CtxLogger`)
 
@@ -446,6 +470,30 @@ retried); `mutation` = write (never retried).
 > The exact registry may be trimmed or extended during implementation, but this
 > list is the agreed, defensible surface. Every endpoint below exists in the
 > real Proxmox VE / PBS REST APIs (`/api2/json`).
+
+### 6.0 Tool metadata (Annotations & Instructions) — M4/N11
+
+Every registered tool carries MCP **Annotations (hints)** and per-tool
+**Instructions**, set via the go-sdk `Tool` fields:
+
+- `Title` — a short human-readable display title (e.g. "List PVE nodes").
+- `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`.
+- `instructions` — natural-language guidance (inputs, ordering, side effects,
+  precautions) for the model, encoded into the SDK `Description` (the field the
+  go-sdk treats as the model hint).
+
+The hints follow a fixed mapping (`adapter/mcp/helpers.go` `roTool`/`sysTool`):
+
+| Tool family | readOnly | destructive | idempotent | openWorld |
+|---|---|---|---|---|
+| read / query | `true` | `false` | `true` | `false` |
+| write / update (planned, gated) | `false` | `false` | `true` | `false` |
+| delete (planned, gated) | `false` | `true` | `false` | `false` |
+
+The currently-registered surface is entirely read-only (system + PVE + PBS
+queries), so all tools are `readOnly=true, destructive=false, idempotent=true,
+openWorld=false`. Mutation tools behind the gate (§2.5) will follow the write /
+delete rows above.
 
 ### 6.1 System (2)
 
@@ -640,10 +688,10 @@ Mutation testing (gremlins) targets `domain` and `application`.
   `depguard`, `nakedret`, plus `gosec` (security).
 - Comments and code in English; package-level doc comments on exported types.
 - No `internal` package (customer requirement); all packages public.
-- `domain/*` and `application/*` must not import the MCP SDK, logrus, `net/http`,
+- `domain/*` and `application/*` must not import the MCP SDK, logrus, low-level `net/http`, resty,
   or any Proxmox client (enforced by review, by `.go-arch-lint.yml` /
   `go-arch-lint check`, and by the `depguard` clean-arch rule in
-  `.golangci.yml`). `net/http` is confined to `adapter/pve` + `adapter/pbs`;
+  `.golangci.yml`). outbound HTTP is done exclusively via `resty.dev/v3` confined to `adapter/pve` + `adapter/pbs`;
   logrus to `adapter/logging`; go-sdk to `adapter/mcp` + `cmd/mcp-proxmox`.
 - **Mutation testing:** `gremlins unleash` on `domain` + `application` with
   efficacy ≥ 80% (config in `gremlins.toml`; generated mocks excluded).
@@ -665,10 +713,13 @@ gremlins unleash --workers 4 --timeout-coefficient 50 ./domain
 
 The CI pipeline (`.gitlab-ci.yml`, `.forgejo/workflows/ci.yml`) runs, and
 **fails the build on any violation**: lint (`golangci-lint`), architecture
-(`go-arch-lint`), **`go test -race`**, **gosec**, **govulncheck**, and a **hard
-coverage gate** — total `cover-core` below **95%** fails the pipeline. Releases
-are built and published by `goreleaser release --clean` on git tags. All
-findings are fixed, never suppressed (no blanket `#nosec` / default excludes).
+(`go-arch-lint`), **`go test -race`**, **gosec**, **govulncheck**, a **hard
+coverage gate** — total `cover-core` below **95%** fails the pipeline — and a
+**mutation-testing (gremlins) hard gate** on `domain` + `application` that
+**fails the build on surviving mutants** (no `allow_failure` /
+`continue-on-error`; C7/C8, N15/N19). Releases are built and published by
+`goreleaser release --clean` on git tags. All findings are fixed, never
+suppressed (no blanket `#nosec` / default excludes).
 
 ### 8.5 TDD workflow
 

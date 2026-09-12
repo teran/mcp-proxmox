@@ -85,6 +85,16 @@ jobs:
             exit 1
           fi
 
+      - name: Install gremlins
+        run: go install github.com/go-gremlins/gremlins/cmd/gremlins@latest
+
+      - name: Mutation testing (gremlins) — HARD GATE
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          gremlins unleash --workers 4 --timeout-coefficient 50 ./application -E '.*mocks.*'
+          gremlins unleash --workers 4 --timeout-coefficient 50 ./domain
+        # NOTE: no continue-on-error — surviving mutants fail the build (SPEC C7/C8).
+
   release:
     name: Release
     # Only on tag pushes. In Forgejo Actions github.ref works the same as in
@@ -102,8 +112,15 @@ jobs:
         run: |
           mkdir -p dist
           VERSION="$(git describe --tags --exact-match 2>/dev/null || echo v0.0.0-dev)"
+          COMMIT="${GITHUB_SHA:-$(git rev-parse HEAD)}"
+          TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           CGO_ENABLED=0 go build -trimpath \
-            -ldflags "-s -w -X main.version=${VERSION}" -o dist/mcp-proxmox ./cmd/mcp-proxmox
+            -ldflags "-s -w \
+              -X main.appName=mcp-proxmox \
+              -X main.appVersion=${VERSION} \
+              -X main.appCommitHash=${COMMIT} \
+              -X main.appTimestamp=${TS} \
+              -X main.version=${VERSION}" -o dist/mcp-proxmox ./cmd/mcp-proxmox
 
       - name: Create Forgejo release
         uses: https://code.forgejo.org/forgejo/release@v2

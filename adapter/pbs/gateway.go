@@ -7,13 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"reflect"
 	"strings"
 	"time"
+
+	"resty.dev/v3"
 
 	"github.com/teran/mcp-proxmox/domain/model"
 	"github.com/teran/mcp-proxmox/domain/port"
@@ -33,7 +34,7 @@ const defaultTimeout = 30 * time.Second
 type Config struct {
 	Endpoint     string           // e.g. https://pbs.example.com:8007
 	TokenSource  port.TokenSource // returns the Authorization header
-	HTTPClient   *http.Client     // timeout 30s; transport replaceable for tests
+	HTTPClient   *http.Client     // timeout 30s; transport replaceable for tests (Resty derives its transport from this)
 	CACertPath   string           // optional custom CA (PEM); empty = system roots
 	Logger       port.AppLogger
 	Retries      int           // 2 (read-only idempotent requests)
@@ -43,7 +44,7 @@ type Config struct {
 // Gateway is an implementation of port.PBSGateway on top of the PBS REST API.
 type Gateway struct {
 	cfg    Config
-	client *http.Client
+	client *resty.Client  // outbound HTTP via resty.dev/v3 (G9); nil-safe via NewGateway
 	logger port.CtxLogger // ctx-aware (session_id/request_id) logging; nil-safe
 	tlsErr error          // set when CACertPath is configured but fails to load/parse
 }
@@ -57,47 +58,54 @@ func NewGateway(cfg Config) *Gateway {
 	return g
 }
 
-// buildClient returns the effective *http.Client to use. When CACertPath is
-// empty the provided HTTPClient (or a default one) is returned unchanged, so
-// tests can inject an httptest client. When CACertPath is set, the transport is
-// cloned and its TLS RootCAs are replaced by a pool that includes the custom CA.
-func buildClient(cfg Config) (*http.Client, error) {
-	c := cfg.HTTPClient
-	if c == nil {
-		c = &http.Client{Timeout: defaultTimeout}
+// buildClient returns the effective resty client to use. Resty is the only
+// outbound HTTP mechanism (SPEC.md G9/N23 — never a bare http.Client{} /
+// http.NewRequestWithContext). When CACertPath is empty the provided
+// HTTPClient's timeout/transport (or a default 30s transport) is used, so
+// tests can inject an httptest client. When CACertPath is set, the transport's
+// TLS RootCAs are replaced by a pool that includes the custom CA (TLS
+// verification stays on).
+func buildClient(cfg Config) (*resty.Client, error) {
+	rc := resty.New()
+	timeout := defaultTimeout
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	if cfg.HTTPClient != nil {
+		if cfg.HTTPClient.Timeout != 0 {
+			timeout = cfg.HTTPClient.Timeout
+		}
+		if t, ok := cfg.HTTPClient.Transport.(*http.Transport); ok && t != nil {
+			tr = t.Clone()
+		}
 	}
-	if cfg.CACertPath == "" {
-		return c, nil
-	}
+	rc.SetTimeout(timeout)
+	rc.SetTransport(tr)
 
-	pool, err := systemOrNewCertPool()
-	if err != nil {
-		return c, err
-	}
-	// #nosec G304 -- cfg.CACertPath is a configuration-supplied CA path, not
-	// attacker-controlled input. Its content is never logged.
-	pem, err := os.ReadFile(cfg.CACertPath)
-	if err != nil {
-		return c, fmt.Errorf("pbs: read CA cert %q: %w", cfg.CACertPath, err)
-	}
-	if !pool.AppendCertsFromPEM(pem) {
-		return c, fmt.Errorf("pbs: no valid CA certificates found in %q", cfg.CACertPath)
-	}
+	if cfg.CACertPath != "" {
+		pool, err := systemOrNewCertPool()
+		if err != nil {
+			return nil, err
+		}
+		// #nosec G304 -- cfg.CACertPath is a configuration-supplied CA path, not
+		// attacker-controlled input. Its content is never logged.
+		pem, err := os.ReadFile(cfg.CACertPath)
+		if err != nil {
+			return nil, fmt.Errorf("pbs: read CA cert %q: %w", cfg.CACertPath, err)
+		}
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, fmt.Errorf("pbs: no valid CA certificates found in %q", cfg.CACertPath)
+		}
 
-	clone := *c
-	tr := cloneTransport(c)
-	tr.TLSClientConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
-	clone.Transport = tr
-	return &clone, nil
-}
-
-// cloneTransport returns a deep clone of c.Transport when it is a
-// *http.Transport, otherwise a clone of the default transport.
-func cloneTransport(c *http.Client) *http.Transport {
-	if t, ok := c.Transport.(*http.Transport); ok && t != nil {
-		return t.Clone()
+		tlsConf := tr.TLSClientConfig
+		if tlsConf == nil {
+			tlsConf = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		tlsConf = tlsConf.Clone()
+		tlsConf.RootCAs = pool
+		tlsConf.MinVersion = tls.VersionTLS12
+		tr.TLSClientConfig = tlsConf
+		rc.SetTransport(tr)
 	}
-	return http.DefaultTransport.(*http.Transport).Clone()
+	return rc, nil
 }
 
 // systemOrNewCertPool returns the system cert pool, or a fresh empty pool when
@@ -151,7 +159,7 @@ func (g *Gateway) do(ctx context.Context, method, path string, out any) error {
 // doOnce performs a single HTTP request (no retry). It builds the URL from
 // cfg.Endpoint + apiPrefix + path, injects the Authorization header via the
 // token source, honors the configured TLS, and maps the response per SPEC.md
-// §7.3.
+// §7.3. The request is made via resty.dev/v3 (SPEC.md G9).
 func (g *Gateway) doOnce(ctx context.Context, method, path string, out any) error {
 	if g.cfg.Endpoint == "" {
 		return &UpstreamError{Op: "config", Err: errors.New("pbs: empty endpoint")}
@@ -169,43 +177,37 @@ func (g *Gateway) doOnce(ctx context.Context, method, path string, out any) erro
 
 	u := strings.TrimRight(g.cfg.Endpoint, "/") + apiPrefix + path
 
-	req, err := http.NewRequestWithContext(ctx, method, u, nil)
-	if err != nil {
-		return &UpstreamError{Op: "build", Err: err}
+	req := g.client.R().SetContext(ctx).
+		SetHeader("Authorization", header).
+		SetHeader("Accept", "application/json")
+	// Forward the per-request correlation ID to the upstream (SPEC.md §5.5);
+	// never the token.
+	if rid, ok := port.RequestIDFromContext(ctx); ok && rid != "" {
+		req.SetHeader("X-Request-ID", rid)
 	}
-	req.Header.Set("Authorization", header)
-	req.Header.Set("Accept", "application/json")
 
-	client := g.client
-	if client == nil {
-		client = &http.Client{Timeout: defaultTimeout}
-	}
-	resp, err := client.Do(req)
+	resp, err := req.Execute(method, u)
 	if err != nil {
 		return &UpstreamError{Op: "transport", Err: err}
 	}
-	defer resp.Body.Close()
+	body := resp.Bytes()
 
 	if g.cfg.Logger != nil {
-		// Request logging carries the upstream HTTP status code so both the
-		// success (2xx) and error paths show it. Method + URL path only; the
-		// Authorization header value is never logged (SPEC.md §5.4). Logged via
-		// the ctx-aware logger so lines carry the same session_id/request_id as
-		// the tool and error lines.
-		g.logger.Debugf(ctx, "pbs request: %s %s upstream_http_status_code=%d", method, path, resp.StatusCode)
+		// Request logging carries the upstream HTTP status code plus request
+		// metrics so both the success (2xx) and error paths show them. Method +
+		// URL path only; the Authorization header value is never logged (SPEC.md
+		// §5.4). Logged via the ctx-aware logger so lines carry the same
+		// session_id/request_id as the tool and error lines.
+		g.logger.Debugf(ctx, "pbs request: %s %s upstream_http_status_code=%d duration_ms=%d in_bytes=%d out_bytes=%d",
+			method, path, resp.StatusCode(), resp.Duration().Milliseconds(), 0, len(body))
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return &UpstreamError{Op: "read", Err: err}
-	}
-
-	if resp.StatusCode >= http.StatusBadRequest {
+	if resp.StatusCode() >= http.StatusBadRequest {
 		// Surface the real PBS error message at debug level (truncated) so the
 		// journal reveals the exact reason. The body of an error response never
 		// contains the API token.
-		g.logger.Debugf(ctx, "pbs error response %d: %s", resp.StatusCode, truncate(body))
-		return g.mapHTTPError(resp.StatusCode, body)
+		g.logger.Debugf(ctx, "pbs error response %d: %s", resp.StatusCode(), truncate(body))
+		return g.mapHTTPError(resp.StatusCode(), body)
 	}
 	return g.decode(body, out)
 }

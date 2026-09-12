@@ -13,7 +13,7 @@ func clearEnv(t *testing.T) {
 	for _, k := range []string{
 		"PVE_ENDPOINT", "PVE_TOKEN", "PVE_CA_CERT_PATH",
 		"PBS_ENDPOINT", "PBS_TOKEN", "PBS_CA_CERT_PATH",
-		"LOG_LEVEL",
+		"LOG_LEVEL", "LOG_FILENAME", "LOG_FORMAT",
 	} {
 		t.Setenv(k, "")
 	}
@@ -40,6 +40,8 @@ func TestLoad(t *testing.T) {
 		t.Setenv("PBS_TOKEN", "user@pbs!t=secret")
 		t.Setenv("PBS_CA_CERT_PATH", "/certs/pbs.pem")
 		t.Setenv("LOG_LEVEL", "debug")
+		t.Setenv("LOG_FORMAT", "json")
+		t.Setenv("LOG_FILENAME", "/var/log/mcp.log")
 
 		c, err := Load()
 		require.NoError(t, err)
@@ -52,7 +54,19 @@ func TestLoad(t *testing.T) {
 		assert.Equal(t, "/certs/pbs.pem", c.PBSCACertPath)
 		assert.True(t, c.PBSEnabled())
 		assert.Equal(t, "debug", c.LogLevel)
+		assert.Equal(t, "json", c.LogFormat)
+		assert.Equal(t, "/var/log/mcp.log", c.LogFileName)
 	})
+}
+
+func TestLoggingDefaults(t *testing.T) {
+	clearEnv(t)
+	c, err := Load()
+	require.NoError(t, err)
+	// LOG_LEVEL unset -> logging disabled; LOG_FILENAME / LOG_FORMAT default.
+	assert.Equal(t, "", c.LogLevel)
+	assert.Equal(t, "", c.LogFileName)
+	assert.Equal(t, "", c.LogFormat)
 }
 
 func TestPVEEnabledPredicate(t *testing.T) {

@@ -55,9 +55,10 @@ domain/model ← domain/port ← application ← adapter/* ← cmd/mcp-proxmox
 Constraints enforced by `go-arch-lint check` (`.go-arch-lint.yml`) and the `depguard`
 rule in `.golangci.yml`:
 
-- `domain/*`, `application/*` never import go-sdk, `net/http`, logrus,
+- `domain/*`, `application/*` never import go-sdk, low-level `net/http`, logrus,
   envconfig, or any Proxmox client.
-- `net/http` is confined to `adapter/pve` + `adapter/pbs`.
+- Outbound HTTP is done exclusively via `resty.dev/v3` confined to `adapter/pve` +
+  `adapter/pbs` (never a bare `http.Client{}` / `http.NewRequestWithContext`).
 - logrus is confined to `adapter/logging` (+ select adapter files for
   trace/debug).
 - the go-sdk is confined to `adapter/mcp` + `cmd/mcp-proxmox`.
@@ -194,7 +195,9 @@ Environment variables via `kelseyhightower/envconfig` — **no YAML file**:
 | `PBSEndpoint` | `PBS_ENDPOINT` | enables PBS when non-empty **and** token set |
 | `PBSToken` | `PBS_TOKEN` | API token; never logged |
 | `PBSCACertPath` | `PBS_CA_CERT_PATH` | optional custom CA (PEM) |
-| `LogLevel` | `LOG_LEVEL` | trace\|debug\|info\|warn\|error; when set → file sink |
+| `LogLevel` | `LOG_LEVEL` | trace\|debug\|info\|warn\|error; **when set → logging enabled** to `LOG_FILENAME`; unset → disabled |
+| `LogFileName` | `LOG_FILENAME` | log file path (default `/tmp/mcp-proxmox.log`, `0600`) |
+| `LogFormat` | `LOG_FORMAT` | `text` (default) \| `json` |
 
 ```go
 func Load() (Config, error)                       // envconfig.Process("", &c)
@@ -251,10 +254,16 @@ All via logrus; core sees only `port.AppLogger`/`port.CtxLogger`.
 - `NewAppLogger(l)` → `port.AppLogger` (and `RequestAwareLogger`).
 - `NewSlogLogger(l)` → `*slog.Logger` (bridges go-sdk internal logs).
 - `WithSession(ctx, l)` → entry tagged with `session_id`/`request_id`.
-- **File sink:** when `LOG_LEVEL` is set, `cmd` writes to
-  `/tmp/mcp-proxmox.log` (`0600`). One `session_id` per MCP session is shared
+- **Disabled by default (L2):** when `LOG_LEVEL` is unset the logger discards all
+  output (`io.Discard`). When set, `cmd` writes to `LOG_FILENAME` (default
+  `/tmp/mcp-proxmox.log`, `0600`) in `LOG_FORMAT` (text|json), and the **first**
+  log line is the B5 banner: `Starting {appName}/{appVersion} (commit: {appCommit};
+  built at {appTimestamp}) ...`. One `session_id` per MCP session is shared
   between the transport connection and the request context
   (`adapter/mcp/session_transport.go` + `Deps.SessionID`).
+- **Per-request (L8):** debug/trace structured tool-call lines carry tool,
+  source=`STDIO`, duration_ms, outcome, (trace) redacted args + in/out bytes;
+  gateways forward `request_id` as `X-Request-ID` upstream.
 - **Secrets never logged:** tokens only as header name at trace, never value;
   `ca_cert_path` content never logged; trace logs method + URL path only.
 

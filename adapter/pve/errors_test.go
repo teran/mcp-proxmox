@@ -40,3 +40,10 @@ func TestMessagesToErrors(t *testing.T) {
 func TestErrNotImplementedIsDefined(t *testing.T) {
 	assert.Error(t, ErrNotImplemented)
 }
+
+func TestUpstreamErrorStatusCode(t *testing.T) {
+	e := &UpstreamError{Op: "http", Status: 500}
+	assert.Equal(t, 500, e.StatusCode())
+	zero := &UpstreamError{Op: "transport"}
+	assert.Equal(t, 0, zero.StatusCode())
+}

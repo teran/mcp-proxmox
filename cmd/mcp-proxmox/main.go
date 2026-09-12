@@ -1,7 +1,7 @@
 // Command mcp-proxmox is the composition root of the mcp-proxmox MCP server.
 // It wires configuration (envconfig), optional backend enablement, logging
-// (including the stdio-friendly /tmp/mcp-proxmox.log sink), the session
-// transport, and the tool-registration gate. See SPEC.md §4 / §5.
+// (including the stdio-friendly file sink), the session transport, and the
+// tool-registration gate. See SPEC.md §4 / §5.
 package main
 
 import (
@@ -9,7 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/http"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -26,9 +26,24 @@ import (
 	"github.com/teran/mcp-proxmox/application"
 )
 
-// version is injected at build time via -ldflags "-X main.version=...".
-// Defaults to v0.0.0-dev when not set (e.g. plain `go build`).
-var version = "v0.0.0-dev"
+// Build metadata. These are injected at build time via ldflags (see
+// .goreleaser.yml / .forgejo/workflows/ci.yml):
+//
+//	-X main.appName=... -X main.appVersion=... -X main.appCommitHash=... -X main.appTimestamp=...
+//
+// `version` is the semver used for the -version flag and the MCP implementation
+// version; it defaults to v0.0.0-dev when not set (e.g. plain `go build`).
+var (
+	appName       = "mcp-proxmox"
+	appVersion    = "v0.0.0-dev"
+	appCommitHash = "unknown"
+	appTimestamp  = "unknown"
+	version       = "v0.0.0-dev"
+)
+
+// defaultLogFile is the stdio-friendly file sink used when LOG_LEVEL is set
+// (override via LOG_FILENAME). See SPEC.md §5.2 / L1–L3.
+const defaultLogFile = "/tmp/mcp-proxmox.log"
 
 // versionString returns the human-readable version line printed by the
 // -version flag (e.g. "mcp-proxmox v1.2.3").
@@ -37,7 +52,6 @@ func versionString() string {
 }
 
 func main() {
-	logFormat := flag.String("log-format", "text", "text|json")
 	showVersion := flag.Bool("version", false, "print the build version and exit")
 	flag.Parse()
 
@@ -52,23 +66,38 @@ func main() {
 
 	// Configuration comes from environment variables (kelseyhightower/envconfig):
 	// PVE_ENDPOINT/PVE_TOKEN(/PVE_CA_CERT_PATH), PBS_ENDPOINT/PBS_TOKEN
-	// (/PBS_CA_CERT_PATH), LOG_LEVEL. See SPEC.md §4.4.
+	// (/PBS_CA_CERT_PATH), LOG_LEVEL, LOG_FILENAME, LOG_FORMAT. See SPEC.md §4.4.
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Logging. When LOG_LEVEL is set, logs are written to /tmp/mcp-proxmox.log
-	// at that level (stdio-friendly file sink); otherwise the default info level
-	// and default destination are used.
-	logrusLogger := logging.NewLogger(cfg.LogLevel, *logFormat)
-	if v := os.Getenv("LOG_LEVEL"); v != "" {
-		f, err := os.OpenFile("/tmp/mcp-proxmox.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	// Logging (SPEC.md §5 / L2). When LOG_LEVEL is set, logs are ENABLED and
+	// written to LOG_FILENAME (default /tmp/mcp-proxmox.log) at that level in
+	// LOG_FORMAT (default text). When LOG_LEVEL is unset, logging is DISABLED:
+	// the logger discards all output, so nothing leaks to stdout/stderr (a stdio
+	// transport must not pollute the protocol channel). Per B5/L6 the very first
+	// log line emitted (only when enabled) is the startup banner.
+	logrusLogger := logging.NewLogger(cfg.LogLevel, cfg.LogFormat)
+	if cfg.LogLevel == "" {
+		logrusLogger.SetOutput(io.Discard)
+	} else {
+		logFile := cfg.LogFileName
+		if logFile == "" {
+			logFile = defaultLogFile
+		}
+		// #nosec G304 -- logFile is a configuration-supplied LOG_FILENAME path
+		// (default /tmp/mcp-proxmox.log), never attacker-controlled input. Its
+		// content is never logged.
+		f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err != nil {
-			logrusLogger.Fatalf("open log file /tmp/mcp-proxmox.log: %v", err)
+			logrusLogger.Fatalf("open log file %s: %v", logFile, err)
 		}
 		logrusLogger.SetOutput(f)
+		// B5/L6: the first log line, emitted only when logging is enabled.
+		logrusLogger.Infof("Starting %s/%s (commit: %s; built at %s) MCP server over stdio",
+			appName, appVersion, appCommitHash, appTimestamp)
 	}
 	appLogger := logging.NewAppLogger(logrusLogger)   // port.AppLogger (core)
 	slogLogger := logging.NewSlogLogger(logrusLogger) // *slog.Logger for the SDK
@@ -83,7 +112,6 @@ func main() {
 		pveGW := pve.NewGateway(pve.Config{
 			Endpoint:     cfg.PVEEndpoint,
 			TokenSource:  pveToken,
-			HTTPClient:   &http.Client{Timeout: 30 * time.Second},
 			CACertPath:   cfg.PVECACertPath,
 			Logger:       appLogger,
 			Retries:      2,
@@ -98,7 +126,6 @@ func main() {
 		pbsGW := pbs.NewGateway(pbs.Config{
 			Endpoint:     cfg.PBSEndpoint,
 			TokenSource:  pbsToken,
-			HTTPClient:   &http.Client{Timeout: 30 * time.Second},
 			CACertPath:   cfg.PBSCACertPath,
 			Logger:       appLogger,
 			Retries:      2,

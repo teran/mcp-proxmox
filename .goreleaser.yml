@@ -17,7 +17,12 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X main.version={{ .Version }}
+      - -s -w
+        -X main.appName={{ .ProjectName }}
+        -X main.appVersion={{ .Version }}
+        -X main.appCommitHash={{ .ShortCommit }}
+        -X main.appTimestamp={{ .Date }}
+        -X main.version={{ .Version }}
     goos:
       - linux
       - darwin

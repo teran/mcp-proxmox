@@ -20,6 +20,7 @@ import (
 
 	"github.com/teran/mcp-proxmox/adapter/token"
 	"github.com/teran/mcp-proxmox/domain/model"
+	"github.com/teran/mcp-proxmox/domain/port"
 )
 
 // runMethod executes fn against a gateway backed by a mock server returning the
@@ -185,6 +186,45 @@ func TestGateway_GetBackupFiltersByBackupID(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, none)
 	assert.NotNil(t, none, "should return a non-nil empty slice")
+}
+
+// TestGateway_ForwardRequestIDHeader verifies that when a per-request ID is
+// present in the context (via port.WithRequestID), the outbound upstream request
+// carries it as the X-Request-ID header, and that the header is absent when no
+// request ID is set in the context (SPEC.md §5.5 / L9 / G11).
+func TestGateway_ForwardRequestIDHeader(t *testing.T) {
+	tests := []struct {
+		name          string
+		withRequestID bool
+		want          string
+	}{
+		{
+			name:          "request id present is forwarded",
+			withRequestID: true,
+			want:          "req-abc-123",
+		},
+		{
+			name: "no request id means header is absent",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := &reqCapture{}
+			srv := mockServer(t, 200, `{"data":{"store":"backup","path":"/backup"}}`, rec)
+			g, _ := newTestGateway(t, srv)
+
+			ctx := context.Background()
+			if tt.withRequestID {
+				ctx = port.WithRequestID(ctx, tt.want)
+			}
+
+			_, err := g.GetDatastoreStatus(ctx, "backup")
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, rec.requestID)
+		})
+	}
 }
 
 // TestGateway_EmptyDataForGetters verifies null data surfaces EmptyDataError for
@@ -358,7 +398,7 @@ func TestBuildClientCACert(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.NotNil(t, c)
-		assert.NotNil(t, c.Transport)
+		assert.NotNil(t, c.Transport())
 	})
 
 	t.Run("invalid CA file errors", func(t *testing.T) {
@@ -374,11 +414,14 @@ func TestBuildClientCACert(t *testing.T) {
 		assert.Contains(t, err.Error(), "no valid CA certificates")
 	})
 
-	t.Run("no CACertPath returns unchanged client", func(t *testing.T) {
-		hc := &http.Client{}
+	t.Run("no CACertPath returns resty client", func(t *testing.T) {
+		hc := &http.Client{Transport: &http.Transport{MaxIdleConns: 5}}
 		c, err := buildClient(Config{HTTPClient: hc})
 		require.NoError(t, err)
-		assert.Same(t, hc, c)
+		require.NotNil(t, c)
+		tr, ok := c.Transport().(*http.Transport)
+		require.True(t, ok)
+		assert.Equal(t, 5, tr.MaxIdleConns)
 	})
 
 	t.Run("nil HTTPClient gets default", func(t *testing.T) {
@@ -388,12 +431,20 @@ func TestBuildClientCACert(t *testing.T) {
 	})
 }
 
-// TestCloneTransport covers cloning a custom transport.
-func TestCloneTransport(t *testing.T) {
-	cl := cloneTransport(&http.Client{Transport: &http.Transport{MaxIdleConns: 5}})
-	assert.NotNil(t, cl)
-	cl2 := cloneTransport(&http.Client{})
-	assert.NotNil(t, cl2)
+// TestBuildClientDerivesTransport covers deriving the resty transport from an
+// injected HTTPClient transport and the default-transport path.
+func TestBuildClientDerivesTransport(t *testing.T) {
+	hc := &http.Client{Transport: &http.Transport{MaxIdleConns: 5}}
+	c, err := buildClient(Config{HTTPClient: hc})
+	require.NoError(t, err)
+	tr, ok := c.Transport().(*http.Transport)
+	require.True(t, ok)
+	assert.Equal(t, 5, tr.MaxIdleConns)
+
+	c2, err := buildClient(Config{}) // non-*http.Transport default path
+	require.NoError(t, err)
+	_, ok = c2.Transport().(*http.Transport)
+	assert.True(t, ok)
 }
 
 // TestDoDefaultBackoff covers the default backoff when RetryBackoff <= 0.

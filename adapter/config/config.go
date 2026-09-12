@@ -24,10 +24,17 @@ type Config struct {
 	PBSCACertPath string `envconfig:"PBS_CA_CERT_PATH" desc:"Optional custom CA (PEM) used to verify the PBS TLS endpoint. Empty = system roots."`
 
 	// Logging.
-	// LogLevel maps to LOG_LEVEL. When set (any non-empty value), logs are
-	// written to /tmp/mcp-proxmox.log at that level (stdio-friendly file sink);
-	// when unset, the default info level and default destination are used.
-	LogLevel string `envconfig:"LOG_LEVEL" desc:"Log level: trace|debug|info|warn|error. When set, logs go to /tmp/mcp-proxmox.log."`
+	// LogLevel maps to LOG_LEVEL. When set (any non-empty value), logging is
+	// ENABLED and logs are written to LogFileName (default /tmp/mcp-proxmox.log)
+	// at that level (stdio-friendly file sink); when unset, logging is DISABLED
+	// and no logs are emitted anywhere (SPEC.md L2).
+	LogLevel string `envconfig:"LOG_LEVEL" desc:"Log level: trace|debug|info|warn|error. When set, enables logging to LOG_FILENAME."`
+	// LogFileName maps to LOG_FILENAME, the stdio-friendly file sink used when
+	// LOG_LEVEL is set. Default /tmp/mcp-proxmox.log (mode 0600).
+	LogFileName string `envconfig:"LOG_FILENAME" desc:"Path of the log file (default /tmp/mcp-proxmox.log, mode 0600). Only used when LOG_LEVEL is set."`
+	// LogFormat maps to LOG_FORMAT: "text" (default, logrus text with full
+	// timestamps) or "json".
+	LogFormat string `envconfig:"LOG_FORMAT" desc:"Log format: text (default) | json."`
 }
 
 // Load reads the configuration from environment variables. It never fails on a

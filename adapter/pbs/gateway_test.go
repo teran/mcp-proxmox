@@ -24,11 +24,12 @@ func (noopLogger) Warnf(string, ...any)  {}
 func (noopLogger) Errorf(string, ...any) {}
 
 type reqCapture struct {
-	method string
-	path   string
-	query  string
-	auth   string
-	count  int
+	method    string
+	path      string
+	query     string
+	auth      string
+	requestID string
+	count     int
 }
 
 // skipIfStub skips a contract test while the gateway body is still the
@@ -61,6 +62,7 @@ func mockServer(t *testing.T, status int, body string, rec *reqCapture) *httptes
 		rec.path = r.URL.Path
 		rec.query = r.URL.RawQuery
 		rec.auth = r.Header.Get("Authorization")
+		rec.requestID = r.Header.Get("X-Request-ID")
 		rec.count++
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)

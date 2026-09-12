@@ -115,6 +115,35 @@ func TestAppLoggerContextTags(t *testing.T) {
 	assert.Contains(t, out, `"msg":"hello world"`)
 }
 
+// TestAppLoggerContextAllLevels verifies every ctx-aware level method (Debug,
+// Info, Warn, Error) writes at the right level and carries the session/request
+// tags.
+func TestAppLoggerContextAllLevels(t *testing.T) {
+	var buf bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&buf)
+	l.SetFormatter(&logrus.TextFormatter{DisableColors: true})
+	l.SetLevel(logrus.DebugLevel)
+
+	app := NewAppLogger(l)
+	aware := app.(port.RequestAwareLogger)
+	ctx := port.WithSessionID(context.Background(), "sess")
+	ctx = port.WithRequestID(ctx, "req")
+
+	aware.DebugfContext(ctx, "d")
+	aware.InfofContext(ctx, "i")
+	aware.WarnfContext(ctx, "w")
+	aware.ErrorfContext(ctx, "e")
+
+	out := buf.String()
+	assert.Contains(t, out, "level=debug")
+	assert.Contains(t, out, "level=info")
+	assert.Contains(t, out, "level=warning")
+	assert.Contains(t, out, "level=error")
+	assert.Contains(t, out, "session_id=sess")
+	assert.Contains(t, out, "request_id=req")
+}
+
 // TestWithSessionTags verifies WithSession adds session_id/request_id fields
 // only when present in the context.
 func TestWithSessionTags(t *testing.T) {
