@@ -6,6 +6,7 @@ import (
 	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/teran/mcp-proxmox/application"
+	"github.com/teran/mcp-proxmox/domain/model"
 	"github.com/teran/mcp-proxmox/domain/port"
 )
 
@@ -56,11 +57,50 @@ type taskLogIn struct {
 	Limit int    `json:"limit,omitempty" jsonschema:"Maximum number of log lines"`
 }
 
+// createVMIn is the input of pve_vm_create (a node plus the QEMU VM config).
+type createVMIn struct {
+	Node string `json:"node" jsonschema:"PVE node name"`
+	model.CreateVMRequest
+}
+
+// resizeVMIn is the input of pve_vm_resize.
+type resizeVMIn struct {
+	Node   string `json:"node" jsonschema:"PVE node name"`
+	VMID   int    `json:"vmid" jsonschema:"VM ID"`
+	Disk   string `json:"disk" jsonschema:"Virtual disk to resize (e.g. scsi0)"`
+	SizeGB int    `json:"size_gb" jsonschema:"New size in GiB; positive grows, negative shrinks"`
+}
+
+// migrateVMIn is the input of pve_vm_migrate.
+type migrateVMIn struct {
+	Node           string `json:"node" jsonschema:"PVE node name"`
+	VMID           int    `json:"vmid" jsonschema:"VM ID"`
+	Target         string `json:"target" jsonschema:"Target node name"`
+	Online         bool   `json:"online,omitempty" jsonschema:"Live migration (no downtime)"`
+	WithLocalDisks bool   `json:"with_local_disks,omitempty" jsonschema:"Migrate local disks"`
+}
+
+// haAddIn is the input of pve_ha_add.
+type haAddIn struct {
+	SID     string   `json:"sid" jsonschema:"HA resource ID (e.g. vm:100)"`
+	Type    string   `json:"type" jsonschema:"Resource type: vm | ct"`
+	Nodes   []string `json:"nodes,omitempty" jsonschema:"Ordered preferred nodes"`
+	Comment string   `json:"comment,omitempty" jsonschema:"Optional comment"`
+}
+
+// vmBackupIn is the input of pve_vm_backup.
+type vmBackupIn struct {
+	Node          string `json:"node" jsonschema:"PVE node name"`
+	VMID          int    `json:"vmid" jsonschema:"VM ID"`
+	Storage       string `json:"storage" jsonschema:"Backup storage"`
+	Mode          string `json:"mode" jsonschema:"Backup mode: snapshot | suspend | stop"`
+	NotesTemplate string `json:"notes_template,omitempty" jsonschema:"Template string for the backup notes"`
+	Compress      string `json:"compress,omitempty" jsonschema:"Compression: 0 | lzo | gzip | zstd"`
+}
+
 // registerPVETools registers the Proxmox VE tools. Read-only (query) tools are
 // always registered for an enabled PVE backend. Mutation tools are registered
-// only when enableMutations is true (gate UX TBD — SPEC.md §2.4); for this
-// milestone only the read-only surface is present, pve_vm_migrate being the
-// next planned addition.
+// only when enableMutations is true (SPEC.md §2.5).
 func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, enableMutations bool) {
 	// --- nodes & cluster ---
 	roTool(s, "pve_node_list", "List PVE nodes",
@@ -188,11 +228,65 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 			return app.PVE.GetPVEVersion(ctx)
 		})
 
-	// --- mutations (gated; pve_vm_migrate is the next addition) ---
+	// --- mutations (gated by EnableMutations) ---
 	if !enableMutations {
 		return
 	}
-	// Mutation tools (pve_vm_create/start/stop/reboot/shutdown/migrate/delete,
-	// pve_lxc_create/start/stop/reboot/shutdown/delete) are registered here when
-	// the gate is enabled. See SPEC.md §6.
+
+	mutTool(s, "pve_vm_create", "Create QEMU VM",
+		"Create a QEMU VM on a PVE node.",
+		"Provide the node and the VM configuration (name, cores, memory, disks, network, etc.). Optionally set vmid; otherwise PVE assigns the next free ID. Returns the new VMID. Idempotent: re-issuing the same create may create a second VM, so verify with pve_vm_list.",
+		log, true, func(ctx context.Context, in createVMIn) (any, error) {
+			vmid, err := app.PVE.CreateVM(ctx, in.Node, in.CreateVMRequest)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"vmid": vmid}, nil
+		})
+
+	mutTool(s, "pve_vm_resize", "Resize QEMU VM disk",
+		"Resize a QEMU VM disk.",
+		"Provide node, vmid, the disk to resize (e.g. scsi0) and the new size in GiB. A positive size grows the disk, a negative size shrinks it. Idempotent.",
+		log, true, func(ctx context.Context, in resizeVMIn) (any, error) {
+			return nil, app.PVE.ResizeVM(ctx, in.Node, in.VMID, model.ResizeVMRequest{
+				Disk:   in.Disk,
+				SizeGB: in.SizeGB,
+			})
+		})
+
+	mutTool(s, "pve_vm_migrate", "Migrate QEMU VM",
+		"Migrate a QEMU VM to another node.",
+		"Provide node, vmid and the target node. Set online for live migration (no downtime) and with_local_disks to move local disks. Idempotent.",
+		log, true, func(ctx context.Context, in migrateVMIn) (any, error) {
+			return nil, app.PVE.MigrateVM(ctx, in.Node, in.VMID, model.MigrateVMRequest{
+				Target:         in.Target,
+				Online:         in.Online,
+				WithLocalDisks: in.WithLocalDisks,
+			})
+		})
+
+	mutTool(s, "pve_ha_add", "Add HA resource",
+		"Register a new high-availability resource.",
+		"Provide the resource SID (e.g. vm:100), type (vm or ct), optionally an ordered list of preferred nodes and a comment. Idempotent.",
+		log, true, func(ctx context.Context, in haAddIn) (any, error) {
+			return nil, app.PVE.AddHAResource(ctx, model.HAResourceRequest{
+				SID:     in.SID,
+				Type:    in.Type,
+				Nodes:   in.Nodes,
+				Comment: in.Comment,
+			})
+		})
+
+	mutTool(s, "pve_vm_backup", "Back up QEMU VM",
+		"Start a vzdump backup of a QEMU VM.",
+		"Provide node, vmid, the backup storage and mode (snapshot|suspend|stop). Optionally set a notes template and compression. Returns the task UPID to poll with pve_task_status. Not idempotent: each call starts a new backup.",
+		log, false, func(ctx context.Context, in vmBackupIn) (any, error) {
+			return app.PVE.StartVMBackup(ctx, in.Node, model.VMBackupRequest{
+				VMID:          in.VMID,
+				Storage:       in.Storage,
+				Mode:          in.Mode,
+				NotesTemplate: in.NotesTemplate,
+				Compress:      in.Compress,
+			})
+		})
 }

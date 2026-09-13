@@ -7,8 +7,8 @@ import (
 	"github.com/teran/mcp-proxmox/domain/port"
 )
 
-// PBSService is the PBS use cases (read-only surface for this milestone). It is
-// a thin orchestration layer over port.PBSGateway. See SPEC.md §3.2 / §6.
+// PBSService is the PBS use cases. It is a thin orchestration layer over
+// port.PBSGateway. See SPEC.md §3.2 / §6.
 type PBSService struct {
 	gw  port.PBSGateway
 	log port.CtxLogger
@@ -52,4 +52,24 @@ func (s *PBSService) GetPruneStatus(ctx context.Context, store, upid string) (*m
 // GetPBSVersion returns the PBS version info.
 func (s *PBSService) GetPBSVersion(ctx context.Context) (*model.PBSVersion, error) {
 	return s.gw.GetPBSVersion(ctx)
+}
+
+// StartVerify starts a verify job on a datastore and returns its UPID.
+func (s *PBSService) StartVerify(ctx context.Context, store string) (string, error) {
+	return s.gw.StartVerify(ctx, store)
+}
+
+// StartGC starts a garbage-collection job on a datastore and returns its UPID.
+func (s *PBSService) StartGC(ctx context.Context, store string) (string, error) {
+	return s.gw.StartGC(ctx, store)
+}
+
+// StartPrune starts a prune job on a datastore and returns its UPID.
+func (s *PBSService) StartPrune(ctx context.Context, store string) (string, error) {
+	return s.gw.StartPrune(ctx, store)
+}
+
+// StartSync starts a one-off sync job on a datastore and returns its UPID.
+func (s *PBSService) StartSync(ctx context.Context, store string, req model.PBSSyncRequest) (string, error) {
+	return s.gw.StartSync(ctx, store, req)
 }

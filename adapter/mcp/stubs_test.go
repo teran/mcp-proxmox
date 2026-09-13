@@ -36,6 +36,11 @@ type stubPVEGateway struct {
 	getTaskStatus    func(ctx context.Context, node, upid string) (*model.TaskStatus, error)
 	getTaskLog       func(ctx context.Context, node, upid string, limit int) ([]model.TaskLogEntry, error)
 	getPVEVersion    func(ctx context.Context) (*model.PVEVersion, error)
+	createVM         func(ctx context.Context, node string, req model.CreateVMRequest) (int, error)
+	resizeVM         func(ctx context.Context, node string, vmid int, req model.ResizeVMRequest) error
+	migrateVM        func(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error
+	addHAResource    func(ctx context.Context, req model.HAResourceRequest) error
+	startVMBackup    func(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
 }
 
 func (s *stubPVEGateway) fail() bool { return s.err != nil }
@@ -202,6 +207,51 @@ func (s *stubPVEGateway) GetPVEVersion(ctx context.Context) (*model.PVEVersion, 
 	}
 	return &model.PVEVersion{Version: "8.2.2"}, nil
 }
+func (s *stubPVEGateway) CreateVM(ctx context.Context, node string, req model.CreateVMRequest) (int, error) {
+	if s.fail() {
+		return 0, s.err
+	}
+	if s.createVM != nil {
+		return s.createVM(ctx, node, req)
+	}
+	return 100, nil
+}
+func (s *stubPVEGateway) ResizeVM(ctx context.Context, node string, vmid int, req model.ResizeVMRequest) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.resizeVM != nil {
+		return s.resizeVM(ctx, node, vmid, req)
+	}
+	return nil
+}
+func (s *stubPVEGateway) MigrateVM(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.migrateVM != nil {
+		return s.migrateVM(ctx, node, vmid, req)
+	}
+	return nil
+}
+func (s *stubPVEGateway) AddHAResource(ctx context.Context, req model.HAResourceRequest) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.addHAResource != nil {
+		return s.addHAResource(ctx, req)
+	}
+	return nil
+}
+func (s *stubPVEGateway) StartVMBackup(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.startVMBackup != nil {
+		return s.startVMBackup(ctx, node, req)
+	}
+	return &model.Task{UPID: "UPID:pve:backup:..."}, nil
+}
 
 var _ port.PVEGateway = (*stubPVEGateway)(nil)
 
@@ -217,6 +267,10 @@ type stubPBSGateway struct {
 	getVerifyStatus   func(ctx context.Context, store, upid string) (*model.VerifyStatus, error)
 	getPruneStatus    func(ctx context.Context, store, upid string) (*model.PruneStatus, error)
 	getPBSVersion     func(ctx context.Context) (*model.PBSVersion, error)
+	startVerify       func(ctx context.Context, store string) (string, error)
+	startGC           func(ctx context.Context, store string) (string, error)
+	startPrune        func(ctx context.Context, store string) (string, error)
+	startSync         func(ctx context.Context, store string, req model.PBSSyncRequest) (string, error)
 }
 
 func (s *stubPBSGateway) fail() bool { return s.err != nil }
@@ -293,6 +347,42 @@ func (s *stubPBSGateway) GetPBSVersion(ctx context.Context) (*model.PBSVersion, 
 	}
 	return &model.PBSVersion{Version: "3.2.3"}, nil
 }
+func (s *stubPBSGateway) StartVerify(ctx context.Context, store string) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.startVerify != nil {
+		return s.startVerify(ctx, store)
+	}
+	return "UPID:pbs:verify:...", nil
+}
+func (s *stubPBSGateway) StartGC(ctx context.Context, store string) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.startGC != nil {
+		return s.startGC(ctx, store)
+	}
+	return "UPID:pbs:gc:...", nil
+}
+func (s *stubPBSGateway) StartPrune(ctx context.Context, store string) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.startPrune != nil {
+		return s.startPrune(ctx, store)
+	}
+	return "UPID:pbs:prune:...", nil
+}
+func (s *stubPBSGateway) StartSync(ctx context.Context, store string, req model.PBSSyncRequest) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.startSync != nil {
+		return s.startSync(ctx, store, req)
+	}
+	return "UPID:pbs:sync:...", nil
+}
 
 var _ port.PBSGateway = (*stubPBSGateway)(nil)
 
@@ -319,6 +409,16 @@ var pbsROTools = []string{
 	"pbs_datastore_list", "pbs_datastore_status",
 	"pbs_backup_list", "pbs_backup_get", "pbs_backup_notes_get",
 	"pbs_verify_status", "pbs_prune_status", "pbs_version",
+}
+
+// pveMutationTools is the gated PVE mutation tool surface (SPEC.md §6.x).
+var pveMutationTools = []string{
+	"pve_vm_create", "pve_vm_resize", "pve_vm_migrate", "pve_ha_add", "pve_vm_backup",
+}
+
+// pbsMutationTools is the gated PBS mutation tool surface (SPEC.md §6.x).
+var pbsMutationTools = []string{
+	"pbs_verify_start", "pbs_gc_start", "pbs_prune_start", "pbs_sync_start",
 }
 
 // newTestServer builds an mcpSDK.Server wired through the real application.App

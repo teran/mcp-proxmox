@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -161,6 +162,19 @@ func (g *Gateway) do(ctx context.Context, method, path string, out any) error {
 // token source, honors the configured TLS, and maps the response per SPEC.md
 // §7.3. The request is made via resty.dev/v3 (SPEC.md G9).
 func (g *Gateway) doOnce(ctx context.Context, method, path string, out any) error {
+	return g.doOnceReq(ctx, method, path, nil, out)
+}
+
+// doOnceWithForm is like doOnce but sends an application/x-www-form-urlencoded
+// body. It is used by the mutation surface (verify/gc/prune/sync), which takes
+// its parameters in the form body.
+func (g *Gateway) doOnceWithForm(ctx context.Context, method, path string, form url.Values, out any) error {
+	return g.doOnceReq(ctx, method, path, form, out)
+}
+
+// doOnceReq performs a single HTTP request (no retry). form carries the optional
+// form-encoded mutation body (nil for reads). See doOnce / doOnceWithForm.
+func (g *Gateway) doOnceReq(ctx context.Context, method, path string, form url.Values, out any) error {
 	if g.cfg.Endpoint == "" {
 		return &UpstreamError{Op: "config", Err: errors.New("pbs: empty endpoint")}
 	}
@@ -184,6 +198,10 @@ func (g *Gateway) doOnce(ctx context.Context, method, path string, out any) erro
 	// never the token.
 	if rid, ok := port.RequestIDFromContext(ctx); ok && rid != "" {
 		req.SetHeader("X-Request-ID", rid)
+	}
+	// Mutation form body (never sent for reads).
+	if len(form) > 0 {
+		req.SetFormDataFromValues(form)
 	}
 
 	resp, err := req.Execute(method, u)
@@ -388,6 +406,83 @@ func (g *Gateway) GetPBSVersion(ctx context.Context) (*model.PBSVersion, error) 
 		return nil, err
 	}
 	return &out, nil
+}
+
+// doMutation executes a single mutation request (never retried — mutations are
+// not idempotent and must not be replayed on a transient 5xx; SPEC.md §7.5)
+// with an optional form-encoded body. The mutation response `data` is the task
+// UPID (a plain string).
+func (g *Gateway) doMutation(ctx context.Context, method, path string, form url.Values, out any) error {
+	return g.doOnceWithForm(ctx, method, path, form, out)
+}
+
+// StartVerify starts a verify job via POST /admin/datastore/{store}/verify and
+// returns the task UPID.
+func (g *Gateway) StartVerify(ctx context.Context, store string) (string, error) {
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+store+"/verify", nil, &upid); err != nil {
+		return "", err
+	}
+	return upid, nil
+}
+
+// StartGC starts a garbage-collection job via POST /admin/datastore/{store}/gc
+// and returns the task UPID.
+func (g *Gateway) StartGC(ctx context.Context, store string) (string, error) {
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+store+"/gc", nil, &upid); err != nil {
+		return "", err
+	}
+	return upid, nil
+}
+
+// StartPrune starts a prune job via POST /admin/datastore/{store}/prune and
+// returns the task UPID.
+func (g *Gateway) StartPrune(ctx context.Context, store string) (string, error) {
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+store+"/prune", nil, &upid); err != nil {
+		return "", err
+	}
+	return upid, nil
+}
+
+// StartSync starts a one-off sync job via POST /admin/datastore/{store}/sync
+// and returns the task UPID.
+func (g *Gateway) StartSync(ctx context.Context, store string, req model.PBSSyncRequest) (string, error) {
+	form := url.Values{}
+	if req.Remote != "" {
+		form.Set("remote", req.Remote)
+	}
+	if req.RemoteStore != "" {
+		form.Set("remote-store", req.RemoteStore)
+	}
+	if req.Owner != "" {
+		form.Set("owner", req.Owner)
+	}
+	if req.MaxFiles != 0 {
+		form.Set("maxfiles", strconv.Itoa(req.MaxFiles))
+	}
+	if req.RemoveVanished {
+		form.Set("remove-vanished", "1")
+	}
+	if req.RateIn != 0 {
+		form.Set("ratein", strconv.Itoa(req.RateIn))
+	}
+	if req.RateOut != 0 {
+		form.Set("rateout", strconv.Itoa(req.RateOut))
+	}
+	if req.SkipLost {
+		form.Set("skip-lost", "1")
+	}
+	if req.NotifyUser != "" {
+		form.Set("notify-user", req.NotifyUser)
+	}
+
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+store+"/sync", form, &upid); err != nil {
+		return "", err
+	}
+	return upid, nil
 }
 
 // truncate bounds an error-response body for debug logging, keeping the log

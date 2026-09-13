@@ -199,15 +199,20 @@ mutations (`POST`/`PUT`/`DELETE`) are **never** retried (§7.5).
 The tool surface is delivered **phased** and **gated**:
 
 - **Read-only (query) tools are always available** for an enabled backend.
-- **All mutations are explicitly gated.** The exact gating UX is **TBD**, but a
-  clean seam is fixed now: `adapter/mcp.Deps.EnableMutations bool` (and the
-  `enableMutations` argument to `RegisterTools` / `registerPVETools` /
-  `registerPBSTools`). `adapter/mcp` registers a mutation tool **only** when the
-  flag is true; read-only tools are unaffected. The composition root
-  (`cmd/mcp-proxmox`) sets the value.
-- `pve_vm_migrate` is the **next planned mutation** to add behind this gate.
-- **Milestone vertical slice:** read-only surface + system tools (`ping`/
-  `status`); mutations are off.
+- **All mutations are explicitly gated** by the env var **`ENABLE_MUTATIONS`**
+  (`adapter/config.Config.EnableMutations`, **default `false`**), read by
+  envconfig and wired by the composition root (`cmd/mcp-proxmox/main.go`) into
+  `adapter/mcp.Deps.EnableMutations` (and the `enableMutations` argument to
+  `RegisterTools` / `registerPVETools` / `registerPBSTools`). `adapter/mcp`
+  registers a mutation tool **only** when the flag is true; read-only tools are
+  unaffected.
+- Implemented mutations (when enabled): PVE — `pve_vm_create`, `pve_vm_resize`,
+  `pve_vm_migrate`, `pve_ha_add`, `pve_vm_backup`; PBS — `pbs_verify_start`,
+  `pbs_gc_start`, `pbs_prune_start`, `pbs_sync_start`. Further mutations
+  (start/stop/reboot/shutdown/delete, LXC, restore/forget/notes-set) remain
+  planned.
+- **Default:** mutations are off (read-only + system vertical slice) until
+  `ENABLE_MUTATIONS=true` is set.
 
 ---
 
@@ -223,14 +228,18 @@ Operates a PVE cluster over the REST API (`/api2/json`).
 - **Nodes & cluster:** list nodes, node status (uptime, CPU, memory, storage
   totals), cluster status (quorum/health), cluster resources (VMs/CTs/storage
   across all nodes), and the next free VMID.
-- **QEMU VMs:** list VMs on a node, VM config, VM status, create, start, stop,
-  reboot, shutdown, migrate, delete.
+- **QEMU VMs:** list VMs on a node, VM config, VM status, create, resize, start,
+  stop, reboot, shutdown, migrate, delete; backup a VM (vzdump).
 - **LXC containers:** list containers on a node, container config, container
   status, create, start, stop, reboot, shutdown, delete.
 - **Storage:** list cluster storage, storage status on a node.
 - **Network:** list network interfaces on a node.
+- **High availability:** register a new HA resource.
 - **Tasks:** list tasks on a node, task status by UPID, task log by UPID.
 - **Version:** PVE version info.
+
+Mutation tools (create/resize/migrate/ha/backup) are registered only when
+`ENABLE_MUTATIONS=true` (SPEC.md §2.5).
 
 ### 3.2 Proxmox Backup Server (prefix `pbs_`)
 
@@ -242,7 +251,12 @@ Operates a PBS instance over the REST API (`/api2/json`).
 - **Notes:** get and set the notes of a backup snapshot.
 - **Verify:** start a verify job on a datastore, poll verify-job status.
 - **Prune:** start a prune job on a datastore, poll prune-job status.
+- **Garbage collection:** start a GC job on a datastore.
+- **Sync:** start a one-off sync job on a datastore.
 - **Version:** PBS version info.
+
+Mutation tools (verify/gc/prune/sync start) are registered only when
+`ENABLE_MUTATIONS=true` (SPEC.md §2.5).
 
 ### 3.3 System (no prefix)
 
@@ -502,7 +516,7 @@ delete rows above.
 | 1 | `ping` | system | query | liveness; reports enabled backends (`pve`, `pbs`) |
 | 2 | `status` | system | query | server status: version, transport, enabled backends |
 
-### 6.2 Proxmox VE — nodes & cluster (5)
+### 6.2 Proxmox VE — nodes, cluster & HA (6)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
@@ -511,82 +525,93 @@ delete rows above.
 | 5 | `pve_cluster_status` | query | `GET /cluster/status` |
 | 6 | `pve_cluster_resources` | query | `GET /cluster/resources` |
 | 7 | `pve_nextid` | query | `GET /cluster/nextid` |
+| 8 | `pve_ha_add` | mutation | `POST /cluster/ha/resources` |
 
-### 6.3 Proxmox VE — QEMU VMs (10)
+### 6.3 Proxmox VE — QEMU VMs (12)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 8 | `pve_vm_list` | query | `GET /nodes/{node}/qemu` |
-| 9 | `pve_vm_get` | query | `GET /nodes/{node}/qemu/{vmid}/config` |
-| 10 | `pve_vm_status` | query | `GET /nodes/{node}/qemu/{vmid}/status/current` |
-| 11 | `pve_vm_create` | mutation | `POST /nodes/{node}/qemu` |
-| 12 | `pve_vm_start` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/start` |
-| 13 | `pve_vm_stop` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/stop` |
-| 14 | `pve_vm_reboot` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/reboot` |
-| 15 | `pve_vm_shutdown` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/shutdown` |
-| 16 | `pve_vm_migrate` | mutation | `POST /nodes/{node}/qemu/{vmid}/migrate` |
-| 17 | `pve_vm_delete` | mutation | `DELETE /nodes/{node}/qemu/{vmid}` |
+| 9 | `pve_vm_list` | query | `GET /nodes/{node}/qemu` |
+| 10 | `pve_vm_get` | query | `GET /nodes/{node}/qemu/{vmid}/config` |
+| 11 | `pve_vm_status` | query | `GET /nodes/{node}/qemu/{vmid}/status/current` |
+| 12 | `pve_vm_create` | mutation | `POST /nodes/{node}/qemu` |
+| 13 | `pve_vm_resize` | mutation | `PUT /nodes/{node}/qemu/{vmid}/resize` |
+| 14 | `pve_vm_start` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/start` |
+| 15 | `pve_vm_stop` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/stop` |
+| 16 | `pve_vm_reboot` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/reboot` |
+| 17 | `pve_vm_shutdown` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/shutdown` |
+| 18 | `pve_vm_migrate` | mutation | `POST /nodes/{node}/qemu/{vmid}/migrate` |
+| 19 | `pve_vm_backup` | mutation | `POST /nodes/{node}/vzdump` |
+| 20 | `pve_vm_delete` | mutation | `DELETE /nodes/{node}/qemu/{vmid}` |
 
 ### 6.4 Proxmox VE — LXC containers (9)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 18 | `pve_lxc_list` | query | `GET /nodes/{node}/lxc` |
-| 19 | `pve_lxc_get` | query | `GET /nodes/{node}/lxc/{vmid}/config` |
-| 20 | `pve_lxc_status` | query | `GET /nodes/{node}/lxc/{vmid}/status/current` |
-| 21 | `pve_lxc_create` | mutation | `POST /nodes/{node}/lxc` |
-| 22 | `pve_lxc_start` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/start` |
-| 23 | `pve_lxc_stop` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/stop` |
-| 24 | `pve_lxc_reboot` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/reboot` |
-| 25 | `pve_lxc_shutdown` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/shutdown` |
-| 26 | `pve_lxc_delete` | mutation | `DELETE /nodes/{node}/lxc/{vmid}` |
+| 21 | `pve_lxc_list` | query | `GET /nodes/{node}/lxc` |
+| 22 | `pve_lxc_get` | query | `GET /nodes/{node}/lxc/{vmid}/config` |
+| 23 | `pve_lxc_status` | query | `GET /nodes/{node}/lxc/{vmid}/status/current` |
+| 24 | `pve_lxc_create` | mutation | `POST /nodes/{node}/lxc` |
+| 25 | `pve_lxc_start` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/start` |
+| 26 | `pve_lxc_stop` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/stop` |
+| 27 | `pve_lxc_reboot` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/reboot` |
+| 28 | `pve_lxc_shutdown` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/shutdown` |
+| 29 | `pve_lxc_delete` | mutation | `DELETE /nodes/{node}/lxc/{vmid}` |
 
 ### 6.5 Proxmox VE — storage & network (3)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 27 | `pve_storage_list` | query | `GET /storage` |
-| 28 | `pve_storage_get` | query | `GET /nodes/{node}/storage/{storage}/status` |
-| 29 | `pve_network_list` | query | `GET /nodes/{node}/network` |
+| 30 | `pve_storage_list` | query | `GET /storage` |
+| 31 | `pve_storage_get` | query | `GET /nodes/{node}/storage/{storage}/status` |
+| 32 | `pve_network_list` | query | `GET /nodes/{node}/network` |
 
 ### 6.6 Proxmox VE — tasks & version (4)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 30 | `pve_task_list` | query | `GET /nodes/{node}/tasks` |
-| 31 | `pve_task_status` | query | `GET /nodes/{node}/tasks/{upid}/status` |
-| 32 | `pve_task_log` | query | `GET /nodes/{node}/tasks/{upid}/log` |
-| 33 | `pve_version` | query | `GET /version` |
+| 33 | `pve_task_list` | query | `GET /nodes/{node}/tasks` |
+| 34 | `pve_task_status` | query | `GET /nodes/{node}/tasks/{upid}/status` |
+| 35 | `pve_task_log` | query | `GET /nodes/{node}/tasks/{upid}/log` |
+| 36 | `pve_version` | query | `GET /version` |
 
 ### 6.7 PBS — datastores (2)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 34 | `pbs_datastore_list` | query | `GET /admin/datastore` |
-| 35 | `pbs_datastore_status` | query | `GET /admin/datastore/{store}/status` |
+| 37 | `pbs_datastore_list` | query | `GET /admin/datastore` |
+| 38 | `pbs_datastore_status` | query | `GET /admin/datastore/{store}/status` |
 
 ### 6.8 PBS — backups/snapshots & notes (6)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 36 | `pbs_backup_list` | query | `GET /admin/datastore/{store}/snapshot` |
-| 37 | `pbs_backup_get` | query | `GET /admin/datastore/{store}/snapshot/{snapshot}` |
-| 38 | `pbs_backup_restore` | mutation | `POST /admin/datastore/{store}/snapshot/{snapshot}/restore` |
-| 39 | `pbs_backup_forget` | mutation | `DELETE /admin/datastore/{store}/snapshot/{snapshot}` |
-| 40 | `pbs_backup_notes_get` | query | `GET /admin/datastore/{store}/snapshot/{snapshot}/notes` |
-| 41 | `pbs_backup_notes_set` | mutation | `PUT /admin/datastore/{store}/snapshot/{snapshot}/notes` |
+| 39 | `pbs_backup_list` | query | `GET /admin/datastore/{store}/snapshot` |
+| 40 | `pbs_backup_get` | query | `GET /admin/datastore/{store}/snapshot/{snapshot}` |
+| 41 | `pbs_backup_restore` | mutation | `POST /admin/datastore/{store}/snapshot/{snapshot}/restore` |
+| 42 | `pbs_backup_forget` | mutation | `DELETE /admin/datastore/{store}/snapshot/{snapshot}` |
+| 43 | `pbs_backup_notes_get` | query | `GET /admin/datastore/{store}/snapshot/{snapshot}/notes` |
+| 44 | `pbs_backup_notes_set` | mutation | `PUT /admin/datastore/{store}/snapshot/{snapshot}/notes` |
 
-### 6.9 PBS — verify & prune & version (5)
+### 6.9 PBS — verify, GC, prune, sync & version (7)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 42 | `pbs_verify_start` | mutation | `POST /admin/datastore/{store}/verify` |
-| 43 | `pbs_verify_status` | query | `GET /admin/datastore/{store}/verify/{upid}` |
-| 44 | `pbs_prune_start` | mutation | `POST /admin/datastore/{store}/prune` |
-| 45 | `pbs_prune_status` | query | `GET /admin/datastore/{store}/prune/{upid}` |
-| 46 | `pbs_version` | query | `GET /version` |
+| 45 | `pbs_verify_start` | mutation | `POST /admin/datastore/{store}/verify` |
+| 46 | `pbs_verify_status` | query | `GET /admin/datastore/{store}/verify/{upid}` |
+| 47 | `pbs_gc_start` | mutation | `POST /admin/datastore/{store}/gc` |
+| 48 | `pbs_prune_start` | mutation | `POST /admin/datastore/{store}/prune` |
+| 49 | `pbs_prune_status` | query | `GET /admin/datastore/{store}/prune/{upid}` |
+| 50 | `pbs_sync_start` | mutation | `POST /admin/datastore/{store}/sync` |
+| 51 | `pbs_version` | query | `GET /version` |
 
-**Total: 46 tools** (system 2, PVE 31, PBS 13).
+**Total: 51 tools** (system 2, PVE 34, PBS 15).
+
+> **Implemented mutations (behind `ENABLE_MUTATIONS=true`, §2.5):**
+> PVE — `pve_vm_create`, `pve_vm_resize`, `pve_vm_migrate`, `pve_ha_add`,
+> `pve_vm_backup`. PBS — `pbs_verify_start`, `pbs_gc_start`, `pbs_prune_start`,
+> `pbs_sync_start`. The remaining mutation rows (start/stop/reboot/shutdown/
+> delete, LXC, restore/forget/notes-set) are planned and not yet registered.
 
 > **Restore/forget semantics (PBS):** `pbs_backup_restore` restores a snapshot
 > and returns the resulting task UPID; `pbs_backup_forget` removes a snapshot
@@ -756,11 +781,11 @@ All fixes and features follow a **TDD workflow** with **isolated contexts**:
    `PBS_CA_CERT_PATH`, `LOG_LEVEL`); **no YAML file**. A backend is enabled only
    when both its endpoint and token are non-empty.
 5. **Tool surface — phased/gated:** read-only (query) tools are **always**
-   available. All mutations are gated behind an explicit opt-in; the exact gating
-   mechanism is **TBD** (the seam is `Deps.EnableMutations` in `adapter/mcp`,
-   honored during tool registration). `pve_vm_migrate` is the next planned
-   mutation. The milestone vertical slice is read-only + system (`ping`/`status`).
-6. **Exact tool list:** the 46-tool registry in §6 is the agreed surface; it may
+   available. All mutations are gated behind the explicit **`ENABLE_MUTATIONS`**
+   env opt-in (default `false`, SPEC.md §2.5; the seam is
+   `Deps.EnableMutations` in `adapter/mcp`, honored during tool registration).
+   The milestone default surface is read-only + system (`ping`/`status`).
+6. **Exact tool list:** the 51-tool registry in §6 is the agreed surface; it may
    be trimmed/extended during implementation (e.g. more PVE config options).
 7. **API-token only** (no ticket/CSRF flow) — matches the stated requirement.
 8. **Tokens from config, not per-call** — confirmed in §2.4; revisit only if a

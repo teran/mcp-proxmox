@@ -132,6 +132,7 @@ disabled and its tools are not registered.
 | `LOG_LEVEL` | Log level (`trace`, `debug`, `info`, `warn`, `error`). **When set, logging is enabled**; when unset, logging is **disabled** (no logs are emitted anywhere). |
 | `LOG_FILENAME` | Path of the log file used when `LOG_LEVEL` is set (default `/tmp/mcp-proxmox.log`, mode `0600`). |
 | `LOG_FORMAT` | Log format: `text` (default) or `json`. |
+| `ENABLE_MUTATIONS` | Register mutation tools (default `false`). When `true`, mutation tools (`pve_vm_create`, `pve_vm_resize`, `pve_vm_migrate`, `pve_ha_add`, `pve_vm_backup`, `pbs_verify_start`, `pbs_gc_start`, `pbs_prune_start`, `pbs_sync_start`) are registered for enabled backends; when `false`, only read-only query tools are exposed. |
 
 These are the **only** environment variables the server reads. Proxmox API
 tokens are long-lived, privilege-scoped credentials configured once per backend
@@ -243,7 +244,7 @@ client as a subprocess (see the client configuration below).
 | `ping` | query | liveness; reports enabled backends (`pve`, `pbs`) |
 | `status` | query | server status: version, transport, enabled backends |
 
-### Proxmox VE — nodes & cluster (5)
+### Proxmox VE — nodes, cluster & HA (6)
 
 | Tool | Type | Description |
 |---|---|---|
@@ -252,8 +253,9 @@ client as a subprocess (see the client configuration below).
 | `pve_cluster_status` | query | cluster status (quorum/health) |
 | `pve_cluster_resources` | query | cluster resources (VMs/CTs/storage across nodes) |
 | `pve_nextid` | query | next free VMID |
+| `pve_ha_add` | mutation | register a new HA resource |
 
-### Proxmox VE — QEMU VMs (10)
+### Proxmox VE — QEMU VMs (12)
 
 | Tool | Type | Description |
 |---|---|---|
@@ -261,11 +263,13 @@ client as a subprocess (see the client configuration below).
 | `pve_vm_get` | query | VM config |
 | `pve_vm_status` | query | VM status |
 | `pve_vm_create` | mutation | create a VM |
+| `pve_vm_resize` | mutation | resize a VM disk |
 | `pve_vm_start` | mutation | start a VM |
 | `pve_vm_stop` | mutation | stop a VM |
 | `pve_vm_reboot` | mutation | reboot a VM |
 | `pve_vm_shutdown` | mutation | shut down a VM |
 | `pve_vm_migrate` | mutation | migrate a VM |
+| `pve_vm_backup` | mutation | back up a VM (vzdump, returns task UPID) |
 | `pve_vm_delete` | mutation | delete a VM |
 
 ### Proxmox VE — LXC containers (9)
@@ -317,17 +321,20 @@ client as a subprocess (see the client configuration below).
 | `pbs_backup_notes_get` | query | get a snapshot's notes |
 | `pbs_backup_notes_set` | mutation | set a snapshot's notes |
 
-### PBS — verify, prune & version (5)
+### PBS — verify, GC, prune, sync & version (7)
 
 | Tool | Type | Description |
 |---|---|---|
 | `pbs_verify_start` | mutation | start a verify job on a datastore |
 | `pbs_verify_status` | query | poll verify-job status |
+| `pbs_gc_start` | mutation | start a garbage-collection job on a datastore |
 | `pbs_prune_start` | mutation | start a prune job on a datastore |
 | `pbs_prune_status` | query | poll prune-job status |
+| `pbs_sync_start` | mutation | start a one-off sync job on a datastore |
 | `pbs_version` | query | PBS version info |
 
-**Total: 46 tools.** For the authoritative registry, see
+**Total: 51 tools** (system 2, PVE 34, PBS 15). Mutation tools are registered
+only when `ENABLE_MUTATIONS=true`. For the authoritative registry, see
 [`SPEC.md`](./SPEC.md#6-tool-registry-complete) §6.
 
 ---

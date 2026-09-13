@@ -182,6 +182,73 @@ func TestPVEService_Success(t *testing.T) {
 	})
 }
 
+// TestPVEService_MutationSuccess exercises the mutation use cases through the
+// PVEGateway mock: CreateVM/ResizeVM/MigrateVM/AddHAResource/StartVMBackup.
+func TestPVEService_MutationSuccess(t *testing.T) {
+	t.Run("CreateVM", func(t *testing.T) {
+		gotReq := model.CreateVMRequest{}
+		gw := &mockPVEGateway{createVM: func(ctx context.Context, node string, req model.CreateVMRequest) (int, error) {
+			gotReq = req
+			return 100, nil
+		}}
+		req := model.CreateVMRequest{Name: "web", Cores: 2, Memory: 1024}
+		vmid, err := (&PVEService{gw: gw}).CreateVM(context.Background(), "pve1", req)
+		require.NoError(t, err)
+		assert.Equal(t, 100, vmid)
+		assert.Equal(t, req, gotReq)
+	})
+
+	t.Run("ResizeVM", func(t *testing.T) {
+		gotReq := model.ResizeVMRequest{}
+		gw := &mockPVEGateway{resizeVM: func(ctx context.Context, node string, vmid int, req model.ResizeVMRequest) error {
+			gotReq = req
+			return nil
+		}}
+		req := model.ResizeVMRequest{Disk: "scsi0", SizeGB: 20}
+		err := (&PVEService{gw: gw}).ResizeVM(context.Background(), "pve1", 100, req)
+		require.NoError(t, err)
+		assert.Equal(t, req, gotReq)
+	})
+
+	t.Run("MigrateVM", func(t *testing.T) {
+		gotReq := model.MigrateVMRequest{}
+		gw := &mockPVEGateway{migrateVM: func(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error {
+			gotReq = req
+			return nil
+		}}
+		req := model.MigrateVMRequest{Target: "pve2", Online: true, WithLocalDisks: true}
+		err := (&PVEService{gw: gw}).MigrateVM(context.Background(), "pve1", 100, req)
+		require.NoError(t, err)
+		assert.Equal(t, req, gotReq)
+	})
+
+	t.Run("AddHAResource", func(t *testing.T) {
+		gotReq := model.HAResourceRequest{}
+		gw := &mockPVEGateway{addHAResource: func(ctx context.Context, req model.HAResourceRequest) error {
+			gotReq = req
+			return nil
+		}}
+		req := model.HAResourceRequest{SID: "vm:100", Type: "vm", Nodes: []string{"pve1"}}
+		err := (&PVEService{gw: gw}).AddHAResource(context.Background(), req)
+		require.NoError(t, err)
+		assert.Equal(t, req, gotReq)
+	})
+
+	t.Run("StartVMBackup", func(t *testing.T) {
+		gotReq := model.VMBackupRequest{}
+		gw := &mockPVEGateway{startVMBackup: func(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error) {
+			gotReq = req
+			return &model.Task{UPID: "UPID:..."}, nil
+		}}
+		req := model.VMBackupRequest{VMID: 100, Storage: "local", Mode: "snapshot"}
+		task, err := (&PVEService{gw: gw}).StartVMBackup(context.Background(), "pve1", req)
+		require.NoError(t, err)
+		require.NotNil(t, task)
+		assert.Equal(t, "UPID:...", task.UPID)
+		assert.Equal(t, req, gotReq)
+	})
+}
+
 // TestPVEService_ErrorPropagation verifies that gateway errors propagate
 // unchanged through the thin service layer.
 func TestPVEService_ErrorPropagation(t *testing.T) {
@@ -212,6 +279,17 @@ func TestPVEService_ErrorPropagation(t *testing.T) {
 		{"GetTaskStatus", func(s *PVEService) error { _, e := s.GetTaskStatus(context.Background(), "n", "u"); return e }},
 		{"GetTaskLog", func(s *PVEService) error { _, e := s.GetTaskLog(context.Background(), "n", "u", 0); return e }},
 		{"GetPVEVersion", func(s *PVEService) error { _, e := s.GetPVEVersion(context.Background()); return e }},
+		{"CreateVM", func(s *PVEService) error {
+			_, e := s.CreateVM(context.Background(), "n", model.CreateVMRequest{})
+			return e
+		}},
+		{"ResizeVM", func(s *PVEService) error { return s.ResizeVM(context.Background(), "n", 1, model.ResizeVMRequest{}) }},
+		{"MigrateVM", func(s *PVEService) error { return s.MigrateVM(context.Background(), "n", 1, model.MigrateVMRequest{}) }},
+		{"AddHAResource", func(s *PVEService) error { return s.AddHAResource(context.Background(), model.HAResourceRequest{}) }},
+		{"StartVMBackup", func(s *PVEService) error {
+			_, e := s.StartVMBackup(context.Background(), "n", model.VMBackupRequest{})
+			return e
+		}},
 	}
 
 	// Build a gateway where every method returns the sentinel error.
@@ -238,6 +316,13 @@ func TestPVEService_ErrorPropagation(t *testing.T) {
 		return nil, sentinel
 	}
 	gw.getPVEVersion = func(ctx context.Context) (*model.PVEVersion, error) { return nil, sentinel }
+	gw.createVM = func(ctx context.Context, node string, req model.CreateVMRequest) (int, error) { return 0, sentinel }
+	gw.resizeVM = func(ctx context.Context, node string, vmid int, req model.ResizeVMRequest) error { return sentinel }
+	gw.migrateVM = func(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error { return sentinel }
+	gw.addHAResource = func(ctx context.Context, req model.HAResourceRequest) error { return sentinel }
+	gw.startVMBackup = func(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error) {
+		return nil, sentinel
+	}
 
 	svc := &PVEService{gw: gw}
 	for _, tc := range cases {

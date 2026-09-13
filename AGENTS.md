@@ -36,8 +36,9 @@ contradiction, raise it with the architect.
 - Runs `golangci-lint`, `go test`, `go-arch-lint`, and gremlins locally before pushing.
 - Registers MCP tools only in `adapter/mcp`; a backend's tools only when its
   service is non-nil. Read-only (query) tools are always registered for an
-  enabled backend; mutation tools are registered only when `Deps.EnableMutations`
-  is true (gate UX TBD — SPEC.md §2.5).
+  enabled backend; mutation tools are registered only when
+  `Deps.EnableMutations` is true (gated by the `ENABLE_MUTATIONS` env var,
+  default `false` — SPEC.md §2.5).
 
 ### QA
 - Owns the test strategy: hermetic unit tests (port mocks), `httptest` mocks of
@@ -169,8 +170,10 @@ contradiction, raise it with the architect.
 - Configuration is read from **environment variables** via
   `kelseyhightower/envconfig` (`adapter/config`): `PVE_ENDPOINT`/`PVE_TOKEN`
   (/`PVE_CA_CERT_PATH`), `PBS_ENDPOINT`/`PBS_TOKEN` (/`PBS_CA_CERT_PATH`),
-  `LOG_LEVEL`, `LOG_FILENAME` (default `/tmp/mcp-proxmox.log`), and `LOG_FORMAT`
-  (text|json). There is **no YAML/config file**.
+  `LOG_LEVEL`, `LOG_FILENAME` (default `/tmp/mcp-proxmox.log`), `LOG_FORMAT`
+  (text|json), and `ENABLE_MUTATIONS` (default `false` — when `true`, mutation
+  tools are registered for enabled backends; SPEC.md §2.5). There is **no YAML/
+  config file**.
 - **Dynamic availability:** a backend is active only if **both** its `endpoint`
   and its `token` are present; otherwise it is **disabled** and its tools must
   **not** be registered. Nothing fails when a backend is absent.

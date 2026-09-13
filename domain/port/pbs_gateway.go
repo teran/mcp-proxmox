@@ -7,9 +7,9 @@ import (
 )
 
 // PBSGateway is the secondary port implemented by adapter/pbs. It models the
-// Proxmox Backup Server REST API (/api2/json) for the read-only (query)
-// surface. Mutation methods (restore/forget/notes-set/verify-start/prune-start)
-// will be added when the mutation gate is implemented (SPEC.md §2.4 / §6).
+// Proxmox Backup Server REST API (/api2/json): the read-only (query) surface
+// plus the mutation surface (verify/gc/prune/sync-start), which the MCP adapter
+// registers only when the ENABLE_MUTATIONS gate is on (SPEC.md §2.5).
 type PBSGateway interface {
 	// Datastores.
 	ListDatastores(ctx context.Context) ([]model.Datastore, error)
@@ -29,6 +29,13 @@ type PBSGateway interface {
 	// Verify & prune (status polling is read-only).
 	GetVerifyStatus(ctx context.Context, store, upid string) (*model.VerifyStatus, error)
 	GetPruneStatus(ctx context.Context, store, upid string) (*model.PruneStatus, error)
+
+	// Mutations (gated by EnableMutations). These are never retried and return
+	// the task UPID taken from the response `data` field.
+	StartVerify(ctx context.Context, store string) (string, error)
+	StartGC(ctx context.Context, store string) (string, error)
+	StartPrune(ctx context.Context, store string) (string, error)
+	StartSync(ctx context.Context, store string, req model.PBSSyncRequest) (string, error)
 
 	// Version.
 	GetPBSVersion(ctx context.Context) (*model.PBSVersion, error)

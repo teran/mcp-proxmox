@@ -17,9 +17,9 @@ type TaskListOptions struct {
 }
 
 // PVEGateway is the secondary port implemented by adapter/pve. It models the
-// Proxmox VE REST API (/api2/json) for the read-only (query) surface. Mutation
-// methods (start/stop/create/migrate/delete/...) will be added when the
-// mutation gate is implemented (SPEC.md §2.4 / §6).
+// Proxmox VE REST API (/api2/json): the read-only (query) surface plus the
+// mutation surface (create/resize/migrate/ha/backup), which the MCP adapter
+// registers only when the ENABLE_MUTATIONS gate is on (SPEC.md §2.5).
 type PVEGateway interface {
 	// Nodes & cluster.
 	ListNodes(ctx context.Context) ([]model.Node, error)
@@ -48,4 +48,11 @@ type PVEGateway interface {
 	GetTaskStatus(ctx context.Context, node, upid string) (*model.TaskStatus, error)
 	GetTaskLog(ctx context.Context, node, upid string, limit int) ([]model.TaskLogEntry, error)
 	GetPVEVersion(ctx context.Context) (*model.PVEVersion, error)
+
+	// Mutations (gated by EnableMutations). These are never retried.
+	CreateVM(ctx context.Context, node string, req model.CreateVMRequest) (int, error)
+	ResizeVM(ctx context.Context, node string, vmid int, req model.ResizeVMRequest) error
+	MigrateVM(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error
+	AddHAResource(ctx context.Context, req model.HAResourceRequest) error
+	StartVMBackup(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
 }

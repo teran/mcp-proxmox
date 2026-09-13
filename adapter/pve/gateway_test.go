@@ -3,8 +3,10 @@ package pve
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -31,6 +33,10 @@ type reqCapture struct {
 	auth      string
 	requestID string
 	count     int
+	// form holds the parsed form body (POST/PUT mutations); empty for GETs.
+	form url.Values
+	// rawBody holds the raw request body bytes (verbatim).
+	rawBody string
 }
 
 // skipIfStub skips a contract test while the gateway body is still the
@@ -69,6 +75,12 @@ func mockServer(t *testing.T, status int, body string, rec *reqCapture) *httptes
 		rec.auth = r.Header.Get("Authorization")
 		rec.requestID = r.Header.Get("X-Request-ID")
 		rec.count++
+		// ParseForm reads the form body for POST/PUT/PATCH into r.PostForm.
+		_ = r.ParseForm()
+		rec.form = r.PostForm
+		if b, err := io.ReadAll(r.Body); err == nil {
+			rec.rawBody = string(b)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))

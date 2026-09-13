@@ -14,9 +14,12 @@ func clearEnv(t *testing.T) {
 		"PVE_ENDPOINT", "PVE_TOKEN", "PVE_CA_CERT_PATH",
 		"PBS_ENDPOINT", "PBS_TOKEN", "PBS_CA_CERT_PATH",
 		"LOG_LEVEL", "LOG_FILENAME", "LOG_FORMAT",
+		"ENABLE_MUTATIONS",
 	} {
 		t.Setenv(k, "")
 	}
+	// ENABLE_MUTATIONS="" is normalized to "false" by Load(), so setting it to
+	// empty here yields a clean disabled baseline for every test.
 }
 
 func TestLoad(t *testing.T) {
@@ -29,6 +32,7 @@ func TestLoad(t *testing.T) {
 		assert.False(t, c.PVEEnabled())
 		assert.False(t, c.PBSEnabled())
 		assert.Equal(t, "", c.LogLevel)
+		assert.False(t, c.EnableMutations)
 	})
 
 	t.Run("full env", func(t *testing.T) {
@@ -42,6 +46,7 @@ func TestLoad(t *testing.T) {
 		t.Setenv("LOG_LEVEL", "debug")
 		t.Setenv("LOG_FORMAT", "json")
 		t.Setenv("LOG_FILENAME", "/var/log/mcp.log")
+		t.Setenv("ENABLE_MUTATIONS", "true")
 
 		c, err := Load()
 		require.NoError(t, err)
@@ -56,7 +61,39 @@ func TestLoad(t *testing.T) {
 		assert.Equal(t, "debug", c.LogLevel)
 		assert.Equal(t, "json", c.LogFormat)
 		assert.Equal(t, "/var/log/mcp.log", c.LogFileName)
+		assert.True(t, c.EnableMutations)
 	})
+}
+
+// TestEnableMutations parses the ENABLE_MUTATIONS env var (bool, default
+// false) into Config.EnableMutations. An explicitly-set empty string is
+// normalized by Load() to false and must not fail.
+func TestEnableMutations(t *testing.T) {
+	tests := []struct {
+		name string
+		set  bool
+		val  string
+		want bool
+	}{
+		{"unset defaults false", false, "", false},
+		{"empty string treated false", true, "", false},
+		{"true", true, "true", true},
+		{"1", true, "1", true},
+		{"false", true, "false", false},
+		{"0", true, "0", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearEnv(t)
+			if tt.set {
+				t.Setenv("ENABLE_MUTATIONS", tt.val)
+			}
+			c, err := Load()
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, c.EnableMutations)
+		})
+	}
 }
 
 func TestLoggingDefaults(t *testing.T) {

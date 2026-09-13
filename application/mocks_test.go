@@ -28,6 +28,11 @@ type mockPVEGateway struct {
 	getTaskStatus    func(ctx context.Context, node, upid string) (*model.TaskStatus, error)
 	getTaskLog       func(ctx context.Context, node, upid string, limit int) ([]model.TaskLogEntry, error)
 	getPVEVersion    func(ctx context.Context) (*model.PVEVersion, error)
+	createVM         func(ctx context.Context, node string, req model.CreateVMRequest) (int, error)
+	resizeVM         func(ctx context.Context, node string, vmid int, req model.ResizeVMRequest) error
+	migrateVM        func(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error
+	addHAResource    func(ctx context.Context, req model.HAResourceRequest) error
+	startVMBackup    func(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
 }
 
 func (m *mockPVEGateway) ListNodes(ctx context.Context) ([]model.Node, error) {
@@ -138,6 +143,36 @@ func (m *mockPVEGateway) GetPVEVersion(ctx context.Context) (*model.PVEVersion, 
 	}
 	return nil, nil
 }
+func (m *mockPVEGateway) CreateVM(ctx context.Context, node string, req model.CreateVMRequest) (int, error) {
+	if m.createVM != nil {
+		return m.createVM(ctx, node, req)
+	}
+	return 0, nil
+}
+func (m *mockPVEGateway) ResizeVM(ctx context.Context, node string, vmid int, req model.ResizeVMRequest) error {
+	if m.resizeVM != nil {
+		return m.resizeVM(ctx, node, vmid, req)
+	}
+	return nil
+}
+func (m *mockPVEGateway) MigrateVM(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error {
+	if m.migrateVM != nil {
+		return m.migrateVM(ctx, node, vmid, req)
+	}
+	return nil
+}
+func (m *mockPVEGateway) AddHAResource(ctx context.Context, req model.HAResourceRequest) error {
+	if m.addHAResource != nil {
+		return m.addHAResource(ctx, req)
+	}
+	return nil
+}
+func (m *mockPVEGateway) StartVMBackup(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error) {
+	if m.startVMBackup != nil {
+		return m.startVMBackup(ctx, node, req)
+	}
+	return nil, nil
+}
 
 var _ port.PVEGateway = (*mockPVEGateway)(nil)
 
@@ -151,6 +186,10 @@ type mockPBSGateway struct {
 	getVerifyStatus   func(ctx context.Context, store, upid string) (*model.VerifyStatus, error)
 	getPruneStatus    func(ctx context.Context, store, upid string) (*model.PruneStatus, error)
 	getPBSVersion     func(ctx context.Context) (*model.PBSVersion, error)
+	startVerify       func(ctx context.Context, store string) (string, error)
+	startGC           func(ctx context.Context, store string) (string, error)
+	startPrune        func(ctx context.Context, store string) (string, error)
+	startSync         func(ctx context.Context, store string, req model.PBSSyncRequest) (string, error)
 }
 
 func (m *mockPBSGateway) ListDatastores(ctx context.Context) ([]model.Datastore, error) {
@@ -200,6 +239,30 @@ func (m *mockPBSGateway) GetPBSVersion(ctx context.Context) (*model.PBSVersion, 
 		return m.getPBSVersion(ctx)
 	}
 	return nil, nil
+}
+func (m *mockPBSGateway) StartVerify(ctx context.Context, store string) (string, error) {
+	if m.startVerify != nil {
+		return m.startVerify(ctx, store)
+	}
+	return "", nil
+}
+func (m *mockPBSGateway) StartGC(ctx context.Context, store string) (string, error) {
+	if m.startGC != nil {
+		return m.startGC(ctx, store)
+	}
+	return "", nil
+}
+func (m *mockPBSGateway) StartPrune(ctx context.Context, store string) (string, error) {
+	if m.startPrune != nil {
+		return m.startPrune(ctx, store)
+	}
+	return "", nil
+}
+func (m *mockPBSGateway) StartSync(ctx context.Context, store string, req model.PBSSyncRequest) (string, error) {
+	if m.startSync != nil {
+		return m.startSync(ctx, store, req)
+	}
+	return "", nil
 }
 
 var _ port.PBSGateway = (*mockPBSGateway)(nil)

@@ -8,6 +8,8 @@
 package config
 
 import (
+	"os"
+
 	"github.com/kelseyhightower/envconfig"
 )
 
@@ -35,12 +37,28 @@ type Config struct {
 	// LogFormat maps to LOG_FORMAT: "text" (default, logrus text with full
 	// timestamps) or "json".
 	LogFormat string `envconfig:"LOG_FORMAT" desc:"Log format: text (default) | json."`
+
+	// EnableMutations maps to ENABLE_MUTATIONS. When false (default), mutation
+	// tools (pve_vm_create, pbs_verify_start, ...) are NOT registered; only the
+	// read-only query surface is exposed. When true, mutation tools are
+	// registered for enabled backends (SPEC.md §2.5).
+	EnableMutations bool `envconfig:"ENABLE_MUTATIONS" default:"false" desc:"Register mutation tools (default false)."`
 }
 
 // Load reads the configuration from environment variables. It never fails on a
 // missing variable — envconfig leaves fields empty, and empty endpoint/token
 // simply mean the backend is disabled.
 func Load() (Config, error) {
+	// envconfig fails to parse an explicitly-set-empty value for a bool field
+	// (strconv.ParseBool("")). Normalize ENABLE_MUTATIONS="" -> "false" so an
+	// empty value means "disabled" (SPEC.md §2.5) instead of failing to load.
+	// Unset behaviour is unchanged: default:"false" already yields false.
+	if v, ok := os.LookupEnv("ENABLE_MUTATIONS"); ok && v == "" {
+		if err := os.Setenv("ENABLE_MUTATIONS", "false"); err != nil {
+			return Config{}, err
+		}
+	}
+
 	var c Config
 	if err := envconfig.Process("", &c); err != nil {
 		return c, err

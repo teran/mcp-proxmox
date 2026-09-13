@@ -6,6 +6,7 @@ import (
 	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/teran/mcp-proxmox/application"
+	"github.com/teran/mcp-proxmox/domain/model"
 )
 
 // storeIn identifies a datastore (pbs_datastore_status / pbs_backup_list).
@@ -33,10 +34,23 @@ type jobIn struct {
 	UPID  string `json:"upid" jsonschema:"Job UPID"`
 }
 
+// syncIn is the input of pbs_sync_start (a datastore plus sync-job parameters).
+type syncIn struct {
+	Store          string `json:"store" jsonschema:"PBS datastore name"`
+	Remote         string `json:"remote,omitempty" jsonschema:"Remote name"`
+	RemoteStore    string `json:"remote_store,omitempty" jsonschema:"Remote datastore name"`
+	Owner          string `json:"owner,omitempty" jsonschema:"Owner of the backups to sync"`
+	MaxFiles       int    `json:"max_files,omitempty" jsonschema:"Maximum number of files to sync"`
+	RemoveVanished bool   `json:"remove_vanished,omitempty" jsonschema:"Remove backups that vanished on the remote"`
+	RateIn         int    `json:"rate_in,omitempty" jsonschema:"Limit restore/import bandwidth (KB/s)"`
+	RateOut        int    `json:"rate_out,omitempty" jsonschema:"Limit upload bandwidth (KB/s)"`
+	SkipLost       bool   `json:"skip_lost,omitempty" jsonschema:"Skip lost backups on the remote"`
+	NotifyUser     string `json:"notify_user,omitempty" jsonschema:"Notify user on job completion"`
+}
+
 // registerPBSTools registers the Proxmox Backup Server tools. Read-only (query)
 // tools are always registered for an enabled PBS backend. Mutation tools are
-// registered only when enableMutations is true (gate UX TBD — SPEC.md §2.4);
-// for this milestone only the read-only surface is present.
+// registered only when enableMutations is true (SPEC.md §2.5).
 func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, enableMutations bool) {
 	// --- datastores ---
 	roTool(s, "pbs_datastore_list", "List PBS datastores",
@@ -94,11 +108,62 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 			return app.PBS.GetPBSVersion(ctx)
 		})
 
-	// --- mutations (gated) ---
+	// --- mutations (gated by EnableMutations) ---
 	if !enableMutations {
 		return
 	}
-	// Mutation tools (pbs_backup_restore/forget, pbs_backup_notes_set,
-	// pbs_verify_start, pbs_prune_start) are registered here when the gate is
-	// enabled. See SPEC.md §6.
+
+	mutTool(s, "pbs_verify_start", "Start PBS verify",
+		"Start a verify job on a PBS datastore.",
+		"Provide the datastore name. Returns the job UPID to poll with pbs_verify_status. Not idempotent: each call starts a new verify.",
+		log, false, func(ctx context.Context, in storeIn) (any, error) {
+			upid, err := app.PBS.StartVerify(ctx, in.Store)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": upid}, nil
+		})
+
+	mutTool(s, "pbs_gc_start", "Start PBS garbage collection",
+		"Start a garbage-collection job on a PBS datastore.",
+		"Provide the datastore name. Returns the job UPID. Not idempotent: each call starts a new GC.",
+		log, false, func(ctx context.Context, in storeIn) (any, error) {
+			upid, err := app.PBS.StartGC(ctx, in.Store)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": upid}, nil
+		})
+
+	mutTool(s, "pbs_prune_start", "Start PBS prune",
+		"Start a prune job on a PBS datastore.",
+		"Provide the datastore name. Returns the job UPID to poll with pbs_prune_status. Not idempotent: each call starts a new prune.",
+		log, false, func(ctx context.Context, in storeIn) (any, error) {
+			upid, err := app.PBS.StartPrune(ctx, in.Store)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": upid}, nil
+		})
+
+	mutTool(s, "pbs_sync_start", "Start PBS sync",
+		"Start a one-off sync job on a PBS datastore.",
+		"Provide the datastore name plus the sync parameters (remote, remote_store, owner, limits, etc.). Returns the job UPID. Not idempotent: each call starts a new sync.",
+		log, false, func(ctx context.Context, in syncIn) (any, error) {
+			upid, err := app.PBS.StartSync(ctx, in.Store, model.PBSSyncRequest{
+				Remote:         in.Remote,
+				RemoteStore:    in.RemoteStore,
+				Owner:          in.Owner,
+				MaxFiles:       in.MaxFiles,
+				RemoveVanished: in.RemoveVanished,
+				RateIn:         in.RateIn,
+				RateOut:        in.RateOut,
+				SkipLost:       in.SkipLost,
+				NotifyUser:     in.NotifyUser,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": upid}, nil
+		})
 }

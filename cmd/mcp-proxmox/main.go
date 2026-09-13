@@ -137,11 +137,10 @@ func main() {
 
 	impl := &mcpSDK.Implementation{Name: "mcp-proxmox", Version: version}
 
-	// Mutation gate: for this milestone only read-only + system tools are
-	// registered, so the gate is off. The exact gating UX (env flag, config,
-	// CLI flag) is TBD (SPEC.md §2.4); the seam is Deps.EnableMutations, which
-	// adapter/mcp honors when registering mutation tools.
-	enableMutations := false
+	// Mutation gate (SPEC.md §2.5): mutation tools are registered only when
+	// ENABLE_MUTATIONS=true; otherwise only read-only + system tools are
+	// exposed. The value comes from the env-driven config (default false).
+	enableMutations := cfg.EnableMutations
 
 	// One session ID per MCP session (a single process run in stdio mode). It is
 	// shared between the stdio transport connection and the request context so

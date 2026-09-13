@@ -86,6 +86,50 @@ func TestPBSService_Success(t *testing.T) {
 	})
 }
 
+// TestPBSService_MutationSuccess exercises the PBS mutation use cases
+// (StartVerify/StartGC/StartPrune/StartSync) through the PBSGateway mock.
+func TestPBSService_MutationSuccess(t *testing.T) {
+	t.Run("StartVerify", func(t *testing.T) {
+		gw := &mockPBSGateway{startVerify: func(ctx context.Context, store string) (string, error) {
+			return "UPID:verify", nil
+		}}
+		upid, err := (&PBSService{gw: gw}).StartVerify(context.Background(), "backup")
+		require.NoError(t, err)
+		assert.Equal(t, "UPID:verify", upid)
+	})
+
+	t.Run("StartGC", func(t *testing.T) {
+		gw := &mockPBSGateway{startGC: func(ctx context.Context, store string) (string, error) {
+			return "UPID:gc", nil
+		}}
+		upid, err := (&PBSService{gw: gw}).StartGC(context.Background(), "backup")
+		require.NoError(t, err)
+		assert.Equal(t, "UPID:gc", upid)
+	})
+
+	t.Run("StartPrune", func(t *testing.T) {
+		gw := &mockPBSGateway{startPrune: func(ctx context.Context, store string) (string, error) {
+			return "UPID:prune", nil
+		}}
+		upid, err := (&PBSService{gw: gw}).StartPrune(context.Background(), "backup")
+		require.NoError(t, err)
+		assert.Equal(t, "UPID:prune", upid)
+	})
+
+	t.Run("StartSync", func(t *testing.T) {
+		gotReq := model.PBSSyncRequest{}
+		gw := &mockPBSGateway{startSync: func(ctx context.Context, store string, req model.PBSSyncRequest) (string, error) {
+			gotReq = req
+			return "UPID:sync", nil
+		}}
+		req := model.PBSSyncRequest{Remote: "remote1", RemoteStore: "backup"}
+		upid, err := (&PBSService{gw: gw}).StartSync(context.Background(), "backup", req)
+		require.NoError(t, err)
+		assert.Equal(t, "UPID:sync", upid)
+		assert.Equal(t, req, gotReq)
+	})
+}
+
 func TestPBSService_ErrorPropagation(t *testing.T) {
 	sentinel := errors.New("pbs boom")
 
@@ -101,6 +145,13 @@ func TestPBSService_ErrorPropagation(t *testing.T) {
 		{"GetVerifyStatus", func(s *PBSService) error { _, e := s.GetVerifyStatus(context.Background(), "s", "u"); return e }},
 		{"GetPruneStatus", func(s *PBSService) error { _, e := s.GetPruneStatus(context.Background(), "s", "u"); return e }},
 		{"GetPBSVersion", func(s *PBSService) error { _, e := s.GetPBSVersion(context.Background()); return e }},
+		{"StartVerify", func(s *PBSService) error { _, e := s.StartVerify(context.Background(), "s"); return e }},
+		{"StartGC", func(s *PBSService) error { _, e := s.StartGC(context.Background(), "s"); return e }},
+		{"StartPrune", func(s *PBSService) error { _, e := s.StartPrune(context.Background(), "s"); return e }},
+		{"StartSync", func(s *PBSService) error {
+			_, e := s.StartSync(context.Background(), "s", model.PBSSyncRequest{})
+			return e
+		}},
 	}
 
 	gw := &mockPBSGateway{}
@@ -114,6 +165,12 @@ func TestPBSService_ErrorPropagation(t *testing.T) {
 	gw.getVerifyStatus = func(ctx context.Context, store, upid string) (*model.VerifyStatus, error) { return nil, sentinel }
 	gw.getPruneStatus = func(ctx context.Context, store, upid string) (*model.PruneStatus, error) { return nil, sentinel }
 	gw.getPBSVersion = func(ctx context.Context) (*model.PBSVersion, error) { return nil, sentinel }
+	gw.startVerify = func(ctx context.Context, store string) (string, error) { return "", sentinel }
+	gw.startGC = func(ctx context.Context, store string) (string, error) { return "", sentinel }
+	gw.startPrune = func(ctx context.Context, store string) (string, error) { return "", sentinel }
+	gw.startSync = func(ctx context.Context, store string, req model.PBSSyncRequest) (string, error) {
+		return "", sentinel
+	}
 
 	svc := &PBSService{gw: gw}
 	for _, tc := range cases {

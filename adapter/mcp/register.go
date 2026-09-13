@@ -10,9 +10,9 @@ import (
 //
 // System tools (ping/status) are always registered. A backend's tools are
 // registered only when its service is non-nil (i.e. the backend is enabled).
-// Mutation tools are registered only when enableMutations is true (the exact
-// gating UX is TBD — SPEC.md §2.4); read-only tools are always registered for
-// an enabled backend.
+// Mutation tools are registered only when enableMutations is true (from the
+// ENABLE_MUTATIONS env var, SPEC.md §2.5); read-only tools are always
+// registered for an enabled backend.
 func RegisterTools(s *mcpSDK.Server, app *application.App, log toolLogger, enableMutations bool) {
 	// --- Proxmox VE (only when the PVE backend is enabled) ---
 	if app.PVE != nil {

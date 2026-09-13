@@ -35,10 +35,11 @@ type Deps struct {
 	// added. It should match the ID used by the transport's connection (see
 	// NewSessionTransport) so connect/disconnect lines and tool lines correlate.
 	SessionID string
-	// EnableMutations gates ALL mutation tools. The exact gating UX is TBD
-	// (SPEC.md §2.4): the seam is that adapter/mcp registers mutation tools only
-	// when this is true. Read-only (query) tools are always registered. For this
-	// milestone it is always false (read-only + system vertical slice).
+	// EnableMutations gates ALL mutation tools (SPEC.md §2.5). adapter/mcp
+	// registers mutation tools only when this is true; read-only (query) tools
+	// are always registered for an enabled backend. The value comes from the
+	// ENABLE_MUTATIONS env var (default false) and is set by the composition
+	// root.
 	EnableMutations bool
 }
 

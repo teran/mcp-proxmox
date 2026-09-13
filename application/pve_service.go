@@ -7,10 +7,10 @@ import (
 	"github.com/teran/mcp-proxmox/domain/port"
 )
 
-// PVEService is the PVE use cases (read-only surface for this milestone). It
-// is a thin orchestration layer over port.PVEGateway; it exists so adapter/mcp
-// talks to the application layer rather than the adapter directly, and so QA
-// can test it against a PVEGateway mock. See SPEC.md §3.1 / §6.
+// PVEService is the PVE use cases. It is a thin orchestration layer over
+// port.PVEGateway; it exists so adapter/mcp talks to the application layer
+// rather than the adapter directly, and so QA can test it against a PVEGateway
+// mock. See SPEC.md §3.1 / §6.
 type PVEService struct {
 	gw  port.PVEGateway
 	log port.CtxLogger
@@ -104,4 +104,29 @@ func (s *PVEService) GetTaskLog(ctx context.Context, node, upid string, limit in
 // GetPVEVersion returns the PVE version info.
 func (s *PVEService) GetPVEVersion(ctx context.Context) (*model.PVEVersion, error) {
 	return s.gw.GetPVEVersion(ctx)
+}
+
+// CreateVM creates a QEMU VM on a node and returns its new VMID.
+func (s *PVEService) CreateVM(ctx context.Context, node string, req model.CreateVMRequest) (int, error) {
+	return s.gw.CreateVM(ctx, node, req)
+}
+
+// ResizeVM resizes a VM disk on a node.
+func (s *PVEService) ResizeVM(ctx context.Context, node string, vmid int, req model.ResizeVMRequest) error {
+	return s.gw.ResizeVM(ctx, node, vmid, req)
+}
+
+// MigrateVM migrates a VM to another node.
+func (s *PVEService) MigrateVM(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error {
+	return s.gw.MigrateVM(ctx, node, vmid, req)
+}
+
+// AddHAResource registers a new HA resource in the cluster.
+func (s *PVEService) AddHAResource(ctx context.Context, req model.HAResourceRequest) error {
+	return s.gw.AddHAResource(ctx, req)
+}
+
+// StartVMBackup starts a vzdump backup of a VM on a node.
+func (s *PVEService) StartVMBackup(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error) {
+	return s.gw.StartVMBackup(ctx, node, req)
 }

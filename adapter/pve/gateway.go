@@ -161,6 +161,20 @@ func (g *Gateway) do(ctx context.Context, method, path string, query url.Values,
 // token source, honors the configured TLS, and maps the response per SPEC.md
 // §7.3. The request is made via resty.dev/v3 (SPEC.md G9).
 func (g *Gateway) doOnce(ctx context.Context, method, path string, query url.Values, out any) error {
+	return g.doOnceReq(ctx, method, path, query, nil, out)
+}
+
+// doOnceWithForm is like doOnce but sends an application/x-www-form-urlencoded
+// body. It is used by the mutation surface (create/resize/migrate/ha/backup),
+// which takes its parameters in the form body rather than the query string.
+func (g *Gateway) doOnceWithForm(ctx context.Context, method, path string, form url.Values, out any) error {
+	return g.doOnceReq(ctx, method, path, nil, form, out)
+}
+
+// doOnceReq performs a single HTTP request (no retry). query and form are
+// mutually exclusive: read requests pass query parameters, mutation requests
+// pass a form-encoded body. See doOnce / doOnceWithForm.
+func (g *Gateway) doOnceReq(ctx context.Context, method, path string, query, form url.Values, out any) error {
 	if g.cfg.Endpoint == "" {
 		return &UpstreamError{Op: "config", Err: errors.New("pve: empty endpoint")}
 	}
@@ -187,6 +201,10 @@ func (g *Gateway) doOnce(ctx context.Context, method, path string, query url.Val
 	// never the token.
 	if rid, ok := port.RequestIDFromContext(ctx); ok && rid != "" {
 		req.SetHeader("X-Request-ID", rid)
+	}
+	// Mutation form body (never sent for reads).
+	if len(form) > 0 {
+		req.SetFormDataFromValues(form)
 	}
 
 	resp, err := req.Execute(method, u)
@@ -488,6 +506,139 @@ func (g *Gateway) GetPVEVersion(ctx context.Context) (*model.PVEVersion, error) 
 		return nil, err
 	}
 	return &out, nil
+}
+
+// doMutation executes a single mutation request (never retried — mutations are
+// not idempotent and must not be replayed on a transient 5xx; SPEC.md §7.5)
+// with an optional form-encoded body.
+func (g *Gateway) doMutation(ctx context.Context, method, path string, form url.Values, out any) error {
+	return g.doOnceWithForm(ctx, method, path, form, out)
+}
+
+// CreateVM creates a QEMU VM via POST /nodes/{node}/qemu. The response `data`
+// is the new VMID; an empty/absent VMID is treated as success without a
+// number, so a zero return is possible only when the API returns no data.
+func (g *Gateway) CreateVM(ctx context.Context, node string, req model.CreateVMRequest) (int, error) {
+	form := url.Values{}
+	if req.VMID != 0 {
+		form.Set("vmid", strconv.Itoa(req.VMID))
+	}
+	if req.Name != "" {
+		form.Set("name", req.Name)
+	}
+	if req.Cores != 0 {
+		form.Set("cores", strconv.Itoa(req.Cores))
+	}
+	if req.Memory != 0 {
+		form.Set("memory", strconv.Itoa(req.Memory))
+	}
+	if req.Sockets != 0 {
+		form.Set("sockets", strconv.Itoa(req.Sockets))
+	}
+	if req.Ostype != "" {
+		form.Set("ostype", req.Ostype)
+	}
+	if req.Net0 != "" {
+		form.Set("net0", req.Net0)
+	}
+	if req.Scsi0 != "" {
+		form.Set("scsi0", req.Scsi0)
+	}
+	if req.Ide2 != "" {
+		form.Set("ide2", req.Ide2)
+	}
+	if req.Boot != "" {
+		form.Set("boot", req.Boot)
+	}
+	if req.Balloon != 0 {
+		form.Set("balloon", strconv.Itoa(req.Balloon))
+	}
+	if req.Description != "" {
+		form.Set("description", req.Description)
+	}
+	if req.Tags != "" {
+		form.Set("tags", req.Tags)
+	}
+	if req.Agent != 0 {
+		form.Set("agent", strconv.Itoa(req.Agent))
+	}
+	if req.OnBoot != 0 {
+		form.Set("onboot", strconv.Itoa(req.OnBoot))
+	}
+	if req.CPU != "" {
+		form.Set("cpu", req.CPU)
+	}
+	if req.Machine != "" {
+		form.Set("machine", req.Machine)
+	}
+	if req.VGA != "" {
+		form.Set("vga", req.VGA)
+	}
+
+	var vmid int
+	if err := g.doMutation(ctx, http.MethodPost, "/nodes/"+node+"/qemu", form, &vmid); err != nil {
+		return 0, err
+	}
+	return vmid, nil
+}
+
+// ResizeVM resizes a VM disk via PUT /nodes/{node}/qemu/{vmid}/resize. The
+// `size` form value is built from SizeGB as "±NG" in GiB (grow/shrink sign).
+func (g *Gateway) ResizeVM(ctx context.Context, node string, vmid int, req model.ResizeVMRequest) error {
+	form := url.Values{}
+	form.Set("disk", req.Disk)
+	form.Set("size", fmt.Sprintf("%+dG", req.SizeGB))
+	return g.doMutation(ctx, http.MethodPut, "/nodes/"+node+"/qemu/"+strconv.Itoa(vmid)+"/resize", form, nil)
+}
+
+// MigrateVM migrates a VM to another node via
+// POST /nodes/{node}/qemu/{vmid}/migrate.
+func (g *Gateway) MigrateVM(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error {
+	form := url.Values{}
+	form.Set("target", req.Target)
+	if req.Online {
+		form.Set("online", "1")
+	}
+	if req.WithLocalDisks {
+		form.Set("with-local-disks", "1")
+	}
+	return g.doMutation(ctx, http.MethodPost, "/nodes/"+node+"/qemu/"+strconv.Itoa(vmid)+"/migrate", form, nil)
+}
+
+// AddHAResource registers a new HA resource via POST /cluster/ha/resources.
+func (g *Gateway) AddHAResource(ctx context.Context, req model.HAResourceRequest) error {
+	form := url.Values{}
+	form.Set("sid", req.SID)
+	form.Set("type", req.Type)
+	if len(req.Nodes) > 0 {
+		form.Set("nodes", strings.Join(req.Nodes, ","))
+	}
+	if req.Comment != "" {
+		form.Set("comment", req.Comment)
+	}
+	return g.doMutation(ctx, http.MethodPost, "/cluster/ha/resources", form, nil)
+}
+
+// StartVMBackup starts a vzdump backup via POST /nodes/{node}/vzdump. The
+// response `data` is the task UPID; it is wrapped in a Task so the tool can
+// return a familiar shape (only UPID is populated from the create response).
+func (g *Gateway) StartVMBackup(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error) {
+	form := url.Values{}
+	form.Set("vmid", strconv.Itoa(req.VMID))
+	form.Set("storage", req.Storage)
+	form.Set("mode", req.Mode)
+	if req.NotesTemplate != "" {
+		form.Set("notes-template", req.NotesTemplate)
+	}
+	if req.Compress != "" {
+		form.Set("compress", req.Compress)
+	}
+
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, "/nodes/"+node+"/vzdump", form, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
 }
 
 // truncate bounds an error-response body for debug logging, keeping the log

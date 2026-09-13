@@ -58,6 +58,39 @@ func descWithInstructions(desc, instr string) string {
 	return desc + "\n\nInstructions: " + instr
 }
 
+// mutTool registers a mutation tool (gated by EnableMutations). It mirrors
+// roTool's uniform handler shape but with write annotations: ReadOnlyHint=false
+// and, depending on the operation, IdempotentHint. `idempotent` is true for
+// create/resize/migrate/ha-add (safe to re-issue) and false for
+// backup/verify/gc/prune/sync-start (each call starts a new task). A mutation
+// tool is destructive only when the underlying operation is (all current tools
+// here are non-destructive, so DestructiveHint is always false).
+func mutTool[In, Out any](s *mcpSDK.Server, name, title, desc, instr string, log toolLogger, idempotent bool, fn func(context.Context, In) (Out, error)) {
+	mcpSDK.AddTool(s, &mcpSDK.Tool{
+		Name:        name,
+		Title:       title,
+		Description: descWithInstructions(desc, instr),
+		Annotations: &mcpSDK.ToolAnnotations{
+			Title:           title,
+			ReadOnlyHint:    false,
+			IdempotentHint:  idempotent,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+	}, func(ctx context.Context, _ *mcpSDK.CallToolRequest, in In) (*mcpSDK.CallToolResult, any, error) {
+		out, err := fn(ctx, in)
+		if err != nil {
+			if status, ok := port.HTTPStatus(err); ok {
+				log.ErrorfStatus(ctx, status, "%s: %v", name, err)
+			} else {
+				log.Errorf(ctx, "%s: %v", name, err)
+			}
+			return nil, nil, err
+		}
+		return nil, wrapOutput(out), nil
+	})
+}
+
 // boolPtr returns a pointer to b (for the SDK's *bool annotation hints).
 func boolPtr(b bool) *bool { return &b }
 
