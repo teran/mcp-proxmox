@@ -140,6 +140,28 @@ and is enforced by `.go-arch-lint.yml` (`go-arch-lint check`), not
 by a hidden `internal/` directory. Dependencies point inward only through the
 `domain/port` interfaces.
 
+**Module namespace — conscious decision (S6/N16).** The repository is hosted on
+an internal **Forgejo** instance (`git.homelab.teran.dev`), where the MCP-server
+skill's security rule S6/N16 prefers a **local-only** module/package namespace
+(never a public/external domain). We deliberately keep the Go module path
+`github.com/teran/mcp-proxmox` for two reasons:
+1. `teran` is the single maintainer's own identity and is used consistently
+   across the org's internal fleet (`mcp-regcloud`, `mcp-entertainment`), so the
+   path is a stable, already-established namespace — not a claim of public
+   publication.
+2. Renaming the module would require rewriting every import across all packages
+   plus the `pkg.go.dev`/badge references, and would provide no additional
+   runtime security: this server is a **local stdio** tool with **no
+   `go get` consumers** and never publishes to any public module proxy, so a
+   local-only path would not change what is fetched or trusted.
+
+**Decision:** keep `github.com/teran/mcp-proxmox` as the module path. This is a
+**recorded, deliberate deviation** from S6/N16 rather than a silent choice. If
+the project is ever made a `go get`-able library, shared across org boundaries,
+or published publicly, the module path MUST be switched to a local-only
+namespace (`git.homelab.teran.dev/teran/mcp-proxmox`) as a dedicated refactor
+commit — see §10.
+
 **Two distinct gateways, one shared shape.** PVE and PBS are separate products
 with different object models, so they are modelled as two separate secondary
 ports — `port.PVEGateway` and `port.PBSGateway` — each implemented by its own
@@ -774,7 +796,11 @@ All fixes and features follow a **TDD workflow** with **isolated contexts**:
 
 1. **Go version:** `1.27.1` (matches the org's flagship `mcp-regcloud`; satisfies
    the go-sdk ≥ 1.24 requirement). Confirm the installed toolchain.
-2. **Module name:** `github.com/teran/mcp-proxmox`.
+2. **Module name:** `github.com/teran/mcp-proxmox` — a **conscious deviation from
+   S6/N16** (internal Forgejo → local-only namespace), recorded in §2.4. If the
+   server ever becomes a `go get`-able library or is published, rename to a
+   local-only path (`git.homelab.teran.dev/teran/mcp-proxmox`) as a dedicated
+   refactor.
 3. **MCP SDK:** `github.com/modelcontextprotocol/go-sdk v1.8.0`.
 4. **Config:** environment variables via `kelseyhightower/envconfig`
    (`PVE_ENDPOINT`/`PVE_TOKEN`/`PVE_CA_CERT_PATH`, `PBS_ENDPOINT`/`PBS_TOKEN`/

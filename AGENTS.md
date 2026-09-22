@@ -74,7 +74,10 @@ contradiction, raise it with the architect.
 
 ### Go
 - Go **1.27.1** (matches the org's flagship `mcp-regcloud`; satisfies the go-sdk
-  ≥ 1.24 requirement). Module name: `github.com/teran/mcp-proxmox`.
+  ≥ 1.24 requirement). Module name: `github.com/teran/mcp-proxmox` — a **conscious
+  deviation from S6/N16** (internal Forgejo → local-only namespace), recorded in
+  SPEC.md §2.4/§10. Do not rename the module without a SPEC-recorded decision;
+  if the server ever becomes `go get`-able or public, switch to a local-only path.
 - Idiomatic Go: `gofmt`/`goimports`, errors wrapped with `%w`, no panics in library code.
 - Use the official MCP SDK: `github.com/modelcontextprotocol/go-sdk v1.8.0` (import `.../mcp`).
 - Logging: **logrus**; the core only ever sees `port.AppLogger` /
