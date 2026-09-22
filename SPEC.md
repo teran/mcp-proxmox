@@ -430,6 +430,37 @@ the server into a Remote/Hybrid one. If a remote HTTP mode is ever implemented
 (§4.1), the image becomes a first-class release artifact and R1/R3/R4/N14 apply
 in full.
 
+### 4.7 Data and state model (X1–X5)
+
+**Stateless (X1).** This server is **stateless**: there is no persistent state
+held outside a single session. Each tool call maps to one self-contained
+upstream HTTP request against the Proxmox VE / PBS REST APIs, and the upstream
+cluster holds all state. The only per-process data is:
+
+- the configuration and API tokens, read **once** at startup from environment
+  variables (`adapter/config`) and held in memory for the process lifetime —
+  never persisted, never refreshed, never mutated by the server;
+- the `session_id` / per-request `request_id`, used **only** for log
+  correlation (§5.2), not as business state.
+
+There is no database, no on-disk store, no cache, and no cross-session data.
+Consequently the data/state criteria that apply to stateful servers do not
+apply here:
+
+- **Write idempotency (X2).** Mutating tools are gated behind `ENABLE_MUTATIONS`
+  (§2.5) and map to single upstream calls. Idempotency is a property of the
+  **upstream** Proxmox API (e.g. `pve_nextid` search-before-create for VM/CT
+  creation, HA-add by resource key) — the server issues one request and does not
+  create duplicates itself. Read-only tools set `idempotentHint=true` (X2/N25).
+- **Upstream connection & limits (X3).** Upstream calls use an explicit timeout
+  (default 30s) and context; on failure (including `429`) the error is returned
+  to the model **and logged** — there is **no silent retry** except a bounded
+  retry with backoff for **idempotent read-only** requests, and the underlying
+  error is always logged (§7.5).
+- **Persistence (X4).** Not applicable — the server is stateless.
+- **Concurrency (X5).** Not applicable — there are no file/DB writes to
+  serialize; the server issues independent HTTP requests per call.
+
 ---
 
 ## 5. Logging
@@ -532,13 +563,34 @@ Every registered tool carries MCP **Annotations (hints)** and per-tool
   precautions) for the model, encoded into the SDK `Description` (the field the
   go-sdk treats as the model hint).
 
-The hints follow a fixed mapping (`adapter/mcp/helpers.go` `roTool`/`sysTool`):
+The hints follow a fixed mapping (`adapter/mcp/helpers.go` `roTool`/`mutTool`):
 
 | Tool family | readOnly | destructive | idempotent | openWorld |
 |---|---|---|---|---|
 | read / query | `true` | `false` | `true` | `false` |
 | write / update (planned, gated) | `false` | `false` | `true` | `false` |
 | delete (planned, gated) | `false` | `true` | `false` | `false` |
+
+Every tool also carries its **own per-tool `Title` and `instructions`**, passed
+at registration (`roTool(s, name, title, desc, instr, ...)` — see
+`adapter/mcp/pve_tools.go`). `instructions` is natural-language guidance for the
+model (expected inputs, ordering, side effects, precautions) and is encoded into
+the SDK `Description` so it is surfaced to the client as the model hint.
+
+**Example — `pve_node_list` (§6.2):**
+
+```json
+{
+  "name": "pve_node_list",
+  "title": "List PVE nodes",
+  "description": "List the Proxmox VE cluster nodes.\n\nInstructions: Returns all cluster nodes and their status. No arguments; read-only and idempotent — safe to call repeatedly.",
+  "annotations": { "readOnlyHint": true, "idempotentHint": true, "openWorldHint": false, "destructiveHint": false }
+}
+```
+
+The registry tables in §6.1–6.9 list each tool's name / domain / type / endpoint
+for brevity; every row is registered with the title + instructions + the
+annotations from the mapping table above (M4/N9).
 
 The currently-registered surface is entirely read-only (system + PVE + PBS
 queries), so all tools are `readOnly=true, destructive=false, idempotent=true,
