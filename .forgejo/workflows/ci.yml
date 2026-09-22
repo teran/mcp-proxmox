@@ -39,6 +39,27 @@ jobs:
             exit 1
           fi
 
+      - name: Install gitleaks
+        run: |
+          # gitleaks is a static binary; download the release matching the
+          # architecture instead of building from source (it pins its own Go
+          # toolchain). See https://github.com/gitleaks/gitleaks/releases
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            x86_64) GITLEAKS_ARCH="x64" ;;
+            aarch64|arm64) GITLEAKS_ARCH="arm64" ;;
+            *) echo "unsupported arch: $ARCH"; exit 1 ;;
+          esac
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_${GITLEAKS_ARCH}.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+
+      - name: Secret scan over git history (gitleaks) — HARD GATE
+        run: |
+          # C3/N28: scan the FULL history; findings must be fixed, not
+          # suppressed. No continue-on-error — leaks fail the build.
+          gitleaks detect --source . --redact --verbose
+
       - name: Test (with -race)
         run: go test -race ./...
 
