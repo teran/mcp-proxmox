@@ -2,7 +2,7 @@
 
 **Language:** English (fixed by the user — do not translate).
 **Module:** `github.com/teran/mcp-proxmox`
-**Go:** 1.27.0
+**Go:** 1.27.1
 **Status:** design snapshot (authoritative technical reference; implementation to follow).
 
 This document is the authoritative technical reference for the `mcp-proxmox`
@@ -25,7 +25,7 @@ operate a Proxmox virtualization cluster and its backup server.
   cluster/status, and tasks/logs.
 - **Proxmox Backup Server** (`https://pbs.example.com:8007`, path prefix
   `/api2/json`): datastores, backups/snapshots, notes, verify, and prune.
-- SDK: [`github.com/modelcontextprotocol/go-sdk v1.7.0`](https://github.com/modelcontextprotocol/go-sdk).
+- SDK: [`github.com/modelcontextprotocol/go-sdk v1.8.0`](https://github.com/modelcontextprotocol/go-sdk).
 - Logging: `github.com/sirupsen/logrus` (all logs through logrus; the core only
   sees a minimal `port.AppLogger`).
 
@@ -772,10 +772,10 @@ All fixes and features follow a **TDD workflow** with **isolated contexts**:
 
 ## 10. Open assumptions (to confirm before implementation)
 
-1. **Go version:** `1.27.0` (matches the org's flagship `mcp-regcloud`; satisfies
+1. **Go version:** `1.27.1` (matches the org's flagship `mcp-regcloud`; satisfies
    the go-sdk ≥ 1.24 requirement). Confirm the installed toolchain.
 2. **Module name:** `github.com/teran/mcp-proxmox`.
-3. **MCP SDK:** `github.com/modelcontextprotocol/go-sdk v1.7.0`.
+3. **MCP SDK:** `github.com/modelcontextprotocol/go-sdk v1.8.0`.
 4. **Config:** environment variables via `kelseyhightower/envconfig`
    (`PVE_ENDPOINT`/`PVE_TOKEN`/`PVE_CA_CERT_PATH`, `PBS_ENDPOINT`/`PBS_TOKEN`/
    `PBS_CA_CERT_PATH`, `LOG_LEVEL`); **no YAML file**. A backend is enabled only

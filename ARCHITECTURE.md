@@ -37,7 +37,7 @@ mcp-proxmox/
 │   ├── token/                   # StaticTokenSource → port.TokenSource
 │   ├── logging/                 # logrus setup, AppLogger, slog→logrus, WithSession
 │   └── mcp/                     # go-sdk server assembly + tool registry
-├── go.mod / go.sum              # module github.com/teran/mcp-proxmox, go 1.27.0
+├── go.mod / go.sum              # module github.com/teran/mcp-proxmox, go 1.27.1
 ├── .golangci.yml, .go-arch-lint.yml, gremlins.toml,
 ├── Dockerfile, .goreleaser.yml, .dockerignore, .gitignore,
 ├── .gitlab-ci.yml, .forgejo/workflows/ci.yml

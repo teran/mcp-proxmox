@@ -9,7 +9,7 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![MCP: stdio Local server](https://img.shields.io/badge/MCP-stdio%20Local-orange)](SPEC.md)
 [![Go Reference](https://img.shields.io/badge/godoc-reference-blue.svg)](https://pkg.go.dev/github.com/teran/mcp-proxmox)
-[![Go Version](https://img.shields.io/badge/Go-1.27.0-blue)](https://go.dev/dl/)
+[![Go Version](https://img.shields.io/badge/Go-1.27.1-blue)](https://go.dev/dl/)
 [![Coverage](https://img.shields.io/badge/coverage-%3E%3D95%25-brightgreen)]()
 [![gosec](https://img.shields.io/badge/gosec-passing-brightgreen)]()
 [![govulncheck](https://img.shields.io/badge/govulncheck-passing-brightgreen)]()
@@ -28,8 +28,8 @@ an API token for it.
 
 - **Proxmox VE**: `https://pve.example.com:8006`, API path prefix `/api2/json`
 - **Proxmox Backup Server**: `https://pbs.example.com:8007`, API path prefix `/api2/json`
-- Language / runtime: **Go 1.27.0**
-- MCP SDK: `github.com/modelcontextprotocol/go-sdk v1.7.0`
+- Language / runtime: **Go 1.27.1**
+- MCP SDK: `github.com/modelcontextprotocol/go-sdk v1.8.0`
 - Logging: logrus (text or JSON), including the SDK's internal logs via a `slog → logrus` adapter
 - License: **Apache-2.0** — © 2026 Igor Shishkin
 
@@ -63,7 +63,7 @@ an API token for it.
 
 ## Requirements
 
-- Go **1.27.0** or newer.
+- Go **1.27.1** or newer.
 - A Proxmox VE and/or Proxmox Backup Server instance, with a per-user **API token**
   generated in the Proxmox web UI ("API Tokens", with privilege separation).
 

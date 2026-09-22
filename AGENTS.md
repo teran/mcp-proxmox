@@ -73,10 +73,10 @@ contradiction, raise it with the architect.
 ## 2. Project rules and conventions
 
 ### Go
-- Go **1.27.0** (matches the org's flagship `mcp-regcloud`; satisfies the go-sdk
+- Go **1.27.1** (matches the org's flagship `mcp-regcloud`; satisfies the go-sdk
   ≥ 1.24 requirement). Module name: `github.com/teran/mcp-proxmox`.
 - Idiomatic Go: `gofmt`/`goimports`, errors wrapped with `%w`, no panics in library code.
-- Use the official MCP SDK: `github.com/modelcontextprotocol/go-sdk v1.7.0` (import `.../mcp`).
+- Use the official MCP SDK: `github.com/modelcontextprotocol/go-sdk v1.8.0` (import `.../mcp`).
 - Logging: **logrus**; the core only ever sees `port.AppLogger` /
   `port.CtxLogger`. Use `Infof` for lifecycle events and `Warnf` for anomalies in
   use cases; tool handlers log errors via `Errorf` with the tool name
