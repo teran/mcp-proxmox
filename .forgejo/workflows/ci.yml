@@ -1,13 +1,19 @@
 # Forgejo Actions workflow for mcp-proxmox (format compatible with GitHub Actions).
 #
+# All jobs bind to the standard build-system interface (R07) via `make`
+# targets, so the same targets work across CI providers (GitLab + Forgejo).
+#
 # Goal: test every push/PR, and build + create a release on tags.
-#   test    — runs on every push and PR (all branches): build, vet, gofmt,
-#             hermetic tests, golangci-lint, go-arch-lint
+#   test    — runs on every push and PR (all branches): make lint, make test,
+#             make mutation (gremlins hard gate), gitleaks secret scan
 #   release — runs only on tag pushes (refs/tags/*): builds the binary and
 #             publishes it as a Forgejo release
 #
+# This is a Local (stdio-only) server: no e2e / container-image targets are
+# declared (N31 — a CI job never invokes an undeclared optional target).
+#
 # Container image: golang:1.27 matches the toolchain used locally and satisfies
-# the `go 1.27.0` directive in go.mod.
+# the `go 1.27.1` directive in go.mod.
 name: CI
 
 on:
@@ -23,21 +29,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Build
-        run: go build ./...
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Format (gofmt)
-        run: |
-          unformatted=$(gofmt -l .)
-          if [ -n "$unformatted" ]; then
-            echo "gofmt required for the following files:"
-            echo "$unformatted"
-            exit 1
-          fi
 
       - name: Install gitleaks
         run: |
@@ -60,60 +51,29 @@ jobs:
           # suppressed. No continue-on-error — leaks fail the build.
           gitleaks detect --source . --redact --verbose
 
-      - name: Test (with -race)
-        run: go test -race ./...
-
-      - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
-
-      - name: Lint (golangci-lint)
+      - name: Install lint/arch/sec/vuln/mutation tools
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
-          golangci-lint run ./...
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
+          go install github.com/fe3dback/go-arch-lint@latest
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install github.com/go-gremlins/gremlins/cmd/gremlins@latest
 
-      - name: Install go-arch-lint
-        run: go install github.com/fe3dback/go-arch-lint@latest
-
-      - name: Architecture check (go-arch-lint)
+      - name: Lint (make lint)
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
-          go-arch-lint check
+          make lint
 
-      - name: Install gosec
-        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
-
-      - name: Security scan (gosec)
+      - name: Test + coverage (make test)
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
-          gosec ./...
+          make test
 
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
-
-      - name: Vulnerability check (govulncheck)
+      - name: Mutation testing (make mutation) — HARD GATE
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
-          govulncheck ./...
-
-      - name: Coverage gate (>= 95%)
-        run: |
-          go test ./... -coverprofile=coverage.out
-          awk '!/\/cmd\/mcp-proxmox\//' coverage.out > coverage-core.out
-          cov=$(go tool cover -func=coverage-core.out | tail -1 | awk '{print $NF}' | tr -d '%')
-          echo "cover-core: ${cov}%"
-          if ! awk -v c="$cov" 'BEGIN { exit !(c >= 95) }'; then
-            echo "coverage ${cov}% is below the 95% gate"
-            exit 1
-          fi
-
-      - name: Install gremlins
-        run: go install github.com/go-gremlins/gremlins/cmd/gremlins@latest
-
-      - name: Mutation testing (gremlins) — HARD GATE
-        run: |
-          export PATH="$PATH:$(go env GOPATH)/bin"
-          gremlins unleash --workers 4 --timeout-coefficient 50 ./application -E '.*mocks.*'
-          gremlins unleash --workers 4 --timeout-coefficient 50 ./domain
+          make mutation
         # NOTE: no continue-on-error — surviving mutants fail the build (SPEC C7/C8).
 
   release:
@@ -129,19 +89,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build binary
+      - name: Build single Linux binary (goreleaser single-target)
         run: |
-          mkdir -p dist
-          VERSION="$(git describe --tags --exact-match 2>/dev/null || echo v0.0.0-dev)"
-          COMMIT="${GITHUB_SHA:-$(git rev-parse HEAD)}"
-          TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          CGO_ENABLED=0 go build -trimpath \
-            -ldflags "-s -w \
-              -X main.appName=mcp-proxmox \
-              -X main.appVersion=${VERSION} \
-              -X main.appCommitHash=${COMMIT} \
-              -X main.appTimestamp=${TS} \
-              -X main.version=${VERSION}" -o dist/mcp-proxmox ./cmd/mcp-proxmox
+          # Dedicated release step (B01): goreleaser produces the single
+          # release binary with build metadata embedded via ldflags
+          # (.goreleaser.yml). --single-target avoids the full multi-platform
+          # matrix; --output places it at dist/mcp-proxmox for the release.
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          goreleaser build --snapshot --clean --single-target \
+            --id mcp-proxmox --output dist/mcp-proxmox
 
       - name: Create Forgejo release
         uses: https://code.forgejo.org/forgejo/release@v2

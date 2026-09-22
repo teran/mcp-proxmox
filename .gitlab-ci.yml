@@ -1,12 +1,18 @@
 # GitLab CI/CD pipeline for mcp-proxmox.
 #
+# All jobs bind to the standard build-system interface (R07) via `make`
+# targets, so the same targets work across CI providers (GitLab + Forgejo).
+#
 # Stages:
-#   lint    — static analysis on master and MRs
-#   test    — hermetic unit tests on EVERY commit (any branch + MR)
-#   mutation— gremlins mutation testing as a HARD gate (fails on survivors)
-#   secrets — gitleaks secret scan over the full git history (HARD gate, C3/N28)
-#   build   — goreleaser snapshot build on master and MRs
+#   lint    — make lint (golangci-lint, vet, gofmt, go-arch-lint, gosec, govulncheck)
+#   test    — make test (hermetic -race tests + coverage >= 95% gate) on EVERY commit
+#   mutation— make mutation (gremlins) as a HARD gate (fails on survivors)
+#   secrets — make secrets (gitleaks over the full git history) as a HARD gate
+#   build   — make build (goreleaser snapshot) on master and MRs
 #   release — goreleaser release on tags
+#
+# This is a Local (stdio-only) server: no e2e / container-image targets are
+# declared (N31 — a CI job never invokes an undeclared optional target).
 stages:
   - lint
   - test
@@ -24,7 +30,7 @@ lint:
   tags:
     - cloud-infra-runner.msk1
   script:
-    - golangci-lint run ./...
+    - make lint
   rules:
     - if: $CI_COMMIT_BRANCH == "master"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -35,21 +41,7 @@ test:
   tags:
     - cloud-infra-runner.msk1
   script:
-    - go test -race ./...
-    - go vet ./...
-    - gofmt -l .
-    - golangci-lint run ./...
-    - go-arch-lint check
-    - gosec ./...
-    - govulncheck ./...
-    - |
-      go test ./... -coverprofile=coverage.out
-      awk '!/\/cmd\/mcp-proxmox\//' coverage.out > coverage-core.out
-      cov=$(go tool cover -func=coverage-core.out | tail -1 | awk '{print $NF}' | tr -d '%')
-      echo "cover-core: ${cov}%"
-      if ! awk -v c="$cov" 'BEGIN { exit !(c >= 95) }'; then
-        echo "coverage ${cov}% is below the 95% gate"; exit 1
-      fi
+    - make test
   rules:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -62,14 +54,16 @@ mutation:
   tags:
     - cloud-infra-runner.msk1
   script:
-    - gremlins unleash --workers 4 --timeout-coefficient 50 ./application -E '.*mocks.*'
-    - gremlins unleash --workers 4 --timeout-coefficient 50 ./domain
+    - make mutation
   rules:
     - if: $CI_COMMIT_BRANCH == "master"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 # Secret scan over the FULL git history (SPEC.md C3/N28). Findings must be
 # fixed, never suppressed. Hard gate — no allow_failure / continue-on-error.
+# Runs in the dedicated gitleaks image (has gitleaks but no make), so it
+# invokes gitleaks directly; this is a dedicated hard-gate job, not part of
+# the standard 5-target interface (R07).
 secrets:
   stage: secrets
   image: zricethezav/gitleaks:latest
@@ -87,7 +81,7 @@ build-master:
   tags:
     - cloud-infra-runner.msk1
   script:
-    - goreleaser build --snapshot --clean
+    - make build
   artifacts:
     name: ${GORELEASER_PROJECT_NAME}
     paths:
@@ -102,7 +96,7 @@ build-mr:
   tags:
     - cloud-infra-runner.msk1
   script:
-    - goreleaser build --snapshot --clean
+    - make build
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
