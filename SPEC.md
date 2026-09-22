@@ -377,6 +377,7 @@ disabled and its tools are not registered.
 | `LOG_LEVEL` | log level `trace\|debug\|info\|warn\|error`; **when set, logging is enabled** (to `LOG_FILENAME`); when unset, logging is **disabled** (L2) |
 | `LOG_FILENAME` | log file path used when `LOG_LEVEL` is set (default `/tmp/mcp-proxmox.log`, mode `0600`) (L3) |
 | `LOG_FORMAT` | log format `text` (default) \| `json` (L4) |
+| `ENABLE_MUTATIONS` | register mutation tools (default `false`). When `true`, mutation tools are registered for enabled backends; when `false`, only read-only query tools are exposed (§2.5) |
 
 These are the **only** environment variables the server reads. The tokens are
 read once per backend from the environment and re-used on every call; they are
@@ -850,9 +851,9 @@ All fixes and features follow a **TDD workflow** with **isolated contexts**:
 
 ## 9. Development workflow (summary)
 
-- Default branch `main`; feature/bugfix branches named `feat/<slug>`, `fix/<slug>`,
+- Default branch `master` (R2); feature/bugfix branches named `feat/<slug>`, `fix/<slug>`,
   `test/<slug>`, `docs/<slug>`; conventional commits.
-- Open an MR against `main`; at least one approving review; CI green:
+- Open an MR against `master`; at least one approving review; CI green:
   lint → arch → test → cover (95%) → mutation → build → sec.
 - Do not merge with below-threshold coverage/mutation or failing checks.
 

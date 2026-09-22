@@ -252,16 +252,16 @@ the binary first with `goreleaser build --snapshot --clean`.
 ## 4. Development workflow
 
 ### Branching
-- Default branch: `main`.
+- Default branch: `master` (R2).
 - One feature/bugfix per branch, named: `feat/<slug>`, `fix/<slug>`, `test/<slug>`, `docs/<slug>`.
-- Branch from latest `main`; keep branches short-lived.
+- Branch from latest `master`; keep branches short-lived.
 
 ### Commits
 - Conventional commits: `feat:`, `fix:`, `test:`, `docs:`, `refactor:`, `chore:`.
 - Keep commits focused; no unrelated changes.
 
 ### Merge request (MR) / review
-- Open an MR (or PR on GitHub) against `main`.
+- Open an MR (or PR on GitHub) against `master`.
 - Fill in description: what, why, what was tested, coverage/mutation impact.
 - Require **at least one approving review** from a human/agent with relevant role
   (architect for structural changes, security for auth, qa for tests).
