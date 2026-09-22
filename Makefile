@@ -57,8 +57,8 @@ lint:
 
 ## mutation — gremlins mutation testing on core packages; HARD GATE (C2/C8)
 mutation:
-	gremlins unleash --workers 4 --timeout-coefficient 50 ./application -E '.*mocks.*'
-	gremlins unleash --workers 4 --timeout-coefficient 50 ./domain
+	gremlins unleash --workers 4 --timeout-coefficient 50 --threshold-efficacy=80 --threshold-mcover=80 ./application -E '.*mocks.*'
+	gremlins unleash --workers 4 --timeout-coefficient 50 --threshold-efficacy=80 --threshold-mcover=80 ./domain
 
 ## secrets — gitleaks scan over the FULL git history; HARD GATE (C3/N28)
 secrets:

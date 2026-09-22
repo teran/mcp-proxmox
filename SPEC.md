@@ -807,33 +807,39 @@ Mutation testing (gremlins) targets `domain` and `application`.
   `go-arch-lint check`, and by the `depguard` clean-arch rule in
   `.golangci.yml`). outbound HTTP is done exclusively via `resty.dev/v3` confined to `adapter/pve` + `adapter/pbs`;
   logrus to `adapter/logging`; go-sdk to `adapter/mcp` + `cmd/mcp-proxmox`.
-- **Mutation testing:** `gremlins unleash` on `domain` + `application` with
-  efficacy ≥ 80% (config in `gremlins.toml`; generated mocks excluded).
+ - **Mutation testing:** `gremlins unleash` on `domain` + `application` with
+  **efficacy ≥ 80% AND mutant-coverage ≥ 80%** (config in `gremlins.toml`:
+  `efficacy = 80.0`, `mutant-coverage = 80.0`; generated mocks excluded). The
+  Makefile `mutation` target passes `--threshold-efficacy=80 --threshold-mcover=80`.
 
 ### 8.4 Build and quality gates
 
-There is **no Makefile**. Builds use **goreleaser** (`.goreleaser.yml`);
-quality gates run directly:
+The build system exposes the standard interface (R7) via **`Makefile`**:
+`make build` (goreleaser), `make test` (hermetic `-race` tests + coverage ≥ 95%
+gate), `make lint` (golangci-lint + vet + gofmt + go-arch-lint + gosec +
+govulncheck), plus the dedicated hard-gate targets `make mutation` (gremlins)
+and `make secrets` (gitleaks). CI binds to these `make` targets, so the same
+interface works across providers. Direct tool invocations:
 
 ```bash
-golangci-lint run ./...   # lint
-go-arch-lint check        # architecture / dependency rule
-go test ./...             # hermetic tests
-go vet ./... && gofmt -l .
-gosec ./...               # security
-gremlins unleash --workers 4 --timeout-coefficient 50 ./application -E '.*mocks.*'
-gremlins unleash --workers 4 --timeout-coefficient 50 ./domain
+make lint      # golangci-lint, vet, gofmt, go-arch-lint, gosec, govulncheck
+make test      # go test -race + coverage >= 95% (cover-core) gate
+make mutation  # gremlins --threshold-efficacy=80 --threshold-mcover=80 (hard gate)
+make secrets   # gitleaks detect over the full git history (hard gate)
+make build     # goreleaser snapshot into dist/
 ```
 
 The CI pipeline (`.gitlab-ci.yml`, `.forgejo/workflows/ci.yml`) runs, and
 **fails the build on any violation**: lint (`golangci-lint`), architecture
 (`go-arch-lint`), **`go test -race`**, **gosec**, **govulncheck**, a **hard
-coverage gate** — total `cover-core` below **95%** fails the pipeline — and a
+coverage gate** — total `cover-core` below **95%** fails the pipeline — a
+**secret scan** (`gitleaks`) over the full git history, and a
 **mutation-testing (gremlins) hard gate** on `domain` + `application` that
-**fails the build on surviving mutants** (no `allow_failure` /
-`continue-on-error`; C7/C8, N15/N19). Releases are built and published by
-`goreleaser release --clean` on git tags. All findings are fixed, never
-suppressed (no blanket `#nosec` / default excludes).
+**fails the build on surviving mutants** or below-threshold efficacy/mutant
+coverage (80/80; no `allow_failure` / `continue-on-error`; C7/C8, N15/N19).
+Releases are built and published by `goreleaser release --clean` on git tags.
+All findings are fixed, never suppressed (no blanket `#nosec` / default
+excludes).
 
 ### 8.5 TDD workflow
 

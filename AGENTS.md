@@ -195,7 +195,7 @@ contradiction, raise it with the architect.
   fails the build when total `cover-core` is below 95%** — it is a hard gate,
   not just a local convention (both `.gitlab-ci.yml` and
   `.forgejo/workflows/ci.yml` enforce it).
-- gremlins mutation score must not regress below 80% on `domain`/`application`; **it is a hard gate in CI** (fails the build on survivors — no `allow_failure`/`continue-on-error`, C7/C8/N15/N19).
+- gremlins mutation score must not regress below 80% on `domain`/`application` (**efficacy ≥ 80% and mutant-coverage ≥ 80%**, per `gremlins.toml` and the `--threshold-efficacy=80 --threshold-mcover=80` flags); **it is a hard gate in CI** (fails the build on survivors — no `allow_failure`/`continue-on-error`, C7/C8/N15/N19).
 - No secrets in code, config, logs, or tool output.
 
 ---
@@ -216,24 +216,33 @@ All fixes and features follow a **TDD workflow** with **isolated contexts**:
 
 ## 3. Commands
 
-There is **no Makefile** — builds are done with **goreleaser** (`.goreleaser.yml`),
-and the quality gates are run directly.
+The build system exposes the standard interface (R7) via the **Makefile** —
+run the quality gates through `make` targets, which is what CI binds to:
 
 ```bash
 # build / release (goreleaser)
-goreleaser build --snapshot --clean     # local snapshot build into dist/
+make build                              # goreleaser snapshot build into dist/
 goreleaser release --clean              # release from a git tag
 go build ./...                          # quick compile check
 
-# quality gates
+# quality gates (bound by CI)
+make lint                               # golangci-lint, vet, gofmt, go-arch-lint, gosec, govulncheck
+make test                               # go test -race + coverage >= 95% (cover-core) gate
+make mutation                           # gremlins hard gate, --threshold-efficacy=80 --threshold-mcover=80
+make secrets                            # gitleaks scan over the full git history
+```
+
+Underlying tool invocations, if you need to run a single one directly:
+
+```bash
 golangci-lint run ./...                 # lint
 go-arch-lint check                      # architecture / dependency rule
-go test ./...                           # hermetic tests (no network)
-go vet ./...
-gofmt -l .                              # formatting check
+go test -race ./...                     # hermetic tests (no network), race detector
 gosec ./...                             # security scan
-gremlins unleash --workers 4 --timeout-coefficient 50 ./application -E '.*mocks.*'
-gremlins unleash --workers 4 --timeout-coefficient 50 ./domain   # mutation on core
+govulncheck ./...                       # vulnerability scan
+gremlins unleash --workers 4 --timeout-coefficient 50 --threshold-efficacy=80 --threshold-mcover=80 ./application -E '.*mocks.*'
+gremlins unleash --workers 4 --timeout-coefficient 50 --threshold-efficacy=80 --threshold-mcover=80 ./domain   # mutation on core
+gitleaks detect --source . --redact --verbose   # secret scan over git history
 
 # real-code coverage (excludes generated mocks and cmd/mcp-proxmox)
 go test ./... -coverprofile=coverage.out
