@@ -416,6 +416,20 @@ The container image build is **isolated**: the `Dockerfile` does not compile —
 it consumes a goreleaser artifact from `dist/mcp-proxmox`, producing a minimal
 `FROM scratch` runtime with only the static binary and the CA bundle.
 
+**Container image vs. Local deployment type (B3/N17).** The MCP-server skill's
+B3/N17 says a container image is **only** for a **Remote/Hybrid** (HTTP) server,
+never a Local stdio-only server. This server is **Local (stdio)** and its image
+is **not** built or published by any CI/CD pipeline (no `container-image` job,
+no registry push — R1/R3/R4 do not apply). The `Dockerfile` is kept purely as a
+**local convenience packaging** for running the stdio binary in an isolated
+runtime (`docker run` with env vars for endpoint/token), which is useful for
+development/sandboxing and is how some clients prefer to launch a subprocess.
+This is a **recorded, deliberate deviation from the letter of B3/N17**: the
+image exists for operator convenience only, is never released, and does not turn
+the server into a Remote/Hybrid one. If a remote HTTP mode is ever implemented
+(§4.1), the image becomes a first-class release artifact and R1/R3/R4/N14 apply
+in full.
+
 ---
 
 ## 5. Logging

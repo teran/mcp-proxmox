@@ -381,6 +381,13 @@ TLS to the Proxmox APIs). **The image build is isolated — it does not compile 
 binary.** Build the binary first with goreleaser (artifacts land in `dist/`), then
 build the image, which only COPYs the ready artifact.
 
+> This server is a **Local (stdio)** MCP server, so the container image is a
+> **local convenience only** — it is **not** built or published by any CI/CD
+> pipeline (there is no `container-image` job or registry push). It lets you run
+> the stdio binary in an isolated runtime (e.g. `docker run` with env vars) for
+> development/sandboxing, or to launch it as a subprocess. It is never a
+> released Remote/Hybrid image (B3/N17 — see SPEC.md §4.6).
+
 ```sh
 # 1) Build the linux/amd64 binary with goreleaser (deterministic path dist/mcp-proxmox)
 GOOS=linux GOARCH=amd64 goreleaser build --snapshot --clean \
