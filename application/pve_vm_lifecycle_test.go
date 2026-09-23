@@ -120,13 +120,19 @@ func TestPVEService_VMLifecycleErrorPropagation(t *testing.T) {
 	sentinel := errors.New("pve boom")
 	gw := &mockPVEGateway{}
 	gw.startVM = func(ctx context.Context, node string, vmid int) (*model.Task, error) { return nil, sentinel }
-	gw.stopVM = func(ctx context.Context, node string, vmid int, skiplock bool) (*model.Task, error) { return nil, sentinel }
+	gw.stopVM = func(ctx context.Context, node string, vmid int, skiplock bool) (*model.Task, error) {
+		return nil, sentinel
+	}
 	gw.shutdownVM = func(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error) {
 		return nil, sentinel
 	}
-	gw.rebootVM = func(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error) { return nil, sentinel }
+	gw.rebootVM = func(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error) {
+		return nil, sentinel
+	}
 	gw.resetVM = func(ctx context.Context, node string, vmid int) (*model.Task, error) { return nil, sentinel }
-	gw.suspendVM = func(ctx context.Context, node string, vmid int, todisk bool) (*model.Task, error) { return nil, sentinel }
+	gw.suspendVM = func(ctx context.Context, node string, vmid int, todisk bool) (*model.Task, error) {
+		return nil, sentinel
+	}
 	gw.resumeVM = func(ctx context.Context, node string, vmid int) (*model.Task, error) { return nil, sentinel }
 	gw.deleteVM = func(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks bool) (*model.Task, error) {
 		return nil, sentinel

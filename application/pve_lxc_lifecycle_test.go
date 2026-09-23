@@ -93,7 +93,9 @@ func TestPVEService_LXCLifecycleErrorPropagation(t *testing.T) {
 	gw.shutdownLXC = func(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error) {
 		return nil, sentinel
 	}
-	gw.rebootLXC = func(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error) { return nil, sentinel }
+	gw.rebootLXC = func(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error) {
+		return nil, sentinel
+	}
 	gw.deleteLXC = func(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks, force bool) (*model.Task, error) {
 		return nil, sentinel
 	}
@@ -107,7 +109,10 @@ func TestPVEService_LXCLifecycleErrorPropagation(t *testing.T) {
 		{"StopLXC", func(s *PVEService) error { _, e := s.StopLXC(context.Background(), "n", 1, false, false); return e }},
 		{"ShutdownLXC", func(s *PVEService) error { _, e := s.ShutdownLXC(context.Background(), "n", 1, false, 0); return e }},
 		{"RebootLXC", func(s *PVEService) error { _, e := s.RebootLXC(context.Background(), "n", 1, 0); return e }},
-		{"DeleteLXC", func(s *PVEService) error { _, e := s.DeleteLXC(context.Background(), "n", 1, false, false, false); return e }},
+		{"DeleteLXC", func(s *PVEService) error {
+			_, e := s.DeleteLXC(context.Background(), "n", 1, false, false, false)
+			return e
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

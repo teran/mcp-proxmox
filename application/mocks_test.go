@@ -35,7 +35,7 @@ type mockPVEGateway struct {
 	startVMBackup    func(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
 
 	// VM/LXC snapshots (read-only).
-	listVMSnapshots func(ctx context.Context, node string, vmid int) ([]model.Snapshot, error)
+	listVMSnapshots  func(ctx context.Context, node string, vmid int) ([]model.Snapshot, error)
 	listLXCSnapshots func(ctx context.Context, node string, vmid int) ([]model.Snapshot, error)
 
 	// VM lifecycle mutations.
@@ -53,15 +53,15 @@ type mockPVEGateway struct {
 	rollbackVMSnapshot func(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
 
 	// LXC lifecycle mutations.
-	startLXC             func(ctx context.Context, node string, vmid int) (*model.Task, error)
-	stopLXC              func(ctx context.Context, node string, vmid int, skiplock, forceStop bool) (*model.Task, error)
-	shutdownLXC          func(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error)
-	rebootLXC            func(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error)
-	deleteLXC            func(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks, force bool) (*model.Task, error)
-	cloneLXC             func(ctx context.Context, node string, vmid int, req model.CloneLXCRequest) (*model.Task, error)
-	createLXCSnapshot    func(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error)
-	deleteLXCSnapshot    func(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
-	rollbackLXCSnapshot  func(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
+	startLXC            func(ctx context.Context, node string, vmid int) (*model.Task, error)
+	stopLXC             func(ctx context.Context, node string, vmid int, skiplock, forceStop bool) (*model.Task, error)
+	shutdownLXC         func(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error)
+	rebootLXC           func(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error)
+	deleteLXC           func(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks, force bool) (*model.Task, error)
+	cloneLXC            func(ctx context.Context, node string, vmid int, req model.CloneLXCRequest) (*model.Task, error)
+	createLXCSnapshot   func(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error)
+	deleteLXCSnapshot   func(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
+	rollbackLXCSnapshot func(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
 
 	// Restore.
 	restoreVM func(ctx context.Context, node string, req model.PVERestoreRequest) (*model.Task, error)

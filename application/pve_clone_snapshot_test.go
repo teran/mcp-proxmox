@@ -98,7 +98,10 @@ func TestPVEService_CloneSnapshotErrorPropagation(t *testing.T) {
 		name string
 		call func(*PVEService) error
 	}{
-		{"CloneVM", func(s *PVEService) error { _, e := s.CloneVM(context.Background(), "n", 1, model.CloneVMRequest{}); return e }},
+		{"CloneVM", func(s *PVEService) error {
+			_, e := s.CloneVM(context.Background(), "n", 1, model.CloneVMRequest{})
+			return e
+		}},
 		{"ListVMSnapshots", func(s *PVEService) error { _, e := s.ListVMSnapshots(context.Background(), "n", 1); return e }},
 		{"CreateVMSnapshot", func(s *PVEService) error {
 			_, e := s.CreateVMSnapshot(context.Background(), "n", 1, model.SnapshotCreateRequest{})

@@ -97,7 +97,10 @@ func TestPVEService_LXCCloneSnapshotErrorPropagation(t *testing.T) {
 		name string
 		call func(*PVEService) error
 	}{
-		{"CloneLXC", func(s *PVEService) error { _, e := s.CloneLXC(context.Background(), "n", 1, model.CloneLXCRequest{}); return e }},
+		{"CloneLXC", func(s *PVEService) error {
+			_, e := s.CloneLXC(context.Background(), "n", 1, model.CloneLXCRequest{})
+			return e
+		}},
 		{"ListLXCSnapshots", func(s *PVEService) error { _, e := s.ListLXCSnapshots(context.Background(), "n", 1); return e }},
 		{"CreateLXCSnapshot", func(s *PVEService) error {
 			_, e := s.CreateLXCSnapshot(context.Background(), "n", 1, model.SnapshotCreateRequest{})
