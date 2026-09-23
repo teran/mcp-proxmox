@@ -761,6 +761,40 @@ attempts (`Config.Retries = 2`) with linear backoff (`RetryBackoff * attempt`,
 default 200 ms); only `*UpstreamError` (5xx and transport) is retried — sentinels
 and `*APIError` abort immediately. The loop honors `ctx.Done()`.
 
+### 7.6 Error → response mapping (A1)
+
+Tool handlers (`adapter/mcp/helpers.go`) return typed errors to the go-sdk. The
+go-sdk distinguishes two cases:
+
+- **Tool-execution errors** (all of this server's typed errors below) are
+  embedded in the MCP `CallToolResult` with `IsError=true` and the message in
+  its content — per the MCP spec, tool failures are a **successful JSON-RPC
+  response carrying an error result**, not a JSON-RPC error. This is why every
+  tool's failure is flagged `IsError` in the adapter/mcp tests.
+- **Protocol-level errors** — invalid input against `inputSchema`
+  (`additionalProperties:false`) and `*jsonrpc.Error` returns — map to JSON-RPC
+  error codes at the transport layer.
+
+The typed-error → observable-outcome mapping:
+
+| Error type | MCP / JSON-RPC outcome | Meaning |
+|---|---|---|
+| `port.ErrUnauthorized` | `IsError=true` (HTTP 401) | request not authorized (bad/missing token) |
+| `port.ErrForbidden` | `IsError=true` (HTTP 403) | request forbidden |
+| `port.ErrNotFound` | `IsError=true` (HTTP 404) | requested resource not found |
+| `*EmptyDataError` | `IsError=true` | entity absent / empty `data` on a getter |
+| `*APIError` (semantic) | `IsError=true` | upstream returned a semantic error payload |
+| `*UpstreamError` (5xx/transport) | `IsError=true` | upstream failure (5xx / network / decode / marshal) |
+| token-source misconfiguration | `IsError=true` | enabled backend has no usable token |
+| input validation (`InvalidParams`) | JSON-RPC `-32602` | tool args failed `inputSchema` (S8) |
+| method not found | JSON-RPC `-32601` | unknown RPC method (SDK) |
+
+The standard JSON-RPC codes (`-32700` parse, `-32600` invalid request,
+`-32601` method not found, `-32602` invalid params, `-32603` internal error)
+are used by the SDK for protocol-level conditions. `port.HTTPStatus` is logged
+on upstream failures so the HTTP status remains observable alongside the
+`IsError` result.
+
 ---
 
 ## 8. Quality requirements
