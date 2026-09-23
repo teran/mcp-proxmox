@@ -39,6 +39,15 @@ type PBSGateway interface {
 	GetVerifyStatus(ctx context.Context, store, upid string) (*model.VerifyStatus, error)
 	GetPruneStatus(ctx context.Context, store, upid string) (*model.PruneStatus, error)
 
+	// RestoreFile restores a single file out of a backup snapshot to a target
+	// path on the PBS filesystem. It is a mutation (gated by EnableMutations),
+	// never retried, and returns no task UPID.
+	RestoreFile(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error
+	// RestoreVMBackup restores a VM backup snapshot into a PVE datastore. It is a
+	// mutation (gated by EnableMutations), never retried, and returns the task
+	// UPID to poll with GetTaskStatus / GetTaskLog.
+	RestoreVMBackup(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest) (string, error)
+
 	// Mutations (gated by EnableMutations). These are never retried and return
 	// the task UPID taken from the response `data` field.
 	StartVerify(ctx context.Context, store string) (string, error)

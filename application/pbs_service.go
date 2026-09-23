@@ -69,6 +69,17 @@ func (s *PBSService) GetTaskLog(ctx context.Context, upid string, limit int) ([]
 	return s.gw.GetTaskLog(ctx, upid, limit)
 }
 
+// RestoreFile restores a single file out of a PBS backup snapshot.
+func (s *PBSService) RestoreFile(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error {
+	return s.gw.RestoreFile(ctx, store, backupType, backupID, snapshot, req)
+}
+
+// RestoreVMBackup restores a PBS VM backup snapshot into a PVE datastore and
+// returns the task UPID.
+func (s *PBSService) RestoreVMBackup(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest) (string, error) {
+	return s.gw.RestoreVMBackup(ctx, store, backupType, backupID, snapshot, req)
+}
+
 // StartVerify starts a verify job on a datastore and returns its UPID.
 func (s *PBSService) StartVerify(ctx context.Context, store string) (string, error) {
 	return s.gw.StartVerify(ctx, store)

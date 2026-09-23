@@ -68,6 +68,32 @@ type pbsTaskLogIn struct {
 	Limit int    `json:"limit,omitempty" jsonschema:"Maximum number of log lines"`
 }
 
+// pbsFileRestoreIn is the input of pbs_backup_restore_file.
+type pbsFileRestoreIn struct {
+	Store      string `json:"store" jsonschema:"PBS datastore name"`
+	BackupType string `json:"backup_type" jsonschema:"Backup type: vm | ct | host"`
+	BackupID   string `json:"backup_id" jsonschema:"Backup ID / group ID (e.g. a VMID)"`
+	Snapshot   string `json:"snapshot" jsonschema:"Backup snapshot identifier (the ISO-8601 timestamp shown in the PBS UI, e.g. 2024-01-01T00:00:00Z); obtain it from the backup listing."`
+	Path       string `json:"path" jsonschema:"Source file path within the backup to restore"`
+	Target     string `json:"target" jsonschema:"Destination path on the PBS filesystem"`
+}
+
+// pbsVMRestoreIn is the input of pbs_backup_vm_restore.
+type pbsVMRestoreIn struct {
+	Store       string `json:"store" jsonschema:"PBS datastore name"`
+	BackupType  string `json:"backup_type" jsonschema:"Backup type: vm | ct | host"`
+	BackupID    string `json:"backup_id" jsonschema:"Backup ID / group ID (e.g. a VMID)"`
+	Snapshot    string `json:"snapshot" jsonschema:"Backup snapshot identifier (the ISO-8601 timestamp shown in the PBS UI, e.g. 2024-01-01T00:00:00Z); obtain it from the backup listing."`
+	Target      string `json:"target" jsonschema:"PVE storage to restore into"`
+	VMID        string `json:"vmid,omitempty" jsonschema:"Target VM ID, or 'next' to let PVE pick the next free ID"`
+	Host        string `json:"host,omitempty" jsonschema:"PVE node hostname/IP to restore to"`
+	Password    string `json:"password,omitempty" jsonschema:"Password to authenticate to the target PVE node"`
+	Fingerprint string `json:"fingerprint,omitempty" jsonschema:"TLS fingerprint of the target PVE node"`
+	Pool        string `json:"pool,omitempty" jsonschema:"Resource pool to place the restored VM in"`
+	Verbose     bool   `json:"verbose,omitempty" jsonschema:"Verbose restore output"`
+	Reload      bool   `json:"reload,omitempty" jsonschema:"Reload the VM configuration after restore"`
+}
+
 // registerPBSTools registers the Proxmox Backup Server tools. Read-only (query)
 // tools are always registered for an enabled PBS backend. Mutation tools are
 // registered only when enableMutations is true (SPEC.md §2.5).
@@ -200,6 +226,36 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 				RateOut:        in.RateOut,
 				SkipLost:       in.SkipLost,
 				NotifyUser:     in.NotifyUser,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": upid}, nil
+		})
+
+	mutTool(s, "pbs_backup_restore_file", "Restore single file from PBS backup",
+		"Restore a single file out of a PBS backup snapshot to a target path on the PBS filesystem.",
+		"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier, the source path inside the backup and the target path on the PBS filesystem. Returns no task UPID. Not idempotent.",
+		log, false, func(ctx context.Context, in pbsFileRestoreIn) (any, error) {
+			return nil, app.PBS.RestoreFile(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, model.PBSFileRestoreRequest{
+				Path:   in.Path,
+				Target: in.Target,
+			})
+		})
+
+	mutTool(s, "pbs_backup_vm_restore", "Restore PBS VM backup",
+		"Restore a PBS VM backup snapshot into a PVE datastore.",
+		"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier, the target PVE storage, and optionally a VM ID (or 'next'), host, password, fingerprint, pool, verbose and reload. Returns the task UPID to poll with pbs_task_status. Not idempotent: each call starts a new restore.",
+		log, false, func(ctx context.Context, in pbsVMRestoreIn) (any, error) {
+			upid, err := app.PBS.RestoreVMBackup(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, model.PBSVMRestoreRequest{
+				Target:      in.Target,
+				VMID:        in.VMID,
+				Host:        in.Host,
+				Password:    in.Password,
+				Fingerprint: in.Fingerprint,
+				Pool:        in.Pool,
+				Verbose:     in.Verbose,
+				Reload:      in.Reload,
 			})
 			if err != nil {
 				return nil, err

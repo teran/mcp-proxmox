@@ -459,6 +459,53 @@ func (g *Gateway) GetTaskLog(ctx context.Context, upid string, limit int) ([]mod
 	return out, nil
 }
 
+// RestoreFile restores a single file out of a backup snapshot via
+// POST /admin/datastore/{store}/backups/{type}/{id}/{snapshot}/files. The
+// source `path` inside the backup is written to the `target` path on the PBS
+// filesystem; the endpoint returns no task UPID.
+func (g *Gateway) RestoreFile(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error {
+	form := url.Values{}
+	form.Set("path", req.Path)
+	form.Set("target", req.Target)
+	return g.doMutation(ctx, http.MethodPost, backupFilesPath(store, backupType, backupID, snapshot)+"/files", form, nil)
+}
+
+// RestoreVMBackup restores a VM backup snapshot into a PVE datastore via
+// POST /admin/datastore/{store}/backups/{type}/{id}/{snapshot}/restore and
+// returns the task UPID. Target is the PVE storage; VMID is either a numeric ID
+// or the string "next". The optional password/fingerprint authenticate to the
+// target PVE node and are sent in the form body — they are never logged.
+func (g *Gateway) RestoreVMBackup(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest) (string, error) {
+	form := url.Values{}
+	form.Set("target", req.Target)
+	if req.VMID != "" {
+		form.Set("vmid", req.VMID)
+	}
+	if req.Host != "" {
+		form.Set("host", req.Host)
+	}
+	if req.Password != "" {
+		form.Set("password", req.Password)
+	}
+	if req.Fingerprint != "" {
+		form.Set("fingerprint", req.Fingerprint)
+	}
+	if req.Pool != "" {
+		form.Set("pool", req.Pool)
+	}
+	if req.Verbose {
+		form.Set("verbose", "1")
+	}
+	if req.Reload {
+		form.Set("reload", "1")
+	}
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, backupFilesPath(store, backupType, backupID, snapshot)+"/restore", form, &upid); err != nil {
+		return "", err
+	}
+	return upid, nil
+}
+
 // doMutation executes a single mutation request (never retried — mutations are
 // not idempotent and must not be replayed on a transient 5xx; SPEC.md §7.5)
 // with an optional form-encoded body. The mutation response `data` is the task
