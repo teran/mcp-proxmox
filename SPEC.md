@@ -881,8 +881,23 @@ make secrets   # gitleaks detect over the full git history (hard gate)
 make build     # goreleaser snapshot into dist/
 ```
 
-The CI pipeline (`.gitlab-ci.yml`, `.forgejo/workflows/ci.yml`) runs, and
-**fails the build on any violation**: lint (`golangci-lint`), architecture
+The CI pipeline runs on **two providers** (`.gitlab-ci.yml`, `.forgejo/workflows/ci.yml`):
+
+- **R6 — CI provider decision.** The repository is hosted on the internal
+  **Forgejo** instance (`git.homelab.teran.dev`), whose native CI is Forgejo
+  Actions (`.forgejo/workflows/ci.yml`). A **GitLab CI** (`.gitlab-ci.yml`) is
+  additionally maintained because the org's central fleet pipeline
+  (`cloud-infra-runner.msk1`, the shared `cicd:latest` image) is GitLab-based
+  and mirrors the same gates. **Both providers are an explicit, deliberate
+  choice** (R6 permits multiple providers only when explicitly stated): the two
+  pipelines are functionally equivalent and both bind to the same `make`
+  build-system interface (R7), so they cannot drift.
+- **N31 / R7.** Neither provider invokes a language-specific command directly;
+  each job calls a `make` target (`make lint`/`test`/`mutation`/`build`, and
+  `gitleaks` in its dedicated image). `e2e`/`container-image` targets are not
+  declared (this is a Local stdio-only server).
+
+Both pipelines **fail the build on any violation**: lint (`golangci-lint`), architecture
 (`go-arch-lint`), **`go test -race`**, **gosec**, **govulncheck**, a **hard
 coverage gate** — total `cover-core` below **95%** fails the pipeline — a
 **secret scan** (`gitleaks`) over the full git history, and a
