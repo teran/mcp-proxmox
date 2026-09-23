@@ -930,6 +930,83 @@ func (g *Gateway) DeleteLXC(ctx context.Context, node string, vmid int, purge, d
 	return &model.Task{UPID: upid}, nil
 }
 
+// ListLXCSnapshots lists the snapshots of an LXC container via
+// GET /nodes/{node}/lxc/{vmid}/snapshot. Read-only.
+func (g *Gateway) ListLXCSnapshots(ctx context.Context, node string, vmid int) ([]model.Snapshot, error) {
+	var out []model.Snapshot
+	if err := g.do(ctx, http.MethodGet, lxcPath(node, vmid)+"/snapshot", nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CloneLXC clones an LXC container via POST /nodes/{node}/lxc/{vmid}/clone.
+func (g *Gateway) CloneLXC(ctx context.Context, node string, vmid int, req model.CloneLXCRequest) (*model.Task, error) {
+	form := url.Values{}
+	form.Set("newid", strconv.Itoa(req.NewID))
+	if req.Full {
+		form.Set("full", "1")
+	}
+	if req.Storage != "" {
+		form.Set("storage", req.Storage)
+	}
+	if req.Hostname != "" {
+		form.Set("hostname", req.Hostname)
+	}
+	if req.Description != "" {
+		form.Set("description", req.Description)
+	}
+	if req.Pool != "" {
+		form.Set("pool", req.Pool)
+	}
+	if req.Snapname != "" {
+		form.Set("snapname", req.Snapname)
+	}
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/clone", form, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// CreateLXCSnapshot creates a snapshot of an LXC container via
+// POST /nodes/{node}/lxc/{vmid}/snapshot. LXC snapshots do not capture a VM
+// state, so only snapname and description are sent.
+func (g *Gateway) CreateLXCSnapshot(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error) {
+	form := url.Values{}
+	form.Set("snapname", req.Snapname)
+	if req.Description != "" {
+		form.Set("description", req.Description)
+	}
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/snapshot", form, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// DeleteLXCSnapshot deletes a snapshot of an LXC container via
+// DELETE /nodes/{node}/lxc/{vmid}/snapshot/{snapname}.
+func (g *Gateway) DeleteLXCSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
+	var upid string
+	if err := g.doMutation(ctx, http.MethodDelete, lxcPath(node, vmid)+"/snapshot/"+snapname, nil, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// RollbackLXCSnapshot rolls an LXC container back to a snapshot via
+// POST /nodes/{node}/lxc/{vmid}/snapshot/{snapname}/rollback. The `start` form
+// value controls whether the container is started after the rollback; here it
+// is left unset so PVE's default applies.
+func (g *Gateway) RollbackLXCSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/snapshot/"+snapname+"/rollback", nil, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
 // truncate bounds an error-response body for debug logging, keeping the log
 // line compact and free of unbounded payloads.
 func truncate(b []byte) string {

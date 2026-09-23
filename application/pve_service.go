@@ -76,6 +76,11 @@ func (s *PVEService) GetLXCStatus(ctx context.Context, node string, vmid int) (*
 	return s.gw.GetLXCStatus(ctx, node, vmid)
 }
 
+// ListLXCSnapshots lists the snapshots of an LXC container on a node.
+func (s *PVEService) ListLXCSnapshots(ctx context.Context, node string, vmid int) ([]model.Snapshot, error) {
+	return s.gw.ListLXCSnapshots(ctx, node, vmid)
+}
+
 // StartLXC starts an LXC container on a node.
 func (s *PVEService) StartLXC(ctx context.Context, node string, vmid int) (*model.Task, error) {
 	return s.gw.StartLXC(ctx, node, vmid)
@@ -99,6 +104,26 @@ func (s *PVEService) RebootLXC(ctx context.Context, node string, vmid int, timeo
 // DeleteLXC deletes an LXC container on a node.
 func (s *PVEService) DeleteLXC(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks, force bool) (*model.Task, error) {
 	return s.gw.DeleteLXC(ctx, node, vmid, purge, destroyUnreferencedDisks, force)
+}
+
+// CloneLXC clones an LXC container on a node.
+func (s *PVEService) CloneLXC(ctx context.Context, node string, vmid int, req model.CloneLXCRequest) (*model.Task, error) {
+	return s.gw.CloneLXC(ctx, node, vmid, req)
+}
+
+// CreateLXCSnapshot creates a snapshot of an LXC container on a node.
+func (s *PVEService) CreateLXCSnapshot(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error) {
+	return s.gw.CreateLXCSnapshot(ctx, node, vmid, req)
+}
+
+// DeleteLXCSnapshot deletes a snapshot of an LXC container on a node.
+func (s *PVEService) DeleteLXCSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
+	return s.gw.DeleteLXCSnapshot(ctx, node, vmid, snapname)
+}
+
+// RollbackLXCSnapshot rolls an LXC container back to a snapshot on a node.
+func (s *PVEService) RollbackLXCSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
+	return s.gw.RollbackLXCSnapshot(ctx, node, vmid, snapname)
 }
 
 // ListStorage returns the cluster storage.

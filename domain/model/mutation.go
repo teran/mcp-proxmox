@@ -75,6 +75,19 @@ type CloneVMRequest struct {
 	Snapname    string `json:"snapname,omitempty"`
 }
 
+// CloneLXCRequest is the form body of POST /nodes/{node}/lxc/{vmid}/clone.
+// NewID is required (the new container ID); the other fields are optional
+// clone overrides.
+type CloneLXCRequest struct {
+	NewID       int    `json:"newid"`
+	Full        bool   `json:"full,omitempty"`
+	Storage     string `json:"storage,omitempty"`
+	Hostname    string `json:"hostname,omitempty"`
+	Description string `json:"description,omitempty"`
+	Pool        string `json:"pool,omitempty"`
+	Snapname    string `json:"snapname,omitempty"`
+}
+
 // PBSSyncRequest is the form body of POST /admin/datastore/{store}/sync. It
 // describes a one-off sync job that pulls from a remote PBS datastore.
 type PBSSyncRequest struct {

@@ -190,6 +190,34 @@ type lxcDeleteIn struct {
 	Force                    bool   `json:"force,omitempty" jsonschema:"Delete even if the container is running"`
 }
 
+// lxcCloneIn is the input of pve_lxc_clone.
+type lxcCloneIn struct {
+	Node        string `json:"node" jsonschema:"PVE node name"`
+	VMID        int    `json:"vmid" jsonschema:"Container ID"`
+	NewID       int    `json:"newid" jsonschema:"Container ID of the new clone"`
+	Full        bool   `json:"full,omitempty" jsonschema:"Full (independent) clone rather than linked clone"`
+	Storage     string `json:"storage,omitempty" jsonschema:"Storage for the new clone's disks"`
+	Hostname    string `json:"hostname,omitempty" jsonschema:"Hostname of the new clone"`
+	Description string `json:"description,omitempty" jsonschema:"Description of the new clone"`
+	Pool        string `json:"pool,omitempty" jsonschema:"Resource pool to place the clone in"`
+	Snapname    string `json:"snapname,omitempty" jsonschema:"Snapshot name to clone from"`
+}
+
+// lxcSnapshotCreateIn is the input of pve_lxc_snapshot_create.
+type lxcSnapshotCreateIn struct {
+	Node        string `json:"node" jsonschema:"PVE node name"`
+	VMID        int    `json:"vmid" jsonschema:"Container ID"`
+	Snapname    string `json:"snapname" jsonschema:"Snapshot name"`
+	Description string `json:"description,omitempty" jsonschema:"Snapshot description"`
+}
+
+// lxcSnapshotIn is the input of pve_lxc_snapshot_delete / pve_lxc_snapshot_rollback.
+type lxcSnapshotIn struct {
+	Node     string `json:"node" jsonschema:"PVE node name"`
+	VMID     int    `json:"vmid" jsonschema:"Container ID"`
+	Snapname string `json:"snapname" jsonschema:"Snapshot name"`
+}
+
 // registerPVETools registers the Proxmox VE tools. Read-only (query) tools are
 // always registered for an enabled PVE backend. Mutation tools are registered
 // only when enableMutations is true (SPEC.md §2.5).
@@ -270,6 +298,12 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 		"Provide node and vmid. Returns the container's current runtime status. Read-only.",
 		log, func(ctx context.Context, in lxcIn) (any, error) {
 			return app.PVE.GetLXCStatus(ctx, in.Node, in.VMID)
+		})
+	roTool(s, "pve_lxc_snapshot_list", "List LXC container snapshots",
+		"List the snapshots of an LXC container.",
+		"Provide node and vmid (container ID). Returns the container's snapshots. Read-only and idempotent.",
+		log, func(ctx context.Context, in lxcIn) (any, error) {
+			return app.PVE.ListLXCSnapshots(ctx, in.Node, in.VMID)
 		})
 
 	// --- storage & network ---
@@ -582,6 +616,61 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 		"Provide node and vmid (container ID). Deletes the container; returns the task UPID. Set purge to remove it from backup jobs, destroy_unreferenced_disks to remove unreferenced disks, and force to delete a running container. Not idempotent and destructive.",
 		log, false, func(ctx context.Context, in lxcDeleteIn) (any, error) {
 			t, err := app.PVE.DeleteLXC(ctx, in.Node, in.VMID, in.Purge, in.DestroyUnreferencedDisks, in.Force)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_lxc_clone", "Clone LXC container",
+		"Clone an LXC container.",
+		"Provide node, vmid (container ID) and the new container ID. Optionally set full (independent clone), storage, hostname, description, pool and snapname. Returns the task UPID. Not idempotent: each call creates a new clone.",
+		log, false, func(ctx context.Context, in lxcCloneIn) (any, error) {
+			t, err := app.PVE.CloneLXC(ctx, in.Node, in.VMID, model.CloneLXCRequest{
+				NewID:       in.NewID,
+				Full:        in.Full,
+				Storage:     in.Storage,
+				Hostname:    in.Hostname,
+				Description: in.Description,
+				Pool:        in.Pool,
+				Snapname:    in.Snapname,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_lxc_snapshot_create", "Create LXC container snapshot",
+		"Create a snapshot of an LXC container.",
+		"Provide node, vmid (container ID) and a snapshot name, optionally with a description. Returns the task UPID. Not idempotent.",
+		log, false, func(ctx context.Context, in lxcSnapshotCreateIn) (any, error) {
+			t, err := app.PVE.CreateLXCSnapshot(ctx, in.Node, in.VMID, model.SnapshotCreateRequest{
+				Snapname:    in.Snapname,
+				Description: in.Description,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_lxc_snapshot_delete", "Delete LXC container snapshot",
+		"Delete a snapshot of an LXC container.",
+		"Provide node, vmid (container ID) and the snapshot name. Returns the task UPID. Not idempotent and destructive.",
+		log, false, func(ctx context.Context, in lxcSnapshotIn) (any, error) {
+			t, err := app.PVE.DeleteLXCSnapshot(ctx, in.Node, in.VMID, in.Snapname)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_lxc_snapshot_rollback", "Roll back LXC container to snapshot",
+		"Roll an LXC container back to a snapshot.",
+		"Provide node, vmid (container ID) and the snapshot name to roll back to. Returns the task UPID. Not idempotent.",
+		log, false, func(ctx context.Context, in lxcSnapshotIn) (any, error) {
+			t, err := app.PVE.RollbackLXCSnapshot(ctx, in.Node, in.VMID, in.Snapname)
 			if err != nil {
 				return nil, err
 			}
