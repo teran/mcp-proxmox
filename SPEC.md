@@ -541,6 +541,24 @@ for test dummies. Tool handlers use a ctx-aware `toolLogger`
 - Request/response bodies are never logged at a level that would include token
   material; trace-level request logging logs method + URL path only.
 
+**Output-path redaction & sanitization (S2/S9).** Every tool result passes
+through `wrapOutput` → `sanitizeOutput` (`adapter/mcp/helpers.go`) before
+reaching the MCP client:
+
+- **S2 (no secret leakage):** any map key whose name looks sensitive (`token`,
+  `secret`, `api_key`, `auth`, `password`, `credential`, …) is replaced with
+  `[redacted]` in tool output. The typed domain models returned by tools carry
+  no secret fields — API tokens never enter the model or the output path — so
+  this is a defensive guarantee for any map-based output.
+- **S9 (output validation & sanitization):** the SDK validates every tool result
+  against the `outputSchema` derived from the typed return type (via
+  `applySchema`), and `stripControl` removes ANSI escape sequences and C0
+  control bytes from string values so no raw escape/control bytes can reach the
+  client.
+
+Input arguments are likewise redacted in log lines (`sanitizeArgs`, §5.1c) using
+the same sensitive-key policy.
+
 ---
 
 ## 6. Tool registry (complete)

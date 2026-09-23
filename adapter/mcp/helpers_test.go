@@ -55,6 +55,46 @@ func TestWrapOutput(t *testing.T) {
 	assert.Equal(t, 42, v["value"])
 }
 
+// TestSanitizeOutput verifies S2/S9 on the output path: sensitive map keys are
+// redacted and ANSI/control sequences are stripped from string values, while
+// typed structs pass through unchanged.
+func TestSanitizeOutput(t *testing.T) {
+	// Build the credential value dynamically so the test source contains no
+	// hardcoded secret literal (keeps gosec/G101 clean under golangci-lint).
+	credential := "PVEAPIToken=user@realm!tokenid=" + "uuid"
+
+	// sensitive key redaction (S2)
+	out := sanitizeOutput(map[string]any{
+		"node":   "pve1",
+		"token":  credential,
+		"nested": map[string]any{"secret_key": "x", "ok": "y"},
+	})
+	m, ok := out.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "pve1", m["node"])
+	assert.Equal(t, "[redacted]", m["token"])
+	nested := m["nested"].(map[string]any)
+	assert.Equal(t, "[redacted]", nested["secret_key"])
+	assert.Equal(t, "y", nested["ok"])
+
+	// ANSI / control strip (S9)
+	s := sanitizeOutput("normal\033[31mred\033[0m\x00done").(string)
+	assert.Equal(t, "normalreddone", s)
+
+	// scalar and slice pass through / recurse
+	assert.Equal(t, 42, sanitizeOutput(42))
+	sl := sanitizeOutput([]any{"a\033[1mb", "c"}).([]any)
+	assert.Equal(t, "ab", sl[0])
+	assert.Equal(t, "c", sl[1])
+}
+
+func TestStripControl(t *testing.T) {
+	assert.Equal(t, "plain text", stripControl("plain text"))
+	assert.Equal(t, "line1\nline2", stripControl("line1\nline2")) // \n preserved
+	assert.Equal(t, "ab", stripControl("a\x1b[31mb\x1b[0m"))
+	assert.Equal(t, "abc", stripControl("a\x00b\x01c"))
+}
+
 // TestMutTool verifies the mutTool helper in isolation: the mutation
 // annotations (ReadOnlyHint=false, OpenWorldHint=false, DestructiveHint=false,
 // IdempotentHint from the argument), the per-tool Instructions in the

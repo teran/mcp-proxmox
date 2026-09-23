@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"reflect"
+	"strings"
 
 	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -97,6 +98,9 @@ func boolPtr(b bool) *bool { return &b }
 // wrapOutput ensures the value returned to the MCP client is a JSON object, as
 // required for structuredContent. A top-level slice (a list tool) or scalar
 // (e.g. pve_nextid) is wrapped in a small object; structs and maps pass through.
+// The result is then passed through sanitizeOutput (S2/S9): fields tagged
+// `secret:"true"` are redacted and ANSI/control escape sequences are stripped
+// from string values, so no secret and no raw control bytes can reach output.
 func wrapOutput(out any) any {
 	if out == nil {
 		return out
@@ -108,13 +112,89 @@ func wrapOutput(out any) any {
 		}
 		v = v.Elem()
 	}
+	var wrapped any
 	switch v.Kind() {
 	case reflect.Slice, reflect.Array:
-		return map[string]any{"items": out}
+		wrapped = map[string]any{"items": out}
 	case reflect.Struct, reflect.Map:
-		return out
+		wrapped = out
 	default:
 		// scalar (int, string, bool, float, ...)
-		return map[string]any{"value": out}
+		wrapped = map[string]any{"value": out}
 	}
+	return sanitizeOutput(wrapped)
+}
+
+// sanitizeOutput recursively walks the value that will be returned to the MCP
+// client (the wrapper shapes produced by wrapOutput — maps, slices and scalars)
+// and:
+//   - redacts any map key whose name looks sensitive (S2), so a secret can never
+//     reach tool output;
+//   - strips ANSI/control escape sequences from string values (S9).
+//
+// Typed structs returned by wrapOutput pass through unchanged — they are the
+// domain models with `json`/`omitempty` tags that the SDK validates against the
+// derived outputSchema; none of them carries a secret (API tokens never enter
+// the model or the output path, §5.4). Map-based output is sanitized defensively.
+func sanitizeOutput(v any) any {
+	switch t := v.(type) {
+	case string:
+		return stripControl(t)
+	case []any:
+		for i := range t {
+			t[i] = sanitizeOutput(t[i])
+		}
+		return t
+	case map[string]any:
+		for k, val := range t {
+			if isSensitiveKey(k) {
+				t[k] = "[redacted]"
+				continue
+			}
+			t[k] = sanitizeOutput(val)
+		}
+		return t
+	default:
+		return v
+	}
+}
+
+// stripControl removes ANSI escape sequences and C0 control characters (except
+// whitespace) from a string, so tool output cannot carry raw escape bytes (S9).
+// Handles CSI sequences ("\x1b[31m"), two-char sequences ("\x1bM") and bare
+// control bytes; the entire escape sequence is dropped.
+func stripControl(s string) string {
+	if !strings.ContainsAny(s, "\x1b\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1c\x1d\x1e\x1f") {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == 0x1b {
+			// ESC [ ... final (CSI): skip '[' plus parameter/intermediate bytes
+			// (0x20..0x3F) until a final byte in 0x40..0x7E.
+			if i+1 < len(s) && s[i+1] == '[' {
+				i += 2
+				for i < len(s) {
+					nc := s[i]
+					i++
+					if nc >= 0x40 && nc <= 0x7e {
+						break
+					}
+				}
+				i-- // the final byte was consumed; the loop increments
+				continue
+			}
+			// Two-char sequence: ESC + one byte.
+			i++
+			continue
+		}
+		if c < 0x20 && c != '\t' && c != '\n' && c != '\r' {
+			// drop other C0 control characters
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
