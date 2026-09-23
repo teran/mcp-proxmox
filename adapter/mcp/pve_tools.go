@@ -165,6 +165,31 @@ type vmSnapshotIn struct {
 	Snapname string `json:"snapname" jsonschema:"Snapshot name"`
 }
 
+// lxcStopIn is the input of pve_lxc_stop.
+type lxcStopIn struct {
+	Node      string `json:"node" jsonschema:"PVE node name"`
+	VMID      int    `json:"vmid" jsonschema:"Container ID"`
+	SkipLock  bool   `json:"skiplock,omitempty" jsonschema:"Ignore locks and stop anyway"`
+	ForceStop bool   `json:"force_stop,omitempty" jsonschema:"Force immediate stop"`
+}
+
+// lxcShutdownIn is the input of pve_lxc_shutdown.
+type lxcShutdownIn struct {
+	Node      string `json:"node" jsonschema:"PVE node name"`
+	VMID      int    `json:"vmid" jsonschema:"Container ID"`
+	ForceStop bool   `json:"force_stop,omitempty" jsonschema:"Immediately stop if the graceful shutdown times out"`
+	Timeout   int    `json:"timeout,omitempty" jsonschema:"Shutdown timeout in seconds"`
+}
+
+// lxcDeleteIn is the input of pve_lxc_delete.
+type lxcDeleteIn struct {
+	Node                     string `json:"node" jsonschema:"PVE node name"`
+	VMID                     int    `json:"vmid" jsonschema:"Container ID"`
+	Purge                    bool   `json:"purge,omitempty" jsonschema:"Remove the container from any backup jobs"`
+	DestroyUnreferencedDisks bool   `json:"destroy_unreferenced_disks,omitempty" jsonschema:"Remove disks not referenced by the container config"`
+	Force                    bool   `json:"force,omitempty" jsonschema:"Delete even if the container is running"`
+}
+
 // registerPVETools registers the Proxmox VE tools. Read-only (query) tools are
 // always registered for an enabled PVE backend. Mutation tools are registered
 // only when enableMutations is true (SPEC.md §2.5).
@@ -502,6 +527,61 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 		"Provide node, vmid and the snapshot name to roll back to. Returns the task UPID. Not idempotent.",
 		log, false, func(ctx context.Context, in vmSnapshotIn) (any, error) {
 			t, err := app.PVE.RollbackVMSnapshot(ctx, in.Node, in.VMID, in.Snapname)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_lxc_start", "Start LXC container",
+		"Start an LXC container.",
+		"Provide node and vmid (container ID). Starts the container; returns the task UPID to poll with pve_task_status. Not idempotent: starting an already-running container errors.",
+		log, false, func(ctx context.Context, in lxcIn) (any, error) {
+			t, err := app.PVE.StartLXC(ctx, in.Node, in.VMID)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_lxc_stop", "Stop LXC container",
+		"Stop an LXC container (hard stop).",
+		"Provide node and vmid (container ID). Hard-stops the container; returns the task UPID. Set skiplock to ignore an active lock and force_stop to force. Not idempotent.",
+		log, false, func(ctx context.Context, in lxcStopIn) (any, error) {
+			t, err := app.PVE.StopLXC(ctx, in.Node, in.VMID, in.SkipLock, in.ForceStop)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_lxc_shutdown", "Shut down LXC container",
+		"Gracefully shut down an LXC container.",
+		"Provide node, vmid (container ID), optionally a timeout (seconds) and force_stop to immediately stop if the graceful shutdown times out. Returns the task UPID. Not idempotent.",
+		log, false, func(ctx context.Context, in lxcShutdownIn) (any, error) {
+			t, err := app.PVE.ShutdownLXC(ctx, in.Node, in.VMID, in.ForceStop, in.Timeout)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_lxc_reboot", "Reboot LXC container",
+		"Reboot an LXC container.",
+		"Provide node and vmid (container ID). Returns the task UPID. Not idempotent.",
+		log, false, func(ctx context.Context, in lxcIn) (any, error) {
+			t, err := app.PVE.RebootLXC(ctx, in.Node, in.VMID, 0)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_lxc_delete", "Delete LXC container",
+		"Delete an LXC container.",
+		"Provide node and vmid (container ID). Deletes the container; returns the task UPID. Set purge to remove it from backup jobs, destroy_unreferenced_disks to remove unreferenced disks, and force to delete a running container. Not idempotent and destructive.",
+		log, false, func(ctx context.Context, in lxcDeleteIn) (any, error) {
+			t, err := app.PVE.DeleteLXC(ctx, in.Node, in.VMID, in.Purge, in.DestroyUnreferencedDisks, in.Force)
 			if err != nil {
 				return nil, err
 			}

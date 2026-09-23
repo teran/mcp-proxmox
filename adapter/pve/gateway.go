@@ -839,6 +839,97 @@ func (g *Gateway) RollbackVMSnapshot(ctx context.Context, node string, vmid int,
 	return &model.Task{UPID: upid}, nil
 }
 
+// lxcPath builds the LXC container path prefix for a node + vmid.
+func lxcPath(node string, vmid int) string {
+	return "/nodes/" + node + "/lxc/" + strconv.Itoa(vmid)
+}
+
+// StartLXC starts an LXC container via
+// POST /nodes/{node}/lxc/{vmid}/status/start.
+func (g *Gateway) StartLXC(ctx context.Context, node string, vmid int) (*model.Task, error) {
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/status/start", nil, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// StopLXC stops an LXC container (hard stop) via
+// POST /nodes/{node}/lxc/{vmid}/status/stop.
+func (g *Gateway) StopLXC(ctx context.Context, node string, vmid int, skiplock, forceStop bool) (*model.Task, error) {
+	form := url.Values{}
+	if skiplock {
+		form.Set("skiplock", "1")
+	}
+	if forceStop {
+		form.Set("forceStop", "1")
+	}
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/status/stop", form, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// ShutdownLXC gracefully shuts down an LXC container via
+// POST /nodes/{node}/lxc/{vmid}/status/shutdown. forceStop requests an
+// immediate stop if the graceful shutdown times out; timeout is the shutdown
+// timeout in seconds.
+func (g *Gateway) ShutdownLXC(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error) {
+	form := url.Values{}
+	if forceStop {
+		form.Set("forceStop", "1")
+	}
+	if timeout > 0 {
+		form.Set("timeout", strconv.Itoa(timeout))
+	}
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/status/shutdown", form, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// RebootLXC reboots an LXC container via
+// POST /nodes/{node}/lxc/{vmid}/status/reboot. timeout is the reboot timeout in
+// seconds.
+func (g *Gateway) RebootLXC(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error) {
+	form := url.Values{}
+	if timeout > 0 {
+		form.Set("timeout", strconv.Itoa(timeout))
+	}
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/status/reboot", form, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// DeleteLXC deletes an LXC container via DELETE /nodes/{node}/lxc/{vmid}. The
+// mutation parameters are carried in the query string (DELETE has no form
+// body). purge removes the container from any backup jobs,
+// destroy-unreferenced-disks removes disks not referenced by the config, and
+// force requests deletion of a running container.
+func (g *Gateway) DeleteLXC(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks, force bool) (*model.Task, error) {
+	q := url.Values{}
+	if purge {
+		q.Set("purge", "1")
+	}
+	if destroyUnreferencedDisks {
+		q.Set("destroy-unreferenced-disks", "1")
+	}
+	if force {
+		q.Set("force", "1")
+	}
+	var upid string
+	// Mutations are never retried: use the single-attempt doOnce path with the
+	// query string (doMutation sends a form body, which DELETE does not use).
+	if err := g.doOnce(ctx, http.MethodDelete, lxcPath(node, vmid), q, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
 // truncate bounds an error-response body for debug logging, keeping the log
 // line compact and free of unbounded payloads.
 func truncate(b []byte) string {

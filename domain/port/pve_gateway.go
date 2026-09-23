@@ -39,6 +39,15 @@ type PVEGateway interface {
 	GetLXCConfig(ctx context.Context, node string, vmid int) (*model.LXCConfig, error)
 	GetLXCStatus(ctx context.Context, node string, vmid int) (*model.LXCStatus, error)
 
+	// LXC lifecycle. These are mutations (gated by EnableMutations) and are never
+	// retried. Each runs as a PVE task, so they return a Task whose UPID can be
+	// polled with GetTaskStatus / GetTaskLog.
+	StartLXC(ctx context.Context, node string, vmid int) (*model.Task, error)
+	StopLXC(ctx context.Context, node string, vmid int, skiplock, forceStop bool) (*model.Task, error)
+	ShutdownLXC(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error)
+	RebootLXC(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error)
+	DeleteLXC(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks, force bool) (*model.Task, error)
+
 	// Storage & network.
 	ListStorage(ctx context.Context) ([]model.Storage, error)
 	GetStorageStatus(ctx context.Context, node, storage string) (*model.StorageStatus, error)

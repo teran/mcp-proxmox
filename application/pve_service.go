@@ -76,6 +76,31 @@ func (s *PVEService) GetLXCStatus(ctx context.Context, node string, vmid int) (*
 	return s.gw.GetLXCStatus(ctx, node, vmid)
 }
 
+// StartLXC starts an LXC container on a node.
+func (s *PVEService) StartLXC(ctx context.Context, node string, vmid int) (*model.Task, error) {
+	return s.gw.StartLXC(ctx, node, vmid)
+}
+
+// StopLXC stops an LXC container on a node (hard stop).
+func (s *PVEService) StopLXC(ctx context.Context, node string, vmid int, skiplock, forceStop bool) (*model.Task, error) {
+	return s.gw.StopLXC(ctx, node, vmid, skiplock, forceStop)
+}
+
+// ShutdownLXC gracefully shuts down an LXC container on a node.
+func (s *PVEService) ShutdownLXC(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error) {
+	return s.gw.ShutdownLXC(ctx, node, vmid, forceStop, timeout)
+}
+
+// RebootLXC reboots an LXC container on a node.
+func (s *PVEService) RebootLXC(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error) {
+	return s.gw.RebootLXC(ctx, node, vmid, timeout)
+}
+
+// DeleteLXC deletes an LXC container on a node.
+func (s *PVEService) DeleteLXC(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks, force bool) (*model.Task, error) {
+	return s.gw.DeleteLXC(ctx, node, vmid, purge, destroyUnreferencedDisks, force)
+}
+
 // ListStorage returns the cluster storage.
 func (s *PVEService) ListStorage(ctx context.Context) ([]model.Storage, error) {
 	return s.gw.ListStorage(ctx)
