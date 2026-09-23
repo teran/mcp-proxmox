@@ -41,6 +41,31 @@ type stubPVEGateway struct {
 	migrateVM        func(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error
 	addHAResource    func(ctx context.Context, req model.HAResourceRequest) error
 	startVMBackup    func(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
+
+	listVMSnapshots    func(ctx context.Context, node string, vmid int) ([]model.Snapshot, error)
+	listLXCSnapshots   func(ctx context.Context, node string, vmid int) ([]model.Snapshot, error)
+	startVM            func(ctx context.Context, node string, vmid int) (*model.Task, error)
+	stopVM             func(ctx context.Context, node string, vmid int, skiplock bool) (*model.Task, error)
+	shutdownVM         func(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error)
+	rebootVM           func(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error)
+	resetVM            func(ctx context.Context, node string, vmid int) (*model.Task, error)
+	suspendVM          func(ctx context.Context, node string, vmid int, todisk bool) (*model.Task, error)
+	resumeVM           func(ctx context.Context, node string, vmid int) (*model.Task, error)
+	deleteVM           func(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks bool) (*model.Task, error)
+	cloneVM            func(ctx context.Context, node string, vmid int, req model.CloneVMRequest) (*model.Task, error)
+	createVMSnapshot   func(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error)
+	deleteVMSnapshot   func(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
+	rollbackVMSnapshot func(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
+	startLXC           func(ctx context.Context, node string, vmid int) (*model.Task, error)
+	stopLXC            func(ctx context.Context, node string, vmid int, skiplock, forceStop bool) (*model.Task, error)
+	shutdownLXC        func(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error)
+	rebootLXC          func(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error)
+	deleteLXC          func(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks, force bool) (*model.Task, error)
+	cloneLXC           func(ctx context.Context, node string, vmid int, req model.CloneLXCRequest) (*model.Task, error)
+	createLXCSnapshot  func(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error)
+	deleteLXCSnapshot  func(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
+	rollbackLXCSnapshot func(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
+	restoreVM          func(ctx context.Context, node string, req model.PVERestoreRequest) (*model.Task, error)
 }
 
 func (s *stubPVEGateway) fail() bool { return s.err != nil }
@@ -252,6 +277,222 @@ func (s *stubPVEGateway) StartVMBackup(ctx context.Context, node string, req mod
 	}
 	return &model.Task{UPID: "UPID:pve:backup:..."}, nil
 }
+func (s *stubPVEGateway) ListVMSnapshots(ctx context.Context, node string, vmid int) ([]model.Snapshot, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.listVMSnapshots != nil {
+		return s.listVMSnapshots(ctx, node, vmid)
+	}
+	return []model.Snapshot{{Name: "snap1"}}, nil
+}
+func (s *stubPVEGateway) ListLXCSnapshots(ctx context.Context, node string, vmid int) ([]model.Snapshot, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.listLXCSnapshots != nil {
+		return s.listLXCSnapshots(ctx, node, vmid)
+	}
+	return []model.Snapshot{{Name: "snap1"}}, nil
+}
+func (s *stubPVEGateway) StartVM(ctx context.Context, node string, vmid int) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.startVM != nil {
+		return s.startVM(ctx, node, vmid)
+	}
+	return &model.Task{UPID: "UPID:pve:start:..."}, nil
+}
+func (s *stubPVEGateway) StopVM(ctx context.Context, node string, vmid int, skiplock bool) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.stopVM != nil {
+		return s.stopVM(ctx, node, vmid, skiplock)
+	}
+	return &model.Task{UPID: "UPID:pve:stop:..."}, nil
+}
+func (s *stubPVEGateway) ShutdownVM(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.shutdownVM != nil {
+		return s.shutdownVM(ctx, node, vmid, forceStop, timeout)
+	}
+	return &model.Task{UPID: "UPID:pve:shutdown:..."}, nil
+}
+func (s *stubPVEGateway) RebootVM(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.rebootVM != nil {
+		return s.rebootVM(ctx, node, vmid, timeout)
+	}
+	return &model.Task{UPID: "UPID:pve:reboot:..."}, nil
+}
+func (s *stubPVEGateway) ResetVM(ctx context.Context, node string, vmid int) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.resetVM != nil {
+		return s.resetVM(ctx, node, vmid)
+	}
+	return &model.Task{UPID: "UPID:pve:reset:..."}, nil
+}
+func (s *stubPVEGateway) SuspendVM(ctx context.Context, node string, vmid int, todisk bool) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.suspendVM != nil {
+		return s.suspendVM(ctx, node, vmid, todisk)
+	}
+	return &model.Task{UPID: "UPID:pve:suspend:..."}, nil
+}
+func (s *stubPVEGateway) ResumeVM(ctx context.Context, node string, vmid int) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.resumeVM != nil {
+		return s.resumeVM(ctx, node, vmid)
+	}
+	return &model.Task{UPID: "UPID:pve:resume:..."}, nil
+}
+func (s *stubPVEGateway) DeleteVM(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks bool) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.deleteVM != nil {
+		return s.deleteVM(ctx, node, vmid, purge, destroyUnreferencedDisks)
+	}
+	return &model.Task{UPID: "UPID:pve:delete:..."}, nil
+}
+func (s *stubPVEGateway) CloneVM(ctx context.Context, node string, vmid int, req model.CloneVMRequest) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.cloneVM != nil {
+		return s.cloneVM(ctx, node, vmid, req)
+	}
+	return &model.Task{UPID: "UPID:pve:clone:..."}, nil
+}
+func (s *stubPVEGateway) CreateVMSnapshot(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.createVMSnapshot != nil {
+		return s.createVMSnapshot(ctx, node, vmid, req)
+	}
+	return &model.Task{UPID: "UPID:pve:snapcreate:..."}, nil
+}
+func (s *stubPVEGateway) DeleteVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.deleteVMSnapshot != nil {
+		return s.deleteVMSnapshot(ctx, node, vmid, snapname)
+	}
+	return &model.Task{UPID: "UPID:pve:snapdelete:..."}, nil
+}
+func (s *stubPVEGateway) RollbackVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.rollbackVMSnapshot != nil {
+		return s.rollbackVMSnapshot(ctx, node, vmid, snapname)
+	}
+	return &model.Task{UPID: "UPID:pve:snaprollback:..."}, nil
+}
+func (s *stubPVEGateway) StartLXC(ctx context.Context, node string, vmid int) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.startLXC != nil {
+		return s.startLXC(ctx, node, vmid)
+	}
+	return &model.Task{UPID: "UPID:pve:lxcstart:..."}, nil
+}
+func (s *stubPVEGateway) StopLXC(ctx context.Context, node string, vmid int, skiplock, forceStop bool) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.stopLXC != nil {
+		return s.stopLXC(ctx, node, vmid, skiplock, forceStop)
+	}
+	return &model.Task{UPID: "UPID:pve:lxcstop:..."}, nil
+}
+func (s *stubPVEGateway) ShutdownLXC(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.shutdownLXC != nil {
+		return s.shutdownLXC(ctx, node, vmid, forceStop, timeout)
+	}
+	return &model.Task{UPID: "UPID:pve:lxcshutdown:..."}, nil
+}
+func (s *stubPVEGateway) RebootLXC(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.rebootLXC != nil {
+		return s.rebootLXC(ctx, node, vmid, timeout)
+	}
+	return &model.Task{UPID: "UPID:pve:lxcreboot:..."}, nil
+}
+func (s *stubPVEGateway) DeleteLXC(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks, force bool) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.deleteLXC != nil {
+		return s.deleteLXC(ctx, node, vmid, purge, destroyUnreferencedDisks, force)
+	}
+	return &model.Task{UPID: "UPID:pve:lxcdelete:..."}, nil
+}
+func (s *stubPVEGateway) CloneLXC(ctx context.Context, node string, vmid int, req model.CloneLXCRequest) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.cloneLXC != nil {
+		return s.cloneLXC(ctx, node, vmid, req)
+	}
+	return &model.Task{UPID: "UPID:pve:lxcclone:..."}, nil
+}
+func (s *stubPVEGateway) CreateLXCSnapshot(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.createLXCSnapshot != nil {
+		return s.createLXCSnapshot(ctx, node, vmid, req)
+	}
+	return &model.Task{UPID: "UPID:pve:lxcsnapcreate:..."}, nil
+}
+func (s *stubPVEGateway) DeleteLXCSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.deleteLXCSnapshot != nil {
+		return s.deleteLXCSnapshot(ctx, node, vmid, snapname)
+	}
+	return &model.Task{UPID: "UPID:pve:lxcsnapdelete:..."}, nil
+}
+func (s *stubPVEGateway) RollbackLXCSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.rollbackLXCSnapshot != nil {
+		return s.rollbackLXCSnapshot(ctx, node, vmid, snapname)
+	}
+	return &model.Task{UPID: "UPID:pve:lxcsnaprollback:..."}, nil
+}
+func (s *stubPVEGateway) RestoreVM(ctx context.Context, node string, req model.PVERestoreRequest) (*model.Task, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.restoreVM != nil {
+		return s.restoreVM(ctx, node, req)
+	}
+	return &model.Task{UPID: "UPID:pve:restore:..."}, nil
+}
 
 var _ port.PVEGateway = (*stubPVEGateway)(nil)
 
@@ -271,6 +512,12 @@ type stubPBSGateway struct {
 	startGC           func(ctx context.Context, store string) (string, error)
 	startPrune        func(ctx context.Context, store string) (string, error)
 	startSync         func(ctx context.Context, store string, req model.PBSSyncRequest) (string, error)
+
+	listBackupFiles func(ctx context.Context, store, backupType, backupID, snapshot, path string) ([]model.PBSFile, error)
+	getTaskStatus   func(ctx context.Context, upid string) (*model.PBSTask, error)
+	getTaskLog      func(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error)
+	restoreFile     func(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error
+	restoreVMBackup func(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest) (string, error)
 }
 
 func (s *stubPBSGateway) fail() bool { return s.err != nil }
@@ -383,6 +630,51 @@ func (s *stubPBSGateway) StartSync(ctx context.Context, store string, req model.
 	}
 	return "UPID:pbs:sync:...", nil
 }
+func (s *stubPBSGateway) ListBackupFiles(ctx context.Context, store, backupType, backupID, snapshot, path string) ([]model.PBSFile, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.listBackupFiles != nil {
+		return s.listBackupFiles(ctx, store, backupType, backupID, snapshot, path)
+	}
+	return []model.PBSFile{{Filename: "client.logidx"}}, nil
+}
+func (s *stubPBSGateway) GetTaskStatus(ctx context.Context, upid string) (*model.PBSTask, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getTaskStatus != nil {
+		return s.getTaskStatus(ctx, upid)
+	}
+	return &model.PBSTask{UPID: upid, Status: "running"}, nil
+}
+func (s *stubPBSGateway) GetTaskLog(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getTaskLog != nil {
+		return s.getTaskLog(ctx, upid, limit)
+	}
+	return []model.TaskLogEntry{{LineNumber: 1, Text: "OK"}}, nil
+}
+func (s *stubPBSGateway) RestoreFile(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.restoreFile != nil {
+		return s.restoreFile(ctx, store, backupType, backupID, snapshot, req)
+	}
+	return nil
+}
+func (s *stubPBSGateway) RestoreVMBackup(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.restoreVMBackup != nil {
+		return s.restoreVMBackup(ctx, store, backupType, backupID, snapshot, req)
+	}
+	return "UPID:pbs:restore:...", nil
+}
 
 var _ port.PBSGateway = (*stubPBSGateway)(nil)
 
@@ -402,6 +694,7 @@ var pveROTools = []string{
 	"pve_lxc_list", "pve_lxc_get", "pve_lxc_status",
 	"pve_storage_list", "pve_storage_get", "pve_network_list",
 	"pve_task_list", "pve_task_status", "pve_task_log", "pve_version",
+	"pve_vm_snapshot_list", "pve_lxc_snapshot_list",
 }
 
 // pbsROTools is the read-only PBS tool surface (SPEC.md §6.7–6.9).
@@ -409,16 +702,25 @@ var pbsROTools = []string{
 	"pbs_datastore_list", "pbs_datastore_status",
 	"pbs_backup_list", "pbs_backup_get", "pbs_backup_notes_get",
 	"pbs_verify_status", "pbs_prune_status", "pbs_version",
+	"pbs_backup_files_list", "pbs_task_status", "pbs_task_log",
 }
 
 // pveMutationTools is the gated PVE mutation tool surface (SPEC.md §6.x).
 var pveMutationTools = []string{
 	"pve_vm_create", "pve_vm_resize", "pve_vm_migrate", "pve_ha_add", "pve_vm_backup",
+	"pve_vm_start", "pve_vm_stop", "pve_vm_shutdown", "pve_vm_reboot",
+	"pve_vm_reset", "pve_vm_suspend", "pve_vm_resume", "pve_vm_delete",
+	"pve_vm_clone", "pve_vm_snapshot_create", "pve_vm_snapshot_delete",
+	"pve_vm_snapshot_rollback", "pve_vm_restore",
+	"pve_lxc_start", "pve_lxc_stop", "pve_lxc_shutdown", "pve_lxc_reboot",
+	"pve_lxc_delete", "pve_lxc_clone", "pve_lxc_snapshot_create",
+	"pve_lxc_snapshot_delete", "pve_lxc_snapshot_rollback",
 }
 
 // pbsMutationTools is the gated PBS mutation tool surface (SPEC.md §6.x).
 var pbsMutationTools = []string{
 	"pbs_verify_start", "pbs_gc_start", "pbs_prune_start", "pbs_sync_start",
+	"pbs_backup_restore_file", "pbs_backup_vm_restore",
 }
 
 // newTestServer builds an mcpSDK.Server wired through the real application.App
