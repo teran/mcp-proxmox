@@ -1007,6 +1007,39 @@ func (g *Gateway) RollbackLXCSnapshot(ctx context.Context, node string, vmid int
 	return &model.Task{UPID: upid}, nil
 }
 
+// RestoreVM restores a QEMU VM backup (qmrestore) via
+// POST /nodes/{node}/qemu. The `restore` form flag is set to 1 when no VMID is
+// supplied so PVE restores the VM to its original ID.
+func (g *Gateway) RestoreVM(ctx context.Context, node string, req model.PVERestoreRequest) (*model.Task, error) {
+	form := url.Values{}
+	form.Set("archive", req.Archive)
+	if req.VMID != 0 {
+		form.Set("vmid", strconv.Itoa(req.VMID))
+	} else {
+		form.Set("restore", "1")
+	}
+	if req.Storage != "" {
+		form.Set("storage", req.Storage)
+	}
+	if req.Unique {
+		form.Set("unique", "1")
+	}
+	if req.Force {
+		form.Set("force", "1")
+	}
+	if req.Pool != "" {
+		form.Set("pool", req.Pool)
+	}
+	if req.BwLimit != 0 {
+		form.Set("bwlimit", strconv.Itoa(req.BwLimit))
+	}
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, "/nodes/"+node+"/qemu", form, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
 // truncate bounds an error-response body for debug logging, keeping the log
 // line compact and free of unbounded payloads.
 func truncate(b []byte) string {

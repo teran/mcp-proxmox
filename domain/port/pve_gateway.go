@@ -86,4 +86,5 @@ type PVEGateway interface {
 	CreateVMSnapshot(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error)
 	DeleteVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
 	RollbackVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
+	RestoreVM(ctx context.Context, node string, req model.PVERestoreRequest) (*model.Task, error)
 }

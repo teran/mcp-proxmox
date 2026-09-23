@@ -88,6 +88,20 @@ type CloneLXCRequest struct {
 	Snapname    string `json:"snapname,omitempty"`
 }
 
+// PVERestoreRequest is the form body of POST /nodes/{node}/qemu used to restore
+// a QEMU VM backup (qmrestore). Archive is the path of the backup archive and
+// is required. When VMID is omitted the restore flag is set so PVE restores the
+// VM to its original ID.
+type PVERestoreRequest struct {
+	Archive string `json:"archive"`
+	VMID    int    `json:"vmid,omitempty"`
+	Storage string `json:"storage,omitempty"`
+	Unique  bool   `json:"unique,omitempty"`
+	Force   bool   `json:"force,omitempty"`
+	Pool    string `json:"pool,omitempty"`
+	BwLimit int    `json:"bwlimit,omitempty"`
+}
+
 // PBSSyncRequest is the form body of POST /admin/datastore/{store}/sync. It
 // describes a one-off sync job that pulls from a remote PBS datastore.
 type PBSSyncRequest struct {

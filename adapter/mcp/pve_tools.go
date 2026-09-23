@@ -218,6 +218,18 @@ type lxcSnapshotIn struct {
 	Snapname string `json:"snapname" jsonschema:"Snapshot name"`
 }
 
+// vmRestoreIn is the input of pve_vm_restore (qmrestore).
+type vmRestoreIn struct {
+	Node    string `json:"node" jsonschema:"PVE node name"`
+	Archive string `json:"archive" jsonschema:"Path of the backup archive to restore (e.g. /var/lib/vz/dump/vzdump-qemu-100-*.vma.zst)"`
+	VMID    int    `json:"vmid,omitempty" jsonschema:"Target VM ID; when omitted the VM is restored to its original ID"`
+	Storage string `json:"storage,omitempty" jsonschema:"Target storage for the restored disks"`
+	Unique  bool   `json:"unique,omitempty" jsonschema:"Restore with a new unique VM ID"`
+	Force   bool   `json:"force,omitempty" jsonschema:"Overwrite an existing VM with the same ID"`
+	Pool    string `json:"pool,omitempty" jsonschema:"Resource pool to place the restored VM in"`
+	BwLimit int    `json:"bwlimit,omitempty" jsonschema:"Restore bandwidth limit (KB/s)"`
+}
+
 // registerPVETools registers the Proxmox VE tools. Read-only (query) tools are
 // always registered for an enabled PVE backend. Mutation tools are registered
 // only when enableMutations is true (SPEC.md §2.5).
@@ -671,6 +683,25 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 		"Provide node, vmid (container ID) and the snapshot name to roll back to. Returns the task UPID. Not idempotent.",
 		log, false, func(ctx context.Context, in lxcSnapshotIn) (any, error) {
 			t, err := app.PVE.RollbackLXCSnapshot(ctx, in.Node, in.VMID, in.Snapname)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_vm_restore", "Restore QEMU VM backup",
+		"Restore a QEMU VM from a backup archive (qmrestore).",
+		"Provide node and the archive path. Optionally set vmid (otherwise the VM is restored to its original ID), storage, unique, force, pool and bwlimit. Returns the task UPID to poll with pve_task_status. Not idempotent: each call starts a new restore.",
+		log, false, func(ctx context.Context, in vmRestoreIn) (any, error) {
+			t, err := app.PVE.RestoreVM(ctx, in.Node, model.PVERestoreRequest{
+				Archive: in.Archive,
+				VMID:    in.VMID,
+				Storage: in.Storage,
+				Unique:  in.Unique,
+				Force:   in.Force,
+				Pool:    in.Pool,
+				BwLimit: in.BwLimit,
+			})
 			if err != nil {
 				return nil, err
 			}

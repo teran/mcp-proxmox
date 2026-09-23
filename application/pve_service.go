@@ -245,3 +245,8 @@ func (s *PVEService) DeleteVMSnapshot(ctx context.Context, node string, vmid int
 func (s *PVEService) RollbackVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
 	return s.gw.RollbackVMSnapshot(ctx, node, vmid, snapname)
 }
+
+// RestoreVM restores a QEMU VM backup on a node (qmrestore).
+func (s *PVEService) RestoreVM(ctx context.Context, node string, req model.PVERestoreRequest) (*model.Task, error) {
+	return s.gw.RestoreVM(ctx, node, req)
+}
