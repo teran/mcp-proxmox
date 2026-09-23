@@ -48,6 +48,26 @@ type syncIn struct {
 	NotifyUser     string `json:"notify_user,omitempty" jsonschema:"Notify user on job completion"`
 }
 
+// pbsFileListIn is the input of pbs_backup_files_list.
+type pbsFileListIn struct {
+	Store      string `json:"store" jsonschema:"PBS datastore name"`
+	BackupType string `json:"backup_type" jsonschema:"Backup type: vm | ct | host"`
+	BackupID   string `json:"backup_id" jsonschema:"Backup ID / group ID (e.g. a VMID)"`
+	Snapshot   string `json:"snapshot" jsonschema:"Backup snapshot identifier (the ISO-8601 timestamp shown in the PBS UI, e.g. 2024-01-01T00:00:00Z); obtain it from the backup listing."`
+	Path       string `json:"path,omitempty" jsonschema:"Directory path within the backup to list (default /)"`
+}
+
+// pbsTaskIn is the input of pbs_task_status.
+type pbsTaskIn struct {
+	UPID string `json:"upid" jsonschema:"Task UPID"`
+}
+
+// pbsTaskLogIn is the input of pbs_task_log.
+type pbsTaskLogIn struct {
+	UPID  string `json:"upid" jsonschema:"Task UPID"`
+	Limit int    `json:"limit,omitempty" jsonschema:"Maximum number of log lines"`
+}
+
 // registerPBSTools registers the Proxmox Backup Server tools. Read-only (query)
 // tools are always registered for an enabled PBS backend. Mutation tools are
 // registered only when enableMutations is true (SPEC.md §2.5).
@@ -106,6 +126,26 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 		"No arguments. Returns the PBS version. Read-only.",
 		log, func(ctx context.Context, _ emptyIn) (any, error) {
 			return app.PBS.GetPBSVersion(ctx)
+		})
+
+	// --- restore & task status (read-only) ---
+	roTool(s, "pbs_backup_files_list", "List PBS backup files",
+		"List the files inside a PBS backup snapshot.",
+		"Provide the datastore name, backup type (vm|ct|host), backup ID, and the snapshot identifier (the ISO-8601 timestamp from the backup listing). Optionally set path to list a subdirectory (default /). Read-only and idempotent.",
+		log, func(ctx context.Context, in pbsFileListIn) (any, error) {
+			return app.PBS.ListBackupFiles(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, in.Path)
+		})
+	roTool(s, "pbs_task_status", "Get PBS task status",
+		"Get the status of a PBS task by UPID.",
+		"Provide the task UPID (e.g. from a restore or verify job). Returns the task status. Read-only.",
+		log, func(ctx context.Context, in pbsTaskIn) (any, error) {
+			return app.PBS.GetTaskStatus(ctx, in.UPID)
+		})
+	roTool(s, "pbs_task_log", "Get PBS task log",
+		"Get the log of a PBS task by UPID.",
+		"Provide the task UPID and optionally a limit on the number of log lines. Returns the task log. Read-only.",
+		log, func(ctx context.Context, in pbsTaskLogIn) (any, error) {
+			return app.PBS.GetTaskLog(ctx, in.UPID, in.Limit)
 		})
 
 	// --- mutations (gated by EnableMutations) ---

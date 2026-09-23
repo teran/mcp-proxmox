@@ -408,6 +408,57 @@ func (g *Gateway) GetPBSVersion(ctx context.Context) (*model.PBSVersion, error) 
 	return &out, nil
 }
 
+// backupFilesPath builds the PBS backup file-list path prefix for a store,
+// backup type, backup ID and snapshot.
+func backupFilesPath(store, backupType, backupID, snapshot string) string {
+	return "/admin/datastore/" + store + "/backups/" + backupType + "/" + backupID + "/" + snapshot
+}
+
+// ListBackupFiles lists the files inside a backup snapshot via
+// GET /admin/datastore/{store}/backups/{type}/{id}/{snapshot}/files. The
+// optional path filter is passed as the `path` query parameter (default "/").
+// Read-only.
+func (g *Gateway) ListBackupFiles(ctx context.Context, store, backupType, backupID, snapshot, path string) ([]model.PBSFile, error) {
+	q := url.Values{}
+	if path != "" {
+		q.Set("path", path)
+	}
+	urlPath := backupFilesPath(store, backupType, backupID, snapshot) + "/files"
+	if len(q) > 0 {
+		urlPath += "?" + q.Encode()
+	}
+	var out []model.PBSFile
+	if err := g.do(ctx, http.MethodGet, urlPath, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetTaskStatus returns the status of a task by UPID via
+// GET /admin/tasks/{upid}. Read-only.
+func (g *Gateway) GetTaskStatus(ctx context.Context, upid string) (*model.PBSTask, error) {
+	var out model.PBSTask
+	if err := g.do(ctx, http.MethodGet, "/admin/tasks/"+upid, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetTaskLog returns the log of a task by UPID via
+// GET /admin/tasks/{upid}/log. The optional limit caps the number of returned
+// lines. Read-only.
+func (g *Gateway) GetTaskLog(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error) {
+	urlPath := "/admin/tasks/" + upid + "/log"
+	if limit > 0 {
+		urlPath += "?limit=" + strconv.Itoa(limit)
+	}
+	var out []model.TaskLogEntry
+	if err := g.do(ctx, http.MethodGet, urlPath, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // doMutation executes a single mutation request (never retried — mutations are
 // not idempotent and must not be replayed on a transient 5xx; SPEC.md §7.5)
 // with an optional form-encoded body. The mutation response `data` is the task

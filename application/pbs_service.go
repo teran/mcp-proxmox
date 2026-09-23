@@ -54,6 +54,21 @@ func (s *PBSService) GetPBSVersion(ctx context.Context) (*model.PBSVersion, erro
 	return s.gw.GetPBSVersion(ctx)
 }
 
+// ListBackupFiles lists the files inside a PBS backup snapshot.
+func (s *PBSService) ListBackupFiles(ctx context.Context, store, backupType, backupID, snapshot, path string) ([]model.PBSFile, error) {
+	return s.gw.ListBackupFiles(ctx, store, backupType, backupID, snapshot, path)
+}
+
+// GetTaskStatus returns the status of a PBS task by UPID.
+func (s *PBSService) GetTaskStatus(ctx context.Context, upid string) (*model.PBSTask, error) {
+	return s.gw.GetTaskStatus(ctx, upid)
+}
+
+// GetTaskLog returns the log of a PBS task by UPID.
+func (s *PBSService) GetTaskLog(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error) {
+	return s.gw.GetTaskLog(ctx, upid, limit)
+}
+
 // StartVerify starts a verify job on a datastore and returns its UPID.
 func (s *PBSService) StartVerify(ctx context.Context, store string) (string, error) {
 	return s.gw.StartVerify(ctx, store)
