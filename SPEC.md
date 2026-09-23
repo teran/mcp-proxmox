@@ -920,6 +920,30 @@ All fixes and features follow a **TDD workflow** with **isolated contexts**:
   gates (lint → arch → test → cover ≥95% → mutation → build → sec → govulncheck)
   before merge. Neither agent edits the other's files.
 
+### 8.6 e2e decision (C9GO / T2 / C4)
+
+**No e2e test suite is present, by design.** The Go profile recommends e2e via
+the `go-docker-testsuite` harness (`make e2e`, `//go:build e2e`, C9GO) to cover
+the full tool-handler → upstream path. This project does **not** implement it
+for two reasons:
+
+1. **The upstream is an external Proxmox VE / PBS cluster**, not a container the
+   harness can spin up — a real e2e would require a live, credentialed Proxmox
+   cluster, which the hermetic CI cannot provision.
+2. **The adapter/mcp layer already exercises the full path** against
+   `httptest` mocks of the real Proxmox/PBS JSON APIs (asserting method, URL
+   path and `Authorization` header; §8.1), closing most of the integration gap
+   a docker-based e2e would cover.
+
+The conditional e2e criteria therefore do **not** apply: **C4/T2** apply "if a
+server has e2e tests", and **N30/N7GO** are violated only when e2e exists but is
+not build-tagged or not run in CI. Since no e2e suite exists, no `make e2e`
+target or e2e CI job is declared (consistent with N31) and the unit + coverage
+≥95% (C1) + mutation (C2) gates remain the hard gates. If a live Proxmox
+cluster becomes available for testing, an e2e suite using
+`github.com/teran/go-docker-testsuite` (build-tagged `//go:build e2e`, `make
+e2e`, dedicated CI job) should be added.
+
 ---
 
 ## 9. Development workflow (summary)

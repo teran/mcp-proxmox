@@ -166,6 +166,13 @@ contradiction, raise it with the architect.
 - **Hermetic tests:** no real network. `httptest` mocks of the **real** Proxmox VE
   and PBS JSON APIs, port mocks, and stubs. They always run as part of
   `go test ./...` — no build tag or env gate.
+- **No e2e suite (by design).** There is no `go-docker-testsuite` e2e suite, no
+  `//go:build e2e` tag and no `make e2e` target — e2e requires a live,
+  credentialed Proxmox cluster that hermetic CI cannot provision, and the
+  adapter/mcp layer already exercises the full handler path against httptest
+  mocks of the real APIs. See SPEC.md §8.6. If a live cluster becomes available,
+  add an e2e suite (build-tagged `//go:build e2e`, `make e2e`, dedicated CI job)
+  using `github.com/teran/go-docker-testsuite`.
 - Mutation testing via **gremlins**; aim for ≥80% mutation score on `domain` and
   `application` (generated mocks excluded).
 
