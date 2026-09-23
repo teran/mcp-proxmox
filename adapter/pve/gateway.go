@@ -759,6 +759,86 @@ func (g *Gateway) DeleteVM(ctx context.Context, node string, vmid int, purge, de
 	return &model.Task{UPID: upid}, nil
 }
 
+// ListVMSnapshots lists the snapshots of a QEMU VM via
+// GET /nodes/{node}/qemu/{vmid}/snapshot. Read-only.
+func (g *Gateway) ListVMSnapshots(ctx context.Context, node string, vmid int) ([]model.Snapshot, error) {
+	var out []model.Snapshot
+	if err := g.do(ctx, http.MethodGet, vmPath(node, vmid)+"/snapshot", nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CloneVM clones a QEMU VM via POST /nodes/{node}/qemu/{vmid}/clone.
+func (g *Gateway) CloneVM(ctx context.Context, node string, vmid int, req model.CloneVMRequest) (*model.Task, error) {
+	form := url.Values{}
+	form.Set("newid", strconv.Itoa(req.NewID))
+	if req.Name != "" {
+		form.Set("name", req.Name)
+	}
+	if req.Full {
+		form.Set("full", "1")
+	}
+	if req.Storage != "" {
+		form.Set("storage", req.Storage)
+	}
+	if req.Pool != "" {
+		form.Set("pool", req.Pool)
+	}
+	if req.Description != "" {
+		form.Set("description", req.Description)
+	}
+	if req.Format != "" {
+		form.Set("format", req.Format)
+	}
+	if req.Snapname != "" {
+		form.Set("snapname", req.Snapname)
+	}
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/clone", form, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// CreateVMSnapshot creates a snapshot of a QEMU VM via
+// POST /nodes/{node}/qemu/{vmid}/snapshot.
+func (g *Gateway) CreateVMSnapshot(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error) {
+	form := url.Values{}
+	form.Set("snapname", req.Snapname)
+	if req.VMState {
+		form.Set("vmstate", "1")
+	}
+	if req.Description != "" {
+		form.Set("description", req.Description)
+	}
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/snapshot", form, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// DeleteVMSnapshot deletes a snapshot of a QEMU VM via
+// DELETE /nodes/{node}/qemu/{vmid}/snapshot/{snapname}.
+func (g *Gateway) DeleteVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
+	var upid string
+	if err := g.doMutation(ctx, http.MethodDelete, vmPath(node, vmid)+"/snapshot/"+snapname, nil, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// RollbackVMSnapshot rolls a QEMU VM back to a snapshot via
+// POST /nodes/{node}/qemu/{vmid}/snapshot/{snapname}/rollback.
+func (g *Gateway) RollbackVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/snapshot/"+snapname+"/rollback", nil, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
 // truncate bounds an error-response body for debug logging, keeping the log
 // line compact and free of unbounded payloads.
 func truncate(b []byte) string {

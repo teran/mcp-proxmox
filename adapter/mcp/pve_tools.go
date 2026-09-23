@@ -135,6 +135,36 @@ type vmDeleteIn struct {
 	DestroyUnreferencedDisks bool   `json:"destroy_unreferenced_disks,omitempty" jsonschema:"Remove disks not referenced by the VM config"`
 }
 
+// vmCloneIn is the input of pve_vm_clone.
+type vmCloneIn struct {
+	Node        string `json:"node" jsonschema:"PVE node name"`
+	VMID        int    `json:"vmid" jsonschema:"VM ID"`
+	NewID       int    `json:"newid" jsonschema:"VM ID of the new clone"`
+	Name        string `json:"name,omitempty" jsonschema:"Name of the new clone"`
+	Full        bool   `json:"full,omitempty" jsonschema:"Full (independent) clone rather than linked clone"`
+	Storage     string `json:"storage,omitempty" jsonschema:"Storage for the new clone's disks"`
+	Pool        string `json:"pool,omitempty" jsonschema:"Resource pool to place the clone in"`
+	Description string `json:"description,omitempty" jsonschema:"Description of the new clone"`
+	Format      string `json:"format,omitempty" jsonschema:"Target disk format (raw, qcow2, vmdk)"`
+	Snapname    string `json:"snapname,omitempty" jsonschema:"Snapshot name to clone from"`
+}
+
+// vmSnapshotCreateIn is the input of pve_vm_snapshot_create.
+type vmSnapshotCreateIn struct {
+	Node        string `json:"node" jsonschema:"PVE node name"`
+	VMID        int    `json:"vmid" jsonschema:"VM ID"`
+	Snapname    string `json:"snapname" jsonschema:"Snapshot name"`
+	VMState     bool   `json:"vmstate,omitempty" jsonschema:"Include the guest RAM state in the snapshot"`
+	Description string `json:"description,omitempty" jsonschema:"Snapshot description"`
+}
+
+// vmSnapshotIn is the input of pve_vm_snapshot_delete / pve_vm_snapshot_rollback.
+type vmSnapshotIn struct {
+	Node     string `json:"node" jsonschema:"PVE node name"`
+	VMID     int    `json:"vmid" jsonschema:"VM ID"`
+	Snapname string `json:"snapname" jsonschema:"Snapshot name"`
+}
+
 // registerPVETools registers the Proxmox VE tools. Read-only (query) tools are
 // always registered for an enabled PVE backend. Mutation tools are registered
 // only when enableMutations is true (SPEC.md §2.5).
@@ -189,6 +219,12 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 		"Provide node and vmid. Returns the VM's current runtime status. Read-only.",
 		log, func(ctx context.Context, in vmIn) (any, error) {
 			return app.PVE.GetVMStatus(ctx, in.Node, in.VMID)
+		})
+	roTool(s, "pve_vm_snapshot_list", "List QEMU VM snapshots",
+		"List the snapshots of a QEMU VM.",
+		"Provide node and vmid. Returns the VM's snapshots. Read-only and idempotent.",
+		log, func(ctx context.Context, in vmIn) (any, error) {
+			return app.PVE.ListVMSnapshots(ctx, in.Node, in.VMID)
 		})
 
 	// --- LXC containers ---
@@ -409,6 +445,63 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 		"Provide node and vmid. Deletes the VM; returns the task UPID. Set purge to remove it from backup jobs and destroy_unreferenced_disks to remove unreferenced disks. Not idempotent and destructive.",
 		log, false, func(ctx context.Context, in vmDeleteIn) (any, error) {
 			t, err := app.PVE.DeleteVM(ctx, in.Node, in.VMID, in.Purge, in.DestroyUnreferencedDisks)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_vm_clone", "Clone QEMU VM",
+		"Clone a QEMU VM.",
+		"Provide node, vmid and the new VM ID. Optionally set name, full (independent clone), storage, pool, description, format and snapname. Returns the task UPID. Not idempotent: each call creates a new clone.",
+		log, false, func(ctx context.Context, in vmCloneIn) (any, error) {
+			t, err := app.PVE.CloneVM(ctx, in.Node, in.VMID, model.CloneVMRequest{
+				NewID:       in.NewID,
+				Name:        in.Name,
+				Full:        in.Full,
+				Storage:     in.Storage,
+				Pool:        in.Pool,
+				Description: in.Description,
+				Format:      in.Format,
+				Snapname:    in.Snapname,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_vm_snapshot_create", "Create QEMU VM snapshot",
+		"Create a snapshot of a QEMU VM.",
+		"Provide node, vmid and a snapshot name. Optionally include the guest RAM state (vmstate) and a description. Returns the task UPID. Not idempotent.",
+		log, false, func(ctx context.Context, in vmSnapshotCreateIn) (any, error) {
+			t, err := app.PVE.CreateVMSnapshot(ctx, in.Node, in.VMID, model.SnapshotCreateRequest{
+				Snapname:    in.Snapname,
+				VMState:     in.VMState,
+				Description: in.Description,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_vm_snapshot_delete", "Delete QEMU VM snapshot",
+		"Delete a snapshot of a QEMU VM.",
+		"Provide node, vmid and the snapshot name. Returns the task UPID. Not idempotent and destructive.",
+		log, false, func(ctx context.Context, in vmSnapshotIn) (any, error) {
+			t, err := app.PVE.DeleteVMSnapshot(ctx, in.Node, in.VMID, in.Snapname)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_vm_snapshot_rollback", "Roll back QEMU VM to snapshot",
+		"Roll a QEMU VM back to a snapshot.",
+		"Provide node, vmid and the snapshot name to roll back to. Returns the task UPID. Not idempotent.",
+		log, false, func(ctx context.Context, in vmSnapshotIn) (any, error) {
+			t, err := app.PVE.RollbackVMSnapshot(ctx, in.Node, in.VMID, in.Snapname)
 			if err != nil {
 				return nil, err
 			}

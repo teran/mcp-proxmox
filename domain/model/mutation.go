@@ -61,6 +61,20 @@ type VMBackupRequest struct {
 	Compress      string `json:"compress,omitempty"`
 }
 
+// CloneVMRequest is the form body of POST /nodes/{node}/qemu/{vmid}/clone.
+// NewID is required (the new VMID); the other fields are optional clone
+// overrides.
+type CloneVMRequest struct {
+	NewID       int    `json:"newid"`
+	Name        string `json:"name,omitempty"`
+	Full        bool   `json:"full,omitempty"`
+	Storage     string `json:"storage,omitempty"`
+	Pool        string `json:"pool,omitempty"`
+	Description string `json:"description,omitempty"`
+	Format      string `json:"format,omitempty"`
+	Snapname    string `json:"snapname,omitempty"`
+}
+
 // PBSSyncRequest is the form body of POST /admin/datastore/{store}/sync. It
 // describes a one-off sync job that pulls from a remote PBS datastore.
 type PBSSyncRequest struct {

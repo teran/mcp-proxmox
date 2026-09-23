@@ -56,6 +56,11 @@ func (s *PVEService) GetVMStatus(ctx context.Context, node string, vmid int) (*m
 	return s.gw.GetVMStatus(ctx, node, vmid)
 }
 
+// ListVMSnapshots lists the snapshots of a QEMU VM on a node.
+func (s *PVEService) ListVMSnapshots(ctx context.Context, node string, vmid int) ([]model.Snapshot, error) {
+	return s.gw.ListVMSnapshots(ctx, node, vmid)
+}
+
 // ListLXCs returns the LXC containers on a node.
 func (s *PVEService) ListLXCs(ctx context.Context, node string) ([]model.LXC, error) {
 	return s.gw.ListLXCs(ctx, node)
@@ -169,4 +174,24 @@ func (s *PVEService) ResumeVM(ctx context.Context, node string, vmid int) (*mode
 // DeleteVM deletes a QEMU VM on a node.
 func (s *PVEService) DeleteVM(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks bool) (*model.Task, error) {
 	return s.gw.DeleteVM(ctx, node, vmid, purge, destroyUnreferencedDisks)
+}
+
+// CloneVM clones a QEMU VM on a node.
+func (s *PVEService) CloneVM(ctx context.Context, node string, vmid int, req model.CloneVMRequest) (*model.Task, error) {
+	return s.gw.CloneVM(ctx, node, vmid, req)
+}
+
+// CreateVMSnapshot creates a snapshot of a QEMU VM on a node.
+func (s *PVEService) CreateVMSnapshot(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error) {
+	return s.gw.CreateVMSnapshot(ctx, node, vmid, req)
+}
+
+// DeleteVMSnapshot deletes a snapshot of a QEMU VM on a node.
+func (s *PVEService) DeleteVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
+	return s.gw.DeleteVMSnapshot(ctx, node, vmid, snapname)
+}
+
+// RollbackVMSnapshot rolls a QEMU VM back to a snapshot on a node.
+func (s *PVEService) RollbackVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
+	return s.gw.RollbackVMSnapshot(ctx, node, vmid, snapname)
 }

@@ -32,6 +32,7 @@ type PVEGateway interface {
 	ListVMs(ctx context.Context, node string) ([]model.VM, error)
 	GetVMConfig(ctx context.Context, node string, vmid int) (*model.VMConfig, error)
 	GetVMStatus(ctx context.Context, node string, vmid int) (*model.VMStatus, error)
+	ListVMSnapshots(ctx context.Context, node string, vmid int) ([]model.Snapshot, error)
 
 	// LXC containers.
 	ListLXCs(ctx context.Context, node string) ([]model.LXC, error)
@@ -67,4 +68,8 @@ type PVEGateway interface {
 	SuspendVM(ctx context.Context, node string, vmid int, todisk bool) (*model.Task, error)
 	ResumeVM(ctx context.Context, node string, vmid int) (*model.Task, error)
 	DeleteVM(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks bool) (*model.Task, error)
+	CloneVM(ctx context.Context, node string, vmid int, req model.CloneVMRequest) (*model.Task, error)
+	CreateVMSnapshot(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error)
+	DeleteVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
+	RollbackVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
 }
