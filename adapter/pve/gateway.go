@@ -641,6 +641,124 @@ func (g *Gateway) StartVMBackup(ctx context.Context, node string, req model.VMBa
 	return &model.Task{UPID: upid}, nil
 }
 
+// vmPath builds the QEMU VM path prefix for a node + vmid.
+func vmPath(node string, vmid int) string {
+	return "/nodes/" + node + "/qemu/" + strconv.Itoa(vmid)
+}
+
+// StartVM starts a QEMU VM via POST /nodes/{node}/qemu/{vmid}/status/start.
+func (g *Gateway) StartVM(ctx context.Context, node string, vmid int) (*model.Task, error) {
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/start", nil, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// StopVM stops a QEMU VM (hard power off) via
+// POST /nodes/{node}/qemu/{vmid}/status/stop.
+func (g *Gateway) StopVM(ctx context.Context, node string, vmid int, skiplock bool) (*model.Task, error) {
+	form := url.Values{}
+	if skiplock {
+		form.Set("skiplock", "1")
+	}
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/stop", form, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// ShutdownVM gracefully shuts down a QEMU VM via
+// POST /nodes/{node}/qemu/{vmid}/status/shutdown. forceStop requests an
+// immediate stop if the graceful shutdown times out; timeout is the shutdown
+// timeout in seconds.
+func (g *Gateway) ShutdownVM(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error) {
+	form := url.Values{}
+	if forceStop {
+		form.Set("forceStop", "1")
+	}
+	if timeout > 0 {
+		form.Set("timeout", strconv.Itoa(timeout))
+	}
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/shutdown", form, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// RebootVM reboots a QEMU VM via
+// POST /nodes/{node}/qemu/{vmid}/status/reboot. timeout is the reboot timeout
+// in seconds.
+func (g *Gateway) RebootVM(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error) {
+	form := url.Values{}
+	if timeout > 0 {
+		form.Set("timeout", strconv.Itoa(timeout))
+	}
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/reboot", form, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// ResetVM resets a QEMU VM (reboot without graceful shutdown) via
+// POST /nodes/{node}/qemu/{vmid}/status/reset.
+func (g *Gateway) ResetVM(ctx context.Context, node string, vmid int) (*model.Task, error) {
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/reset", nil, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// SuspendVM suspends a QEMU VM via
+// POST /nodes/{node}/qemu/{vmid}/status/suspend. todisk writes the guest RAM to
+// disk for a full suspend-to-disk.
+func (g *Gateway) SuspendVM(ctx context.Context, node string, vmid int, todisk bool) (*model.Task, error) {
+	form := url.Values{}
+	if todisk {
+		form.Set("todisk", "1")
+	}
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/suspend", form, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// ResumeVM resumes a suspended QEMU VM via
+// POST /nodes/{node}/qemu/{vmid}/status/resume.
+func (g *Gateway) ResumeVM(ctx context.Context, node string, vmid int) (*model.Task, error) {
+	var upid string
+	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/resume", nil, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
+// DeleteVM deletes a QEMU VM via DELETE /nodes/{node}/qemu/{vmid}. The mutation
+// parameters are carried in the query string (DELETE has no form body). purge
+// removes the VM from any backup jobs and destroy-unreferenced-disks removes
+// disks not referenced by the config.
+func (g *Gateway) DeleteVM(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks bool) (*model.Task, error) {
+	q := url.Values{}
+	if purge {
+		q.Set("purge", "1")
+	}
+	if destroyUnreferencedDisks {
+		q.Set("destroy-unreferenced-disks", "1")
+	}
+	var upid string
+	// Mutations are never retried: use the single-attempt doOnce path with the
+	// query string (doMutation sends a form body, which DELETE does not use).
+	if err := g.doOnce(ctx, http.MethodDelete, vmPath(node, vmid), q, &upid); err != nil {
+		return nil, err
+	}
+	return &model.Task{UPID: upid}, nil
+}
+
 // truncate bounds an error-response body for debug logging, keeping the log
 // line compact and free of unbounded payloads.
 func truncate(b []byte) string {

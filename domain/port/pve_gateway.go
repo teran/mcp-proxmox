@@ -55,4 +55,16 @@ type PVEGateway interface {
 	MigrateVM(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error
 	AddHAResource(ctx context.Context, req model.HAResourceRequest) error
 	StartVMBackup(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
+
+	// VM lifecycle. These are mutations (gated by EnableMutations) and are never
+	// retried. PVE runs each operation as a task, so they return a Task whose
+	// UPID can be polled with GetTaskStatus / GetTaskLog.
+	StartVM(ctx context.Context, node string, vmid int) (*model.Task, error)
+	StopVM(ctx context.Context, node string, vmid int, skiplock bool) (*model.Task, error)
+	ShutdownVM(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error)
+	RebootVM(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error)
+	ResetVM(ctx context.Context, node string, vmid int) (*model.Task, error)
+	SuspendVM(ctx context.Context, node string, vmid int, todisk bool) (*model.Task, error)
+	ResumeVM(ctx context.Context, node string, vmid int) (*model.Task, error)
+	DeleteVM(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks bool) (*model.Task, error)
 }

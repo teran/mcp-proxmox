@@ -130,3 +130,43 @@ func (s *PVEService) AddHAResource(ctx context.Context, req model.HAResourceRequ
 func (s *PVEService) StartVMBackup(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error) {
 	return s.gw.StartVMBackup(ctx, node, req)
 }
+
+// StartVM starts a QEMU VM on a node.
+func (s *PVEService) StartVM(ctx context.Context, node string, vmid int) (*model.Task, error) {
+	return s.gw.StartVM(ctx, node, vmid)
+}
+
+// StopVM stops a QEMU VM on a node (hard power off).
+func (s *PVEService) StopVM(ctx context.Context, node string, vmid int, skiplock bool) (*model.Task, error) {
+	return s.gw.StopVM(ctx, node, vmid, skiplock)
+}
+
+// ShutdownVM gracefully shuts down a QEMU VM on a node.
+func (s *PVEService) ShutdownVM(ctx context.Context, node string, vmid int, forceStop bool, timeout int) (*model.Task, error) {
+	return s.gw.ShutdownVM(ctx, node, vmid, forceStop, timeout)
+}
+
+// RebootVM reboots a QEMU VM on a node.
+func (s *PVEService) RebootVM(ctx context.Context, node string, vmid int, timeout int) (*model.Task, error) {
+	return s.gw.RebootVM(ctx, node, vmid, timeout)
+}
+
+// ResetVM resets a QEMU VM on a node.
+func (s *PVEService) ResetVM(ctx context.Context, node string, vmid int) (*model.Task, error) {
+	return s.gw.ResetVM(ctx, node, vmid)
+}
+
+// SuspendVM suspends a QEMU VM on a node.
+func (s *PVEService) SuspendVM(ctx context.Context, node string, vmid int, todisk bool) (*model.Task, error) {
+	return s.gw.SuspendVM(ctx, node, vmid, todisk)
+}
+
+// ResumeVM resumes a suspended QEMU VM on a node.
+func (s *PVEService) ResumeVM(ctx context.Context, node string, vmid int) (*model.Task, error) {
+	return s.gw.ResumeVM(ctx, node, vmid)
+}
+
+// DeleteVM deletes a QEMU VM on a node.
+func (s *PVEService) DeleteVM(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks bool) (*model.Task, error) {
+	return s.gw.DeleteVM(ctx, node, vmid, purge, destroyUnreferencedDisks)
+}

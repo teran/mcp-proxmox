@@ -98,6 +98,43 @@ type vmBackupIn struct {
 	Compress      string `json:"compress,omitempty" jsonschema:"Compression: 0 | lzo | gzip | zstd"`
 }
 
+// vmStopIn is the input of pve_vm_stop.
+type vmStopIn struct {
+	Node     string `json:"node" jsonschema:"PVE node name"`
+	VMID     int    `json:"vmid" jsonschema:"VM ID"`
+	SkipLock bool   `json:"skiplock,omitempty" jsonschema:"Ignore locks and stop anyway"`
+}
+
+// vmShutdownIn is the input of pve_vm_shutdown.
+type vmShutdownIn struct {
+	Node      string `json:"node" jsonschema:"PVE node name"`
+	VMID      int    `json:"vmid" jsonschema:"VM ID"`
+	ForceStop bool   `json:"force_stop,omitempty" jsonschema:"Immediately stop if the graceful shutdown times out"`
+	Timeout   int    `json:"timeout,omitempty" jsonschema:"Shutdown timeout in seconds"`
+}
+
+// vmRebootIn is the input of pve_vm_reboot.
+type vmRebootIn struct {
+	Node    string `json:"node" jsonschema:"PVE node name"`
+	VMID    int    `json:"vmid" jsonschema:"VM ID"`
+	Timeout int    `json:"timeout,omitempty" jsonschema:"Reboot timeout in seconds"`
+}
+
+// vmSuspendIn is the input of pve_vm_suspend.
+type vmSuspendIn struct {
+	Node   string `json:"node" jsonschema:"PVE node name"`
+	VMID   int    `json:"vmid" jsonschema:"VM ID"`
+	ToDisk bool   `json:"to_disk,omitempty" jsonschema:"Suspend to disk (write guest RAM to disk)"`
+}
+
+// vmDeleteIn is the input of pve_vm_delete.
+type vmDeleteIn struct {
+	Node                     string `json:"node" jsonschema:"PVE node name"`
+	VMID                     int    `json:"vmid" jsonschema:"VM ID"`
+	Purge                    bool   `json:"purge,omitempty" jsonschema:"Remove the VM from any backup jobs"`
+	DestroyUnreferencedDisks bool   `json:"destroy_unreferenced_disks,omitempty" jsonschema:"Remove disks not referenced by the VM config"`
+}
+
 // registerPVETools registers the Proxmox VE tools. Read-only (query) tools are
 // always registered for an enabled PVE backend. Mutation tools are registered
 // only when enableMutations is true (SPEC.md §2.5).
@@ -288,5 +325,93 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 				NotesTemplate: in.NotesTemplate,
 				Compress:      in.Compress,
 			})
+		})
+
+	mutTool(s, "pve_vm_start", "Start QEMU VM",
+		"Start a QEMU VM.",
+		"Provide node and vmid. Starts the VM; returns the task UPID to poll with pve_task_status. Not idempotent: starting an already-running VM errors.",
+		log, false, func(ctx context.Context, in vmIn) (any, error) {
+			t, err := app.PVE.StartVM(ctx, in.Node, in.VMID)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_vm_stop", "Stop QEMU VM",
+		"Stop a QEMU VM (hard power off).",
+		"Provide node and vmid. Hard-stops the VM; returns the task UPID. Set skiplock to ignore an active lock. Not idempotent.",
+		log, false, func(ctx context.Context, in vmStopIn) (any, error) {
+			t, err := app.PVE.StopVM(ctx, in.Node, in.VMID, in.SkipLock)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_vm_shutdown", "Shut down QEMU VM",
+		"Gracefully shut down a QEMU VM.",
+		"Provide node, vmid, optionally a timeout (seconds) and force_stop to immediately stop if the graceful shutdown times out. Returns the task UPID. Not idempotent.",
+		log, false, func(ctx context.Context, in vmShutdownIn) (any, error) {
+			t, err := app.PVE.ShutdownVM(ctx, in.Node, in.VMID, in.ForceStop, in.Timeout)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_vm_reboot", "Reboot QEMU VM",
+		"Reboot a QEMU VM.",
+		"Provide node, vmid and optionally a timeout (seconds). Returns the task UPID. Not idempotent.",
+		log, false, func(ctx context.Context, in vmRebootIn) (any, error) {
+			t, err := app.PVE.RebootVM(ctx, in.Node, in.VMID, in.Timeout)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_vm_reset", "Reset QEMU VM",
+		"Reset a QEMU VM (reboot without graceful shutdown).",
+		"Provide node and vmid. Resets the VM; returns the task UPID. Not idempotent.",
+		log, false, func(ctx context.Context, in vmIn) (any, error) {
+			t, err := app.PVE.ResetVM(ctx, in.Node, in.VMID)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_vm_suspend", "Suspend QEMU VM",
+		"Suspend a QEMU VM.",
+		"Provide node and vmid. Suspend the VM; set to_disk to write guest RAM to disk. Returns the task UPID. Not idempotent.",
+		log, false, func(ctx context.Context, in vmSuspendIn) (any, error) {
+			t, err := app.PVE.SuspendVM(ctx, in.Node, in.VMID, in.ToDisk)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_vm_resume", "Resume QEMU VM",
+		"Resume a suspended QEMU VM.",
+		"Provide node and vmid. Resumes the VM; returns the task UPID. Not idempotent.",
+		log, false, func(ctx context.Context, in vmIn) (any, error) {
+			t, err := app.PVE.ResumeVM(ctx, in.Node, in.VMID)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_vm_delete", "Delete QEMU VM",
+		"Delete a QEMU VM.",
+		"Provide node and vmid. Deletes the VM; returns the task UPID. Set purge to remove it from backup jobs and destroy_unreferenced_disks to remove unreferenced disks. Not idempotent and destructive.",
+		log, false, func(ctx context.Context, in vmDeleteIn) (any, error) {
+			t, err := app.PVE.DeleteVM(ctx, in.Node, in.VMID, in.Purge, in.DestroyUnreferencedDisks)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"upid": t.UPID}, nil
 		})
 }
