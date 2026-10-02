@@ -24,6 +24,11 @@ func (s *PBSService) GetDatastoreStatus(ctx context.Context, store string) (*mod
 	return s.gw.GetDatastoreStatus(ctx, store)
 }
 
+// GetDatastoreConfig returns the full configuration of a single datastore.
+func (s *PBSService) GetDatastoreConfig(ctx context.Context, store string) (*model.DatastoreConfig, error) {
+	return s.gw.GetDatastoreConfig(ctx, store)
+}
+
 // ListBackups returns the backup snapshots in a datastore.
 func (s *PBSService) ListBackups(ctx context.Context, store string) ([]model.Backup, error) {
 	return s.gw.ListBackups(ctx, store)

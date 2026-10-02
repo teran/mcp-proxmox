@@ -265,6 +265,12 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 		log, func(ctx context.Context, _ emptyIn) (any, error) {
 			return app.PVE.GetNextID(ctx)
 		})
+	roTool(s, "pve_backup_job_list", "List PVE backup jobs",
+		"List the configured vzdump backup jobs (schedules) on the PVE cluster.",
+		"No arguments. Returns every configured backup job (id, schedule, node, mode, storage, enabled, target VMs/pool, next run, notification settings). Read-only and idempotent.",
+		log, func(ctx context.Context, _ emptyIn) (any, error) {
+			return app.PVE.ListBackupJobs(ctx)
+		})
 
 	// --- QEMU VMs ---
 	roTool(s, "pve_vm_list", "List QEMU VMs",

@@ -50,6 +50,16 @@ func TestPVEService_Success(t *testing.T) {
 		assert.Len(t, got, 1)
 	})
 
+	t.Run("ListBackupJobs", func(t *testing.T) {
+		gw := &mockPVEGateway{listBackupJobs: func(ctx context.Context) ([]model.BackupJob, error) {
+			return []model.BackupJob{{ID: "backup-100", Enabled: true, Storage: "local"}}, nil
+		}}
+		got, err := (&PVEService{gw: gw}).ListBackupJobs(context.Background())
+		require.NoError(t, err)
+		assert.Len(t, got, 1)
+		assert.Equal(t, "backup-100", got[0].ID)
+	})
+
 	t.Run("GetNextID", func(t *testing.T) {
 		gw := &mockPVEGateway{getNextID: func(ctx context.Context) (string, error) { return "201", nil }}
 		got, err := (&PVEService{gw: gw}).GetNextID(context.Background())
@@ -262,6 +272,7 @@ func TestPVEService_ErrorPropagation(t *testing.T) {
 		{"GetNodeStatus", func(s *PVEService) error { _, e := s.GetNodeStatus(context.Background(), "n"); return e }},
 		{"GetClusterStatus", func(s *PVEService) error { _, e := s.GetClusterStatus(context.Background()); return e }},
 		{"GetClusterResources", func(s *PVEService) error { _, e := s.GetClusterResources(context.Background()); return e }},
+		{"ListBackupJobs", func(s *PVEService) error { _, e := s.ListBackupJobs(context.Background()); return e }},
 		{"GetNextID", func(s *PVEService) error { _, e := s.GetNextID(context.Background()); return e }},
 		{"ListVMs", func(s *PVEService) error { _, e := s.ListVMs(context.Background(), "n"); return e }},
 		{"GetVMConfig", func(s *PVEService) error { _, e := s.GetVMConfig(context.Background(), "n", 1); return e }},
@@ -299,6 +310,7 @@ func TestPVEService_ErrorPropagation(t *testing.T) {
 	gw.getClusterStatus = func(ctx context.Context) ([]model.ClusterStatus, error) { return nil, sentinel }
 	gw.getClusterRes = func(ctx context.Context) ([]model.ClusterResource, error) { return nil, sentinel }
 	gw.getNextID = func(ctx context.Context) (string, error) { return "", sentinel }
+	gw.listBackupJobs = func(ctx context.Context) ([]model.BackupJob, error) { return nil, sentinel }
 	gw.listVMs = func(ctx context.Context, node string) ([]model.VM, error) { return nil, sentinel }
 	gw.getVMConfig = func(ctx context.Context, node string, vmid int) (*model.VMConfig, error) { return nil, sentinel }
 	gw.getVMStatus = func(ctx context.Context, node string, vmid int) (*model.VMStatus, error) { return nil, sentinel }

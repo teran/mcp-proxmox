@@ -26,12 +26,13 @@ func (noopLogger) Warnf(string, ...any)  {}
 func (noopLogger) Errorf(string, ...any) {}
 
 type reqCapture struct {
-	method    string
-	path      string
-	query     string
-	auth      string
-	requestID string
-	count     int
+	method      string
+	path        string
+	escapedPath string
+	query       string
+	auth        string
+	requestID   string
+	count       int
 	// form holds the parsed form body (POST/PUT mutations); empty for GETs.
 	form url.Values
 	// rawBody holds the raw request body bytes (verbatim).
@@ -66,6 +67,7 @@ func mockServer(t *testing.T, status int, body string, rec *reqCapture) *httptes
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec.method = r.Method
 		rec.path = r.URL.Path
+		rec.escapedPath = r.URL.EscapedPath()
 		rec.query = r.URL.RawQuery
 		rec.auth = r.Header.Get("Authorization")
 		rec.requestID = r.Header.Get("X-Request-ID")

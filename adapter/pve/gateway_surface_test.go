@@ -97,6 +97,22 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 			},
 		},
 		{
+			name: "ListBackupJobs",
+			body: `{"data":[{"id":"backup-100","enabled":true,"schedule":"daily","node":"pve1","mode":"snapshot","storage":"local","all":true,"next-run":1700000000}]}`,
+			path: "/api2/json/cluster/backup",
+			call: func(g *Gateway) error {
+				jobs, err := g.ListBackupJobs(context.Background())
+				if assert.NoError(t, err) {
+					require.Len(t, jobs, 1)
+					assert.Equal(t, "backup-100", jobs[0].ID)
+					assert.True(t, jobs[0].Enabled)
+					assert.Equal(t, "snapshot", jobs[0].Mode)
+					assert.Equal(t, int64(1700000000), jobs[0].NextRun)
+				}
+				return err
+			},
+		},
+		{
 			name: "GetNextID",
 			body: `{"data":"201"}`,
 			path: "/api2/json/cluster/nextid",
@@ -418,6 +434,7 @@ func TestGateway_EmptyDataForLists(t *testing.T) {
 		{"ListNodes", func(g *Gateway) error { _, e := g.ListNodes(context.Background()); return e }},
 		{"GetClusterStatus", func(g *Gateway) error { _, e := g.GetClusterStatus(context.Background()); return e }},
 		{"GetClusterResources", func(g *Gateway) error { _, e := g.GetClusterResources(context.Background()); return e }},
+		{"ListBackupJobs", func(g *Gateway) error { _, e := g.ListBackupJobs(context.Background()); return e }},
 		{"ListVMs", func(g *Gateway) error { _, e := g.ListVMs(context.Background(), "pve1"); return e }},
 		{"ListLXCs", func(g *Gateway) error { _, e := g.ListLXCs(context.Background(), "pve1"); return e }},
 		{"ListStorage", func(g *Gateway) error { _, e := g.ListStorage(context.Background()); return e }},
@@ -640,6 +657,7 @@ func TestGateway_ListMethodErrorBranches(t *testing.T) {
 	}{
 		{"GetClusterStatus", func(g *Gateway) error { _, e := g.GetClusterStatus(context.Background()); return e }},
 		{"GetClusterResources", func(g *Gateway) error { _, e := g.GetClusterResources(context.Background()); return e }},
+		{"ListBackupJobs", func(g *Gateway) error { _, e := g.ListBackupJobs(context.Background()); return e }},
 		{"GetNextID", func(g *Gateway) error { _, e := g.GetNextID(context.Background()); return e }},
 		{"ListVMs", func(g *Gateway) error { _, e := g.ListVMs(context.Background(), "pve1"); return e }},
 		{"ListLXCs", func(g *Gateway) error { _, e := g.ListLXCs(context.Background(), "pve1"); return e }},

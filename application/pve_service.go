@@ -36,6 +36,11 @@ func (s *PVEService) GetClusterResources(ctx context.Context) ([]model.ClusterRe
 	return s.gw.GetClusterResources(ctx)
 }
 
+// ListBackupJobs returns the configured vzdump backup jobs (schedules).
+func (s *PVEService) ListBackupJobs(ctx context.Context) ([]model.BackupJob, error) {
+	return s.gw.ListBackupJobs(ctx)
+}
+
 // GetNextID returns the next free VMID.
 func (s *PVEService) GetNextID(ctx context.Context) (string, error) {
 	return s.gw.GetNextID(ctx)

@@ -356,6 +356,16 @@ func (g *Gateway) GetClusterResources(ctx context.Context) ([]model.ClusterResou
 	return out, nil
 }
 
+// ListBackupJobs returns the vzdump backup jobs (schedules) configured on the
+// cluster via GET /cluster/backup.
+func (g *Gateway) ListBackupJobs(ctx context.Context) ([]model.BackupJob, error) {
+	var out []model.BackupJob
+	if err := g.do(ctx, http.MethodGet, "/cluster/backup", nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GetNextID returns the next free VMID.
 func (g *Gateway) GetNextID(ctx context.Context) (string, error) {
 	var out string

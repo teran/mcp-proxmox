@@ -23,6 +23,7 @@ type stubPVEGateway struct {
 	getClusterStatus func(ctx context.Context) ([]model.ClusterStatus, error)
 	getClusterRes    func(ctx context.Context) ([]model.ClusterResource, error)
 	getNextID        func(ctx context.Context) (string, error)
+	listBackupJobs   func(ctx context.Context) ([]model.BackupJob, error)
 	listVMs          func(ctx context.Context, node string) ([]model.VM, error)
 	getVMConfig      func(ctx context.Context, node string, vmid int) (*model.VMConfig, error)
 	getVMStatus      func(ctx context.Context, node string, vmid int) (*model.VMStatus, error)
@@ -114,6 +115,15 @@ func (s *stubPVEGateway) GetNextID(ctx context.Context) (string, error) {
 		return s.getNextID(ctx)
 	}
 	return "201", nil
+}
+func (s *stubPVEGateway) ListBackupJobs(ctx context.Context) ([]model.BackupJob, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.listBackupJobs != nil {
+		return s.listBackupJobs(ctx)
+	}
+	return []model.BackupJob{{ID: "backup-100", Enabled: true, Schedule: "daily", Storage: "local"}}, nil
 }
 func (s *stubPVEGateway) ListVMs(ctx context.Context, node string) ([]model.VM, error) {
 	if s.fail() {
@@ -500,18 +510,19 @@ var _ port.PVEGateway = (*stubPVEGateway)(nil)
 type stubPBSGateway struct {
 	err error
 
-	listDatastores    func(ctx context.Context) ([]model.Datastore, error)
-	getDatastoreStats func(ctx context.Context, store string) (*model.DatastoreStatus, error)
-	listBackups       func(ctx context.Context, store string) ([]model.Backup, error)
-	getBackup         func(ctx context.Context, store, backupID string) ([]model.Backup, error)
-	getBackupNotes    func(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error)
-	getVerifyStatus   func(ctx context.Context, store, upid string) (*model.VerifyStatus, error)
-	getPruneStatus    func(ctx context.Context, store, upid string) (*model.PruneStatus, error)
-	getPBSVersion     func(ctx context.Context) (*model.PBSVersion, error)
-	startVerify       func(ctx context.Context, store string) (string, error)
-	startGC           func(ctx context.Context, store string) (string, error)
-	startPrune        func(ctx context.Context, store string) (string, error)
-	startSync         func(ctx context.Context, store string, req model.PBSSyncRequest) (string, error)
+	listDatastores     func(ctx context.Context) ([]model.Datastore, error)
+	getDatastoreStats  func(ctx context.Context, store string) (*model.DatastoreStatus, error)
+	getDatastoreConfig func(ctx context.Context, store string) (*model.DatastoreConfig, error)
+	listBackups        func(ctx context.Context, store string) ([]model.Backup, error)
+	getBackup          func(ctx context.Context, store, backupID string) ([]model.Backup, error)
+	getBackupNotes     func(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error)
+	getVerifyStatus    func(ctx context.Context, store, upid string) (*model.VerifyStatus, error)
+	getPruneStatus     func(ctx context.Context, store, upid string) (*model.PruneStatus, error)
+	getPBSVersion      func(ctx context.Context) (*model.PBSVersion, error)
+	startVerify        func(ctx context.Context, store string) (string, error)
+	startGC            func(ctx context.Context, store string) (string, error)
+	startPrune         func(ctx context.Context, store string) (string, error)
+	startSync          func(ctx context.Context, store string, req model.PBSSyncRequest) (string, error)
 
 	listBackupFiles func(ctx context.Context, store, backupType, backupID, snapshot, path string) ([]model.PBSFile, error)
 	getTaskStatus   func(ctx context.Context, upid string) (*model.PBSTask, error)
@@ -539,6 +550,15 @@ func (s *stubPBSGateway) GetDatastoreStatus(ctx context.Context, store string) (
 		return s.getDatastoreStats(ctx, store)
 	}
 	return &model.DatastoreStatus{Store: store, Total: 1000}, nil
+}
+func (s *stubPBSGateway) GetDatastoreConfig(ctx context.Context, store string) (*model.DatastoreConfig, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getDatastoreConfig != nil {
+		return s.getDatastoreConfig(ctx, store)
+	}
+	return &model.DatastoreConfig{Path: "/backup"}, nil
 }
 func (s *stubPBSGateway) ListBackups(ctx context.Context, store string) ([]model.Backup, error) {
 	if s.fail() {
@@ -689,7 +709,7 @@ func (nopLogger) Errorf(string, ...any) {}
 // pveROTools is the read-only PVE tool surface (SPEC.md §6.2–6.6).
 var pveROTools = []string{
 	"pve_node_list", "pve_node_status", "pve_cluster_status",
-	"pve_cluster_resources", "pve_nextid",
+	"pve_cluster_resources", "pve_nextid", "pve_backup_job_list",
 	"pve_vm_list", "pve_vm_get", "pve_vm_status",
 	"pve_lxc_list", "pve_lxc_get", "pve_lxc_status",
 	"pve_storage_list", "pve_storage_get", "pve_network_list",
@@ -699,7 +719,7 @@ var pveROTools = []string{
 
 // pbsROTools is the read-only PBS tool surface (SPEC.md §6.7–6.9).
 var pbsROTools = []string{
-	"pbs_datastore_list", "pbs_datastore_status",
+	"pbs_datastore_list", "pbs_datastore_status", "pbs_datastore_config_get",
 	"pbs_backup_list", "pbs_backup_get", "pbs_backup_notes_get",
 	"pbs_verify_status", "pbs_prune_status", "pbs_version",
 	"pbs_backup_files_list", "pbs_task_status", "pbs_task_log",

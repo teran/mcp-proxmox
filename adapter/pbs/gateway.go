@@ -233,6 +233,10 @@ func (g *Gateway) doOnceReq(ctx context.Context, method, path string, form url.V
 // decode parses the {"data": ...} envelope into out, mapping empty/null data for
 // single-entity getters to EmptyDataError and an error envelope to APIError.
 func (g *Gateway) decode(body []byte, out any) error {
+	if len(body) == 0 {
+		return &UpstreamError{Op: "decode", Err: errors.New("pbs: empty response body")}
+	}
+
 	var env struct {
 		Data    json.RawMessage   `json:"data"`
 		Errors  map[string]string `json:"errors"`
@@ -330,6 +334,18 @@ func (g *Gateway) ListDatastores(ctx context.Context) ([]model.Datastore, error)
 func (g *Gateway) GetDatastoreStatus(ctx context.Context, store string) (*model.DatastoreStatus, error) {
 	var out model.DatastoreStatus
 	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+store+"/status", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetDatastoreConfig returns the full configuration of a single datastore via
+// GET /config/datastore/{store}. The store name is path-escaped so a value
+// containing reserved path characters cannot inject extra segments (S11
+// path-injection fix). Read-only.
+func (g *Gateway) GetDatastoreConfig(ctx context.Context, store string) (*model.DatastoreConfig, error) {
+	var out model.DatastoreConfig
+	if err := g.do(ctx, http.MethodGet, "/config/datastore/"+url.PathEscape(store), &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

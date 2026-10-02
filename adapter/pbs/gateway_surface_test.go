@@ -46,14 +46,34 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 	}{
 		{
 			name: "ListDatastores",
-			body: `{"data":[{"store":"backup","path":"/backup","keep-daily":7}]}`,
+			body: `{"data":[{"store":"backup","backend-type":"filesystem","mount-status":"mounted","comment":"primary","maintenance":"none"}]}`,
 			path: "/api2/json/admin/datastore",
 			call: func(g *Gateway) error {
 				ds, err := g.ListDatastores(context.Background())
 				if assert.NoError(t, err) {
 					require.Len(t, ds, 1)
 					assert.Equal(t, "backup", ds[0].Store)
-					assert.Equal(t, 7, ds[0].KeepDaily)
+					assert.Equal(t, "filesystem", ds[0].BackendType)
+					assert.Equal(t, "mounted", ds[0].MountStatus)
+					assert.Equal(t, "primary", ds[0].Comment)
+					assert.Equal(t, "none", ds[0].Maintenance)
+				}
+				return err
+			},
+		},
+		{
+			name: "GetDatastoreConfig",
+			body: `{"data":{"path":"/backup","keep-daily":7,"verify-new":true,"gc-schedule":"sun","notify-user":"root@pam","tuning":"example"}}`,
+			path: "/api2/json/config/datastore/backup",
+			call: func(g *Gateway) error {
+				cfg, err := g.GetDatastoreConfig(context.Background(), "backup")
+				if assert.NoError(t, err) {
+					assert.Equal(t, "/backup", cfg.Path)
+					assert.Equal(t, 7, cfg.KeepDaily)
+					assert.True(t, cfg.VerifyNew)
+					assert.Equal(t, "sun", cfg.GCSchedule)
+					assert.Equal(t, "root@pam", cfg.NotifyUser)
+					assert.Equal(t, "example", cfg.Tuning)
 				}
 				return err
 			},

@@ -27,6 +27,7 @@ type PVEGateway interface {
 	GetClusterStatus(ctx context.Context) ([]model.ClusterStatus, error)
 	GetClusterResources(ctx context.Context) ([]model.ClusterResource, error)
 	GetNextID(ctx context.Context) (string, error)
+	ListBackupJobs(ctx context.Context) ([]model.BackupJob, error)
 
 	// QEMU VMs.
 	ListVMs(ctx context.Context, node string) ([]model.VM, error)

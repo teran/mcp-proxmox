@@ -623,7 +623,7 @@ delete rows above.
 | 1 | `ping` | system | query | liveness; reports enabled backends (`pve`, `pbs`) |
 | 2 | `status` | system | query | server status: version, transport, enabled backends |
 
-### 6.2 Proxmox VE — nodes, cluster & HA (6)
+### 6.2 Proxmox VE — nodes, cluster & HA (7)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
@@ -632,85 +632,86 @@ delete rows above.
 | 5 | `pve_cluster_status` | query | `GET /cluster/status` |
 | 6 | `pve_cluster_resources` | query | `GET /cluster/resources` |
 | 7 | `pve_nextid` | query | `GET /cluster/nextid` |
-| 8 | `pve_ha_add` | mutation | `POST /cluster/ha/resources` |
+| 8 | `pve_backup_job_list` | query | `GET /cluster/backup` |
+| 9 | `pve_ha_add` | mutation | `POST /cluster/ha/resources` |
 
 ### 6.3 Proxmox VE — QEMU VMs (12)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 9 | `pve_vm_list` | query | `GET /nodes/{node}/qemu` |
-| 10 | `pve_vm_get` | query | `GET /nodes/{node}/qemu/{vmid}/config` |
-| 11 | `pve_vm_status` | query | `GET /nodes/{node}/qemu/{vmid}/status/current` |
-| 12 | `pve_vm_create` | mutation | `POST /nodes/{node}/qemu` |
-| 13 | `pve_vm_resize` | mutation | `PUT /nodes/{node}/qemu/{vmid}/resize` |
-| 14 | `pve_vm_start` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/start` |
-| 15 | `pve_vm_stop` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/stop` |
-| 16 | `pve_vm_reboot` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/reboot` |
-| 17 | `pve_vm_shutdown` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/shutdown` |
-| 18 | `pve_vm_migrate` | mutation | `POST /nodes/{node}/qemu/{vmid}/migrate` |
-| 19 | `pve_vm_backup` | mutation | `POST /nodes/{node}/vzdump` |
-| 20 | `pve_vm_delete` | mutation | `DELETE /nodes/{node}/qemu/{vmid}` |
+| 10 | `pve_vm_list` | query | `GET /nodes/{node}/qemu` |
+| 11 | `pve_vm_get` | query | `GET /nodes/{node}/qemu/{vmid}/config` |
+| 12 | `pve_vm_status` | query | `GET /nodes/{node}/qemu/{vmid}/status/current` |
+| 13 | `pve_vm_create` | mutation | `POST /nodes/{node}/qemu` |
+| 14 | `pve_vm_resize` | mutation | `PUT /nodes/{node}/qemu/{vmid}/resize` |
+| 15 | `pve_vm_start` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/start` |
+| 16 | `pve_vm_stop` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/stop` |
+| 17 | `pve_vm_reboot` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/reboot` |
+| 18 | `pve_vm_shutdown` | mutation | `POST /nodes/{node}/qemu/{vmid}/status/shutdown` |
+| 19 | `pve_vm_migrate` | mutation | `POST /nodes/{node}/qemu/{vmid}/migrate` |
+| 20 | `pve_vm_backup` | mutation | `POST /nodes/{node}/vzdump` |
+| 21 | `pve_vm_delete` | mutation | `DELETE /nodes/{node}/qemu/{vmid}` |
 
 ### 6.4 Proxmox VE — LXC containers (9)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 21 | `pve_lxc_list` | query | `GET /nodes/{node}/lxc` |
-| 22 | `pve_lxc_get` | query | `GET /nodes/{node}/lxc/{vmid}/config` |
-| 23 | `pve_lxc_status` | query | `GET /nodes/{node}/lxc/{vmid}/status/current` |
-| 24 | `pve_lxc_create` | mutation | `POST /nodes/{node}/lxc` |
-| 25 | `pve_lxc_start` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/start` |
-| 26 | `pve_lxc_stop` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/stop` |
-| 27 | `pve_lxc_reboot` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/reboot` |
-| 28 | `pve_lxc_shutdown` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/shutdown` |
-| 29 | `pve_lxc_delete` | mutation | `DELETE /nodes/{node}/lxc/{vmid}` |
+| 22 | `pve_lxc_list` | query | `GET /nodes/{node}/lxc` |
+| 23 | `pve_lxc_get` | query | `GET /nodes/{node}/lxc/{vmid}/config` |
+| 24 | `pve_lxc_status` | query | `GET /nodes/{node}/lxc/{vmid}/status/current` |
+| 25 | `pve_lxc_create` | mutation | `POST /nodes/{node}/lxc` |
+| 26 | `pve_lxc_start` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/start` |
+| 27 | `pve_lxc_stop` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/stop` |
+| 28 | `pve_lxc_reboot` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/reboot` |
+| 29 | `pve_lxc_shutdown` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/shutdown` |
+| 30 | `pve_lxc_delete` | mutation | `DELETE /nodes/{node}/lxc/{vmid}` |
 
 ### 6.5 Proxmox VE — storage & network (3)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 30 | `pve_storage_list` | query | `GET /storage` |
-| 31 | `pve_storage_get` | query | `GET /nodes/{node}/storage/{storage}/status` |
-| 32 | `pve_network_list` | query | `GET /nodes/{node}/network` |
+| 31 | `pve_storage_list` | query | `GET /storage` |
+| 32 | `pve_storage_get` | query | `GET /nodes/{node}/storage/{storage}/status` |
+| 33 | `pve_network_list` | query | `GET /nodes/{node}/network` |
 
 ### 6.6 Proxmox VE — tasks & version (4)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 33 | `pve_task_list` | query | `GET /nodes/{node}/tasks` |
-| 34 | `pve_task_status` | query | `GET /nodes/{node}/tasks/{upid}/status` |
-| 35 | `pve_task_log` | query | `GET /nodes/{node}/tasks/{upid}/log` |
-| 36 | `pve_version` | query | `GET /version` |
+| 34 | `pve_task_list` | query | `GET /nodes/{node}/tasks` |
+| 35 | `pve_task_status` | query | `GET /nodes/{node}/tasks/{upid}/status` |
+| 36 | `pve_task_log` | query | `GET /nodes/{node}/tasks/{upid}/log` |
+| 37 | `pve_version` | query | `GET /version` |
 
 ### 6.7 PBS — datastores (2)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 37 | `pbs_datastore_list` | query | `GET /admin/datastore` |
-| 38 | `pbs_datastore_status` | query | `GET /admin/datastore/{store}/status` |
+| 38 | `pbs_datastore_list` | query | `GET /admin/datastore` |
+| 39 | `pbs_datastore_status` | query | `GET /admin/datastore/{store}/status` |
 
 ### 6.8 PBS — backups/snapshots & notes (6)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 39 | `pbs_backup_list` | query | `GET /admin/datastore/{store}/snapshot` |
-| 40 | `pbs_backup_get` | query | `GET /admin/datastore/{store}/snapshot/{snapshot}` |
-| 41 | `pbs_backup_restore` | mutation | `POST /admin/datastore/{store}/snapshot/{snapshot}/restore` |
-| 42 | `pbs_backup_forget` | mutation | `DELETE /admin/datastore/{store}/snapshot/{snapshot}` |
-| 43 | `pbs_backup_notes_get` | query | `GET /admin/datastore/{store}/snapshot/{snapshot}/notes` |
-| 44 | `pbs_backup_notes_set` | mutation | `PUT /admin/datastore/{store}/snapshot/{snapshot}/notes` |
+| 40 | `pbs_backup_list` | query | `GET /admin/datastore/{store}/snapshot` |
+| 41 | `pbs_backup_get` | query | `GET /admin/datastore/{store}/snapshot/{snapshot}` |
+| 42 | `pbs_backup_restore` | mutation | `POST /admin/datastore/{store}/snapshot/{snapshot}/restore` |
+| 43 | `pbs_backup_forget` | mutation | `DELETE /admin/datastore/{store}/snapshot/{snapshot}` |
+| 44 | `pbs_backup_notes_get` | query | `GET /admin/datastore/{store}/snapshot/{snapshot}/notes` |
+| 45 | `pbs_backup_notes_set` | mutation | `PUT /admin/datastore/{store}/snapshot/{snapshot}/notes` |
 
 ### 6.9 PBS — verify, GC, prune, sync & version (7)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 45 | `pbs_verify_start` | mutation | `POST /admin/datastore/{store}/verify` |
-| 46 | `pbs_verify_status` | query | `GET /admin/datastore/{store}/verify/{upid}` |
-| 47 | `pbs_gc_start` | mutation | `POST /admin/datastore/{store}/gc` |
-| 48 | `pbs_prune_start` | mutation | `POST /admin/datastore/{store}/prune` |
-| 49 | `pbs_prune_status` | query | `GET /admin/datastore/{store}/prune/{upid}` |
-| 50 | `pbs_sync_start` | mutation | `POST /admin/datastore/{store}/sync` |
-| 51 | `pbs_version` | query | `GET /version` |
+| 46 | `pbs_verify_start` | mutation | `POST /admin/datastore/{store}/verify` |
+| 47 | `pbs_verify_status` | query | `GET /admin/datastore/{store}/verify/{upid}` |
+| 48 | `pbs_gc_start` | mutation | `POST /admin/datastore/{store}/gc` |
+| 49 | `pbs_prune_start` | mutation | `POST /admin/datastore/{store}/prune` |
+| 50 | `pbs_prune_status` | query | `GET /admin/datastore/{store}/prune/{upid}` |
+| 51 | `pbs_sync_start` | mutation | `POST /admin/datastore/{store}/sync` |
+| 52 | `pbs_version` | query | `GET /version` |
 
 **Total: 51 tools** (system 2, PVE 34, PBS 15).
 

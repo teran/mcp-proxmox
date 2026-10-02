@@ -14,6 +14,7 @@ type PBSGateway interface {
 	// Datastores.
 	ListDatastores(ctx context.Context) ([]model.Datastore, error)
 	GetDatastoreStatus(ctx context.Context, store string) (*model.DatastoreStatus, error)
+	GetDatastoreConfig(ctx context.Context, store string) (*model.DatastoreConfig, error)
 
 	// Backups / snapshots & notes.
 	ListBackups(ctx context.Context, store string) ([]model.Backup, error)

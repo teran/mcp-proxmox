@@ -111,6 +111,12 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 		log, func(ctx context.Context, in storeIn) (any, error) {
 			return app.PBS.GetDatastoreStatus(ctx, in.Store)
 		})
+	roTool(s, "pbs_datastore_config_get", "Get PBS datastore configuration",
+		"Get the full configuration of a PBS datastore.",
+		"Provide the datastore name. Returns its configuration (path, retention/keep settings, GC schedule, notification options, etc.). Read-only.",
+		log, func(ctx context.Context, in storeIn) (any, error) {
+			return app.PBS.GetDatastoreConfig(ctx, in.Store)
+		})
 
 	// --- backups / snapshots & notes ---
 	roTool(s, "pbs_backup_list", "List PBS backup snapshots",

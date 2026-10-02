@@ -244,7 +244,7 @@ client as a subprocess (see the client configuration below).
 | `ping` | query | liveness; reports enabled backends (`pve`, `pbs`) |
 | `status` | query | server status: version, transport, enabled backends |
 
-### Proxmox VE — nodes, cluster & HA (6)
+### Proxmox VE — nodes, cluster & HA (7)
 
 | Tool | Type | Description |
 |---|---|---|
@@ -253,6 +253,7 @@ client as a subprocess (see the client configuration below).
 | `pve_cluster_status` | query | cluster status (quorum/health) |
 | `pve_cluster_resources` | query | cluster resources (VMs/CTs/storage across nodes) |
 | `pve_nextid` | query | next free VMID |
+| `pve_backup_job_list` | query | list vzdump backup jobs (schedules) |
 | `pve_ha_add` | mutation | register a new HA resource |
 
 ### Proxmox VE — QEMU VMs (12)

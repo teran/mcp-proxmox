@@ -100,6 +100,17 @@ func TestJSONRoundTrip(t *testing.T) {
 			want: `{"id":"qemu/100","type":"qemu","vmid":100,"node":"pve1","name":"web","status":"running","storage":"local","disk":10,"maxdisk":32,"mem":512,"maxmem":1024,"cpu":0.1,"maxcpu":2,"uptime":300}`,
 		},
 		{
+			name: "backup-job",
+			in: BackupJob{
+				ID: "backup-100", Comment: "nightly", Enabled: true, Schedule: "0 2 * * *",
+				Node: "pve1", Mode: "snapshot", Storage: "local", All: true,
+				VMID: "100,101", NextRun: 1700000000, MailNotification: "always",
+				MailTo: "root", Notify: "always", Compress: "zstd", BwLimit: 1000,
+				Fleecing: true, NotesTemplate: "{{guestname}}", PruneBackups: "keep-last=3",
+			},
+			want: `{"id":"backup-100","comment":"nightly","enabled":true,"schedule":"0 2 * * *","node":"pve1","mode":"snapshot","storage":"local","all":true,"vmid":"100,101","next-run":1700000000,"mailnotification":"always","mailto":"root","notify":"always","compress":"zstd","bwlimit":1000,"fleecing":true,"notes-template":"{{guestname}}","prune-backups":"keep-last=3"}`,
+		},
+		{
 			name: "storage",
 			in: Storage{
 				Storage: "local", Type: "dir", Status: "available", Content: "images,rootdir",
@@ -151,10 +162,21 @@ func TestJSONRoundTrip(t *testing.T) {
 		{
 			name: "datastore",
 			in: Datastore{
-				Store: "backup", Path: "/backup", Comment: "primary", KeepDaily: 7, KeepWeekly: 4,
-				KeepMonthly: 6, KeepYearly: 2, NotifyUser: "root@pam", GC: "sun", Verify: "mon",
+				Store: "backup", BackendType: "filesystem", MountStatus: "mounted",
+				Comment: "primary", Maintenance: "none",
 			},
-			want: `{"store":"backup","path":"/backup","comment":"primary","keep-daily":7,"keep-weekly":4,"keep-monthly":6,"keep-yearly":2,"notify-user":"root@pam","gc-schedule":"sun","verify-new":"mon"}`,
+			want: `{"store":"backup","backend-type":"filesystem","mount-status":"mounted","comment":"primary","maintenance":"none"}`,
+		},
+		{
+			name: "datastore-config",
+			in: DatastoreConfig{
+				Path: "/backup", Comment: "primary", Backend: "filesystem", BackingDevice: "/dev/sdb",
+				KeepHourly: 1, KeepDaily: 7, KeepWeekly: 4, KeepMonthly: 6, KeepYearly: 2, KeepLast: 1,
+				GCSchedule: "sun", VerifyNew: true, PruneSchedule: "daily", NotificationMode: "auto",
+				NotifyUser: "root@pam", Notify: "always", MaintenanceMode: "off",
+				CounterResetSchedule: "daily", GCOnUnmount: true, Tuning: "example",
+			},
+			want: `{"path":"/backup","comment":"primary","backend":"filesystem","backing-device":"/dev/sdb","keep-hourly":1,"keep-daily":7,"keep-weekly":4,"keep-monthly":6,"keep-yearly":2,"keep-last":1,"gc-schedule":"sun","verify-new":true,"prune-schedule":"daily","notification-mode":"auto","notify-user":"root@pam","notify":"always","maintenance-mode":"off","counter-reset-schedule":"daily","gc-on-unmount":true,"tuning":"example"}`,
 		},
 		{
 			name: "datastore-status",

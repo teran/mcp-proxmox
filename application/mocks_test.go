@@ -15,6 +15,7 @@ type mockPVEGateway struct {
 	getClusterStatus func(ctx context.Context) ([]model.ClusterStatus, error)
 	getClusterRes    func(ctx context.Context) ([]model.ClusterResource, error)
 	getNextID        func(ctx context.Context) (string, error)
+	listBackupJobs   func(ctx context.Context) ([]model.BackupJob, error)
 	listVMs          func(ctx context.Context, node string) ([]model.VM, error)
 	getVMConfig      func(ctx context.Context, node string, vmid int) (*model.VMConfig, error)
 	getVMStatus      func(ctx context.Context, node string, vmid int) (*model.VMStatus, error)
@@ -96,6 +97,12 @@ func (m *mockPVEGateway) GetNextID(ctx context.Context) (string, error) {
 		return m.getNextID(ctx)
 	}
 	return "", nil
+}
+func (m *mockPVEGateway) ListBackupJobs(ctx context.Context) ([]model.BackupJob, error) {
+	if m.listBackupJobs != nil {
+		return m.listBackupJobs(ctx)
+	}
+	return nil, nil
 }
 func (m *mockPVEGateway) ListVMs(ctx context.Context, node string) ([]model.VM, error) {
 	if m.listVMs != nil {
@@ -354,18 +361,19 @@ var _ port.PVEGateway = (*mockPVEGateway)(nil)
 
 // mockPBSGateway is a controllable port.PBSGateway mock.
 type mockPBSGateway struct {
-	listDatastores    func(ctx context.Context) ([]model.Datastore, error)
-	getDatastoreStats func(ctx context.Context, store string) (*model.DatastoreStatus, error)
-	listBackups       func(ctx context.Context, store string) ([]model.Backup, error)
-	getBackup         func(ctx context.Context, store, backupID string) ([]model.Backup, error)
-	getBackupNotes    func(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error)
-	getVerifyStatus   func(ctx context.Context, store, upid string) (*model.VerifyStatus, error)
-	getPruneStatus    func(ctx context.Context, store, upid string) (*model.PruneStatus, error)
-	getPBSVersion     func(ctx context.Context) (*model.PBSVersion, error)
-	startVerify       func(ctx context.Context, store string) (string, error)
-	startGC           func(ctx context.Context, store string) (string, error)
-	startPrune        func(ctx context.Context, store string) (string, error)
-	startSync         func(ctx context.Context, store string, req model.PBSSyncRequest) (string, error)
+	listDatastores     func(ctx context.Context) ([]model.Datastore, error)
+	getDatastoreStats  func(ctx context.Context, store string) (*model.DatastoreStatus, error)
+	getDatastoreConfig func(ctx context.Context, store string) (*model.DatastoreConfig, error)
+	listBackups        func(ctx context.Context, store string) ([]model.Backup, error)
+	getBackup          func(ctx context.Context, store, backupID string) ([]model.Backup, error)
+	getBackupNotes     func(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error)
+	getVerifyStatus    func(ctx context.Context, store, upid string) (*model.VerifyStatus, error)
+	getPruneStatus     func(ctx context.Context, store, upid string) (*model.PruneStatus, error)
+	getPBSVersion      func(ctx context.Context) (*model.PBSVersion, error)
+	startVerify        func(ctx context.Context, store string) (string, error)
+	startGC            func(ctx context.Context, store string) (string, error)
+	startPrune         func(ctx context.Context, store string) (string, error)
+	startSync          func(ctx context.Context, store string, req model.PBSSyncRequest) (string, error)
 
 	// Backup file list & task status (read-only).
 	listBackupFiles func(ctx context.Context, store, backupType, backupID, snapshot, path string) ([]model.PBSFile, error)
@@ -386,6 +394,12 @@ func (m *mockPBSGateway) ListDatastores(ctx context.Context) ([]model.Datastore,
 func (m *mockPBSGateway) GetDatastoreStatus(ctx context.Context, store string) (*model.DatastoreStatus, error) {
 	if m.getDatastoreStats != nil {
 		return m.getDatastoreStats(ctx, store)
+	}
+	return nil, nil
+}
+func (m *mockPBSGateway) GetDatastoreConfig(ctx context.Context, store string) (*model.DatastoreConfig, error) {
+	if m.getDatastoreConfig != nil {
+		return m.getDatastoreConfig(ctx, store)
 	}
 	return nil, nil
 }
