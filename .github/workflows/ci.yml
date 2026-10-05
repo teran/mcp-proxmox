@@ -13,15 +13,13 @@
 #   secrets  — make secrets (gitleaks over the FULL git history) as a HARD GATE
 #   build    — make build (goreleaser snapshot -> dist/)
 #
-# This is a Local (stdio-only) server: there are no e2e tests and no
-# CI-published container image, so `e2e`/`container-image` jobs are NOT declared
+# This is a Local (stdio-only) server: there is no end-to-end test suite and no
+# CI-published container image, so no optional jobs for them are declared
 # (N31 — a CI job never invokes an undeclared optional target).
 name: CI
 
 on:
   push:
-    branches: [master]
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
