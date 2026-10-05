@@ -1,6 +1,7 @@
 package pve
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -24,6 +26,15 @@ func (noopLogger) Debugf(string, ...any) {}
 func (noopLogger) Infof(string, ...any)  {}
 func (noopLogger) Warnf(string, ...any)  {}
 func (noopLogger) Errorf(string, ...any) {}
+
+// logrusAppLogger adapts a *logrus.Logger to port.AppLogger (via the embedded
+// Debugf/Infof/Warnf/Errorf) while also exposing a Tracef method so the gateway's
+// trace-level request line can be captured. It is intentionally NOT a
+// RequestAwareLogger, so port.CtxLogger falls back to the plain methods. The
+// Tracef method is the seam the developer adds to the port logger surface.
+type logrusAppLogger struct {
+	*logrus.Logger
+}
 
 // reqCapture records the last request the httptest server received.
 type reqCapture struct {
@@ -62,6 +73,94 @@ func newTestGateway(t *testing.T, srv *httptest.Server) (*Gateway, *reqCapture) 
 		Retries:      1,
 		RetryBackoff: time.Millisecond,
 	}), rec
+}
+
+// newTraceGatewayLogger returns a logrus-backed port.AppLogger writing to a
+// buffer at the given level, for asserting trace/debug gating of HTTP request
+// lines.
+func newTraceGatewayLogger(t *testing.T, level logrus.Level) (*logrusAppLogger, *bytes.Buffer) {
+	t.Helper()
+	var buf bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&buf)
+	l.SetFormatter(&logrus.TextFormatter{DisableColors: true})
+	l.SetLevel(level)
+	return &logrusAppLogger{Logger: l}, &buf
+}
+
+// newTestGatewayWithLogger builds a Gateway pointing at the given httptest
+// server with a custom logger, a static PVE token and fast retry settings.
+func newTestGatewayWithLogger(t *testing.T, srv *httptest.Server, logger port.AppLogger) *Gateway {
+	t.Helper()
+	return NewGateway(Config{
+		Endpoint:     srv.URL,
+		TokenSource:  token.NewStaticTokenSource("user@pam!tokenid=secret"),
+		HTTPClient:   srv.Client(),
+		Logger:       logger,
+		Retries:      1,
+		RetryBackoff: time.Millisecond,
+	})
+}
+
+// TestGateway_TraceRequestLine verifies the HTTP request line is emitted at
+// TRACE level and carries the method, URL path and upstream status, while never
+// containing the API token value (SPEC.md §5.4).
+func TestGateway_TraceRequestLine(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, 200, `{"data":[{"node":"pve1","status":"online"}]}`, rec)
+	lg, buf := newTraceGatewayLogger(t, logrus.TraceLevel)
+	g := newTestGatewayWithLogger(t, srv, lg)
+
+	_, err := g.ListNodes(context.Background())
+	skipIfStub(t, err)
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, "pve request")
+	assert.Contains(t, out, "GET")
+	assert.Contains(t, out, "/api2/json/nodes")
+	assert.Contains(t, out, "upstream_http_status_code=200")
+	assert.Contains(t, out, "out_bytes=")
+	assert.Contains(t, out, "in_bytes=")
+	assert.Contains(t, out, "duration_ms=")
+	// Never the API token / Authorization header value.
+	assert.NotContains(t, out, "PVEAPIToken=")
+	assert.NotContains(t, out, "user@pam!tokenid=secret")
+}
+
+// TestGateway_RequestLineIsTraceGated verifies the HTTP request line is NOT
+// emitted at debug level (its level must be trace, so at LOG_LEVEL=debug the
+// journal stays free of per-request lines).
+func TestGateway_RequestLineIsTraceGated(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, 200, `{"data":[]}`, rec)
+	lg, buf := newTraceGatewayLogger(t, logrus.DebugLevel)
+	g := newTestGatewayWithLogger(t, srv, lg)
+
+	_, err := g.ListNodes(context.Background())
+	skipIfStub(t, err)
+	require.NoError(t, err)
+
+	assert.NotContains(t, buf.String(), "pve request",
+		"request line must be trace-gated, not emitted at debug")
+}
+
+// TestGateway_ErrorResponseBodyNotLogged verifies an error response's BODY is
+// never written to the log at trace level (only the status may be logged); the
+// response payload must not reach the journal.
+func TestGateway_ErrorResponseBodyNotLogged(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, http.StatusBadRequest, `{"data":null,"errors":{"node":"no such node"}}`, rec)
+	lg, buf := newTraceGatewayLogger(t, logrus.TraceLevel)
+	g := newTestGatewayWithLogger(t, srv, lg)
+
+	_, err := g.ListNodes(context.Background())
+	skipIfStub(t, err)
+	require.Error(t, err)
+
+	out := buf.String()
+	assert.NotContains(t, out, "no such node", "error response body must never be logged")
+	assert.NotContains(t, out, `{"data":null`, "error response body must never be logged")
 }
 
 // mockServer spins up an httptest server whose handler records method/path/auth
