@@ -69,37 +69,86 @@ func NewServer(impl *mcpSDK.Implementation, deps Deps, opts *mcpSDK.ServerOption
 // the tool name, source ("STDIO"), duration and outcome, and is tagged with
 // session_id/request_id from ctx. Sensitive arguments are never logged. A nil
 // logger is a silent no-op.
+//
+// At trace level it additionally emits a DEDICATED trace line (below the info
+// line) that carries the tool name, redacted args and the byte-size/duration/
+// outcome metrics, so per-tool payload detail stays confined to trace. This line
+// is trace-gated: it never appears unless LOG_LEVEL=trace.
 func logIncomingRequest(deps Deps, ctx context.Context, method string, req mcpSDK.Request, res mcpSDK.Result, dur time.Duration, err error) {
 	if deps.Log == nil {
 		return
 	}
+	outcome := "ok"
+	if err != nil {
+		outcome = "error"
+	}
+
 	fields := logrus.Fields{
 		"source":      "STDIO",
 		"duration_ms": dur.Milliseconds(),
-		"outcome":     "ok",
-	}
-	if err != nil {
-		fields["outcome"] = "error"
+		"outcome":     outcome,
 	}
 
 	// tools/call: capture the tool name; args + byte sizes only at trace level
 	// (never for sensitive inputs — tokens are never tool arguments).
-	if params, ok := req.GetParams().(*mcpSDK.CallToolParams); ok {
-		fields["tool"] = params.Name
-		if deps.Log.IsLevelEnabled(logrus.TraceLevel) && params.Arguments != nil {
-			in, _ := json.Marshal(params.Arguments)
+	var traceFields logrus.Fields
+	if name, args, ok := toolCallFromRequest(req); ok {
+		fields["tool"] = name
+		if deps.Log.IsLevelEnabled(logrus.TraceLevel) && args != nil {
+			in, _ := json.Marshal(args)
 			fields["in_bytes"] = len(in)
-			fields["args"] = sanitizeArgs(params.Arguments)
+			fields["args"] = sanitizeArgs(args)
 		}
 		if deps.Log.IsLevelEnabled(logrus.TraceLevel) && res != nil {
 			if out, err := json.Marshal(res); err == nil {
 				fields["out_bytes"] = len(out)
 			}
 		}
+
+		// Dedicated per-tool trace line, emitted only at trace level. It carries
+		// the tool name, redacted args and metrics. Sensitive arguments are
+		// redacted via sanitizeArgs, so no secret reaches the journal.
+		if deps.Log.IsLevelEnabled(logrus.TraceLevel) {
+			traceFields = logrus.Fields{
+				"tool":        name,
+				"in_bytes":    fields["in_bytes"],
+				"out_bytes":   fields["out_bytes"],
+				"duration_ms": dur.Milliseconds(),
+				"outcome":     outcome,
+			}
+			if args != nil {
+				traceFields["args"] = sanitizeArgs(args)
+			}
+		}
 	}
 
 	e := logging.WithSession(ctx, deps.Log)
 	e.WithFields(fields).Infof("mcp request: %s", method)
+	if traceFields != nil {
+		e.WithFields(traceFields).Tracef("mcp tool trace: %s", method)
+	}
+}
+
+// toolCallFromRequest extracts the tool name and its arguments from a tools/call
+// request. The go-sdk hands the receiving middleware a *CallToolParamsRaw (the
+// wire form) for real tool calls, while unit tests may construct a
+// *CallToolParams directly, so both shapes are supported. The returned args is
+// an unmarshalled map (suitable for sanitizeArgs) or nil when there are none.
+func toolCallFromRequest(req mcpSDK.Request) (name string, args any, ok bool) {
+	switch p := req.GetParams().(type) {
+	case *mcpSDK.CallToolParams:
+		return p.Name, p.Arguments, true
+	case *mcpSDK.CallToolParamsRaw:
+		if len(p.Arguments) > 0 {
+			var m map[string]any
+			if err := json.Unmarshal(p.Arguments, &m); err == nil {
+				return p.Name, m, true
+			}
+		}
+		return p.Name, nil, true
+	default:
+		return "", nil, false
+	}
 }
 
 // sanitizeArgs returns a JSON-ish string of the tool arguments, omitting any

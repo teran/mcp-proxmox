@@ -599,4 +599,3 @@ func (g *Gateway) StartSync(ctx context.Context, store string, req model.PBSSync
 	}
 	return upid, nil
 }
-
