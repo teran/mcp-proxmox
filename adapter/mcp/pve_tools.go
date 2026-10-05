@@ -385,8 +385,8 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 
 	mutTool(s, "pve_vm_create", "Create QEMU VM",
 		"Create a QEMU VM on a PVE node.",
-		"Provide the node and the VM configuration (name, cores, memory, disks, network, etc.). Optionally set vmid; otherwise PVE assigns the next free ID. Returns the new VMID. Idempotent: re-issuing the same create may create a second VM, so verify with pve_vm_list.",
-		log, true, func(ctx context.Context, in createVMIn) (any, error) {
+		"Provide the node and the VM configuration (name, cores, memory, disks, network, etc.). Optionally set vmid; otherwise PVE assigns the next free ID. Returns the new VMID. Not idempotent: re-issuing the same create provisions a second VM, so verify with pve_vm_list.",
+		log, false, func(ctx context.Context, in createVMIn) (any, error) {
 			vmid, err := app.PVE.CreateVM(ctx, in.Node, in.CreateVMRequest)
 			if err != nil {
 				return nil, err
