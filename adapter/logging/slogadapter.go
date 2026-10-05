@@ -67,7 +67,7 @@ func NewSlogLogger(l *logrus.Logger) *slog.Logger {
 func slogToLogrus(l slog.Level) logrus.Level {
 	switch {
 	case l <= slog.LevelDebug:
-		return logrus.DebugLevel
+		return logrus.TraceLevel
 	case l < slog.LevelWarn:
 		return logrus.InfoLevel
 	case l < slog.LevelError:
