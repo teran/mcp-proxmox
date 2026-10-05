@@ -13,17 +13,21 @@
 #   mutation — gremlins mutation testing, hard gate (C2/C8)
 #   secrets  — gitleaks secret scan over the full git history (C3/N28)
 #
-# This is a Local (stdio-only) server: there are no e2e tests and no
-# CI-published container image, so `e2e`/`container-image` targets are
-# intentionally NOT declared (N31 — a CI job must never invoke an undeclared
-# optional target). See SPEC.md §4.1 / §9.
+# This is a Local (stdio-only) server. `e2e` is an OPTIONAL, harness-backed
+# target (build-tagged `//go:build e2e`, requires Docker): it runs an in-repo
+# emulator of the Proxmox VE / PBS REST APIs in a container via
+# github.com/teran/go-docker-testsuite and drives the real server over stdio.
+# It is NOT part of the standard interface and does not run in the default
+# `go test ./...` pass. There is no CI-published container image, so
+# `container-image` stays intentionally UNDECLARED (N31 — a CI job must never
+# invoke an undeclared optional target). See SPEC.md §4.1 / §9.
 
 GO        ?= go
 SHELL     := bash
 COVER_OUT := coverage.out
 COVER_CORE := coverage-core.out
 
-.PHONY: build test lint mutation secrets
+.PHONY: build test lint mutation secrets e2e
 
 ## build — produce binary artifacts via goreleaser (single artifact in dist/)
 build:
@@ -63,3 +67,7 @@ mutation:
 ## secrets — gitleaks scan over the FULL git history; HARD GATE (C3/N28)
 secrets:
 	gitleaks detect --source . --redact --verbose
+
+## e2e — harness-backed end-to-end suite (//go:build e2e; requires Docker)
+e2e:
+	$(GO) test -tags e2e ./e2e/...

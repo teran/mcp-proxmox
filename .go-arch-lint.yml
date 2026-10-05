@@ -40,6 +40,11 @@ components:
 
   cmd:                { in: [ cmd, cmd/** ] }
 
+  # e2e: the hermetic e2e suite + its stdlib-only emulator. It is a test-support
+  # layer outside the clean-arch product layers, so it may depend on anything
+  # (like the composition root).
+  e2e:                { in: [ e2e, e2e/** ] }
+
 deps:
   # NOTE: `model` is intentionally omitted — it must depend on nothing
   # (std only). If it ever starts importing another project package, the
@@ -125,4 +130,9 @@ deps:
 
   # Composition root depends on everything.
   cmd:
+    anyProjectDeps: true
+
+  # e2e (test-support) depends on everything — the suite uses the go-sdk, the
+  # docker-testsuite harness and the built server.
+  e2e:
     anyProjectDeps: true

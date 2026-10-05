@@ -65,14 +65,15 @@ func NewServer(impl *mcpSDK.Implementation, deps Deps, opts *mcpSDK.ServerOption
 
 // logIncomingRequest emits a structured per-request access-log line at info
 // level (SPEC.md L8 — unconditionally when logging is enabled, NOT gated behind
-// debug). args/in_bytes/out_bytes are only captured at trace level. It carries
-// the tool name, source ("STDIO"), duration and outcome, and is tagged with
-// session_id/request_id from ctx. Sensitive arguments are never logged. A nil
-// logger is a silent no-op.
+// debug). For a tool call it carries the tool name and the REDACTED args
+// (sanitizeArgs redacts secrets per S02, so no raw secret can reach the
+// journal), plus source ("STDIO"), duration and outcome, tagged with
+// session_id/request_id from ctx. Byte-size metrics (in_bytes/out_bytes) are
+// confined to the trace line below. A nil logger is a silent no-op.
 //
 // At trace level it additionally emits a DEDICATED trace line (below the info
 // line) that carries the tool name, redacted args and the byte-size/duration/
-// outcome metrics, so per-tool payload detail stays confined to trace. This line
+// outcome metrics, so per-tool payload sizes stay confined to trace. This line
 // is trace-gated: it never appears unless LOG_LEVEL=trace.
 func logIncomingRequest(deps Deps, ctx context.Context, method string, req mcpSDK.Request, res mcpSDK.Result, dur time.Duration, err error) {
 	if deps.Log == nil {
@@ -89,15 +90,18 @@ func logIncomingRequest(deps Deps, ctx context.Context, method string, req mcpSD
 		"outcome":     outcome,
 	}
 
-	// tools/call: capture the tool name; args + byte sizes only at trace level
-	// (never for sensitive inputs — tokens are never tool arguments).
+	// tools/call: capture the tool name; the REDACTED args go on the info line
+	// (L08 — sanitizeArgs guarantees no secrets), while byte sizes stay at trace
+	// level.
 	var traceFields logrus.Fields
 	if name, args, ok := toolCallFromRequest(req); ok {
 		fields["tool"] = name
+		if args != nil {
+			fields["args"] = sanitizeArgs(args)
+		}
 		if deps.Log.IsLevelEnabled(logrus.TraceLevel) && args != nil {
 			in, _ := json.Marshal(args)
 			fields["in_bytes"] = len(in)
-			fields["args"] = sanitizeArgs(args)
 		}
 		if deps.Log.IsLevelEnabled(logrus.TraceLevel) && res != nil {
 			if out, err := json.Marshal(res); err == nil {

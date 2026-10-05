@@ -12,10 +12,14 @@
 #   mutation — make mutation (gremlins 80/80) as a HARD GATE (fails on survivors)
 #   secrets  — make secrets (gitleaks over the FULL git history) as a HARD GATE
 #   build    — make build (goreleaser snapshot -> dist/)
+#   e2e      — make e2e (harness-backed suite; //go:build e2e) on a runner with
+#              Docker. OPTIONAL, not part of the standard 5-target interface (R07),
+#              and NOT run in the default `go test ./...` pass.
 #
-# This is a Local (stdio-only) server: there is no end-to-end test suite and no
-# CI-published container image, so no optional jobs for them are declared
-# (N31 — a CI job never invokes an undeclared optional target).
+# This is a Local (stdio-only) server with an OPTIONAL, harness-backed e2e
+# target (runs an in-repo Proxmox emulator in a container and drives the real
+# server over stdio). There is no CI-published container image, so no image
+# job is declared (N31 — a CI job never invokes an undeclared optional target).
 name: CI
 
 # Run the full suite once per change:
@@ -134,3 +138,21 @@ jobs:
           install-only: true
       - name: Build (make build)
         run: make build
+
+  # ====================== E2E (make e2e, needs Docker) ======================
+  # Harness-backed end-to-end suite (//go:build e2e): builds the in-repo Proxmox
+  # emulator for linux, runs it in a Docker container via go-docker-testsuite,
+  # builds the real server and drives it over stdio against the emulator.
+  # Requires Docker (ubuntu-latest has it). NOT part of the standard 5-target
+  # interface (R07) and not run in the default `go test ./...` pass.
+  e2e:
+    name: "e2e (make e2e, needs Docker)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "${{ env.GO_VERSION }}"
+          cache: true
+      - name: E2E (make e2e)
+        run: make e2e

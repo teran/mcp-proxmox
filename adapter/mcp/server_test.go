@@ -100,7 +100,10 @@ func TestLogIncomingRequest(t *testing.T) {
 	assert.Contains(t, out, `"outcome":"ok"`)
 	assert.Contains(t, out, `"session_id":"sess"`)
 	assert.Contains(t, out, `"request_id":"req"`)
+	// L08: the REDACTED args ride on the info line (sanitizeArgs hides secrets).
+	assert.Contains(t, out, `"args"`)
 	assert.NotContains(t, out, `"token":"x"`)
+	assert.NotContains(t, out, `"in_bytes"`, "byte sizes stay confined to trace")
 
 	// Error path.
 	buf.Reset()
