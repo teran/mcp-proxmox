@@ -24,6 +24,7 @@ import (
 	"github.com/teran/mcp-proxmox/adapter/pve"
 	"github.com/teran/mcp-proxmox/adapter/token"
 	"github.com/teran/mcp-proxmox/application"
+	"github.com/teran/mcp-proxmox/domain/port"
 )
 
 // Build metadata. These are injected at build time via ldflags (see
@@ -49,6 +50,41 @@ const defaultLogFile = "/tmp/mcp-proxmox.log"
 // -version flag (e.g. "mcp-proxmox v1.2.3").
 func versionString() string {
 	return "mcp-proxmox " + version
+}
+
+// buildApp wires the backends enabled in cfg into a single App.
+func buildApp(cfg config.Config, logger port.AppLogger, version string) *application.App {
+	opts := make([]application.Option, 0, 2)
+
+	if cfg.PVEEnabled() {
+		pveToken := token.NewStaticTokenSource(cfg.PVEToken)
+		pveGW := pve.NewGateway(pve.Config{
+			Endpoint:     cfg.PVEEndpoint,
+			TokenSource:  pveToken,
+			CACertPath:   cfg.PVECACertPath,
+			Logger:       logger,
+			Retries:      2,
+			RetryBackoff: 200 * time.Millisecond,
+		})
+		opts = append(opts, application.WithPVE(pveGW))
+		logger.Infof("PVE backend enabled: %s", cfg.PVEEndpoint)
+	}
+
+	if cfg.PBSEnabled() {
+		pbsToken := token.NewPBSStaticTokenSource(cfg.PBSToken)
+		pbsGW := pbs.NewGateway(pbs.Config{
+			Endpoint:     cfg.PBSEndpoint,
+			TokenSource:  pbsToken,
+			CACertPath:   cfg.PBSCACertPath,
+			Logger:       logger,
+			Retries:      2,
+			RetryBackoff: 200 * time.Millisecond,
+		})
+		opts = append(opts, application.WithPBS(pbsGW))
+		logger.Infof("PBS backend enabled: %s", cfg.PBSEndpoint)
+	}
+
+	return application.New(logger, version, opts...)
 }
 
 func main() {
@@ -105,35 +141,7 @@ func main() {
 	// Build the App, injecting each backend only when it is enabled. A backend
 	// whose endpoint or token is missing is simply absent — its tools are not
 	// registered and nothing fails.
-	app := application.New(appLogger, version)
-
-	if cfg.PVEEnabled() {
-		pveToken := token.NewStaticTokenSource(cfg.PVEToken)
-		pveGW := pve.NewGateway(pve.Config{
-			Endpoint:     cfg.PVEEndpoint,
-			TokenSource:  pveToken,
-			CACertPath:   cfg.PVECACertPath,
-			Logger:       appLogger,
-			Retries:      2,
-			RetryBackoff: 200 * time.Millisecond,
-		})
-		app = application.New(appLogger, version, application.WithPVE(pveGW))
-		logrusLogger.Infof("PVE backend enabled: %s", cfg.PVEEndpoint)
-	}
-
-	if cfg.PBSEnabled() {
-		pbsToken := token.NewPBSStaticTokenSource(cfg.PBSToken)
-		pbsGW := pbs.NewGateway(pbs.Config{
-			Endpoint:     cfg.PBSEndpoint,
-			TokenSource:  pbsToken,
-			CACertPath:   cfg.PBSCACertPath,
-			Logger:       appLogger,
-			Retries:      2,
-			RetryBackoff: 200 * time.Millisecond,
-		})
-		app = application.New(appLogger, version, application.WithPBS(pbsGW))
-		logrusLogger.Infof("PBS backend enabled: %s", cfg.PBSEndpoint)
-	}
+	app := buildApp(cfg, appLogger, version)
 
 	impl := &mcpSDK.Implementation{Name: "mcp-proxmox", Version: version}
 

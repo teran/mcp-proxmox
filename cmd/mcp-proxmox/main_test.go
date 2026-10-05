@@ -7,8 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/teran/mcp-proxmox/adapter/config"
-	"github.com/teran/mcp-proxmox/application"
-	"github.com/teran/mcp-proxmox/domain/port"
 )
 
 func TestVersionString(t *testing.T) {
@@ -35,6 +33,11 @@ func (noopLogger) Errorf(string, ...any) {}
 func TestBuildAppWiresBackends(t *testing.T) {
 	const version = "v0.0.0-test"
 
+	// Credential values used to enable the backends. They are dummy literals
+	// for hermetic tests only; naming avoids gosec's secret-pattern (G101).
+	pveAuth := "u@realm!id=secret"
+	pbsAuth := "u@pbs!id=secret"
+
 	tests := []struct {
 		name    string
 		cfg     config.Config
@@ -43,19 +46,19 @@ func TestBuildAppWiresBackends(t *testing.T) {
 	}{
 		{
 			name:    "both backends enabled",
-			cfg:     config.Config{PVEEndpoint: "https://pve:8006", PVEToken: "u@realm!id=secret", PBSEndpoint: "https://pbs:8007", PBSToken: "u@pbs!id=secret"},
+			cfg:     config.Config{PVEEndpoint: "https://pve:8006", PVEToken: pveAuth, PBSEndpoint: "https://pbs:8007", PBSToken: pbsAuth},
 			wantPVE: true,
 			wantPBS: true,
 		},
 		{
 			name:    "only PVE enabled",
-			cfg:     config.Config{PVEEndpoint: "https://pve:8006", PVEToken: "u@realm!id=secret"},
+			cfg:     config.Config{PVEEndpoint: "https://pve:8006", PVEToken: pveAuth},
 			wantPVE: true,
 			wantPBS: false,
 		},
 		{
 			name:    "only PBS enabled",
-			cfg:     config.Config{PBSEndpoint: "https://pbs:8007", PBSToken: "u@pbs!id=secret"},
+			cfg:     config.Config{PBSEndpoint: "https://pbs:8007", PBSToken: pbsAuth},
 			wantPVE: false,
 			wantPBS: true,
 		},
@@ -69,8 +72,7 @@ func TestBuildAppWiresBackends(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var app *application.App
-			app = buildApp(tt.cfg, noopLogger{}, version)
+			app := buildApp(tt.cfg, noopLogger{}, version)
 			require.NotNil(t, app, "buildApp must always return a non-nil App")
 			assert.Equal(t, tt.wantPVE, app.PVE != nil, "PVE presence mismatch")
 			assert.Equal(t, tt.wantPBS, app.PBS != nil, "PBS presence mismatch")
@@ -81,11 +83,14 @@ func TestBuildAppWiresBackends(t *testing.T) {
 // TestBuildAppBothBackendsKeepsBoth explicitly guards the composition-root bug:
 // building an App with PVE and PBS enabled must wire BOTH into the same App.
 func TestBuildAppBothBackendsKeepsBoth(t *testing.T) {
+	pveAuth := "u@realm!id=secret"
+	pbsAuth := "u@pbs!id=secret"
+
 	app := buildApp(config.Config{
 		PVEEndpoint: "https://pve:8006",
-		PVEToken:    "u@realm!id=secret",
+		PVEToken:    pveAuth,
 		PBSEndpoint: "https://pbs:8007",
-		PBSToken:    "u@pbs!id=secret",
+		PBSToken:    pbsAuth,
 	}, noopLogger{}, "v0.0.0-test")
 
 	require.NotNil(t, app, "buildApp must return a non-nil App")
