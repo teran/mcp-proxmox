@@ -5,6 +5,7 @@ import "context"
 // AppLogger is the minimal logging contract for the core (application).
 // Implemented by adapter/logging on top of logrus. The core does NOT see logrus.
 type AppLogger interface {
+	Tracef(format string, args ...any)
 	Debugf(format string, args ...any)
 	Infof(format string, args ...any)
 	Warnf(format string, args ...any)
@@ -19,6 +20,7 @@ type AppLogger interface {
 // implement it — callers fall back to the plain AppLogger when it is absent.
 type RequestAwareLogger interface {
 	AppLogger
+	TracefContext(ctx context.Context, format string, args ...any)
 	DebugfContext(ctx context.Context, format string, args ...any)
 	InfofContext(ctx context.Context, format string, args ...any)
 	WarnfContext(ctx context.Context, format string, args ...any)
@@ -47,6 +49,18 @@ func ToRequestAwareLogger(l AppLogger) RequestAwareLogger {
 		return r
 	}
 	return nil
+}
+
+// Tracef logs at trace level, attaching the session/request ID from ctx when
+// the underlying logger supports it.
+func (c CtxLogger) Tracef(ctx context.Context, format string, args ...any) {
+	if c.aware != nil {
+		c.aware.TracefContext(ctx, format, args...)
+		return
+	}
+	if c.plain != nil {
+		c.plain.Tracef(format, args...)
+	}
 }
 
 // Debugf logs at debug level, attaching the session/request ID from ctx when

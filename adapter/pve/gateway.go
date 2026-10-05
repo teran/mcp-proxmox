@@ -216,18 +216,19 @@ func (g *Gateway) doOnceReq(ctx context.Context, method, path string, query, for
 	if g.cfg.Logger != nil {
 		// Request logging carries the upstream HTTP status code plus request
 		// metrics so both the success (2xx) and error paths show them. Method +
-		// URL path only; the Authorization header value is never logged (SPEC.md
-		// §5.4). Logged via the ctx-aware logger so lines carry the same
-		// session_id/request_id as the tool and error lines.
-		g.logger.Debugf(ctx, "pve request: %s %s upstream_http_status_code=%d duration_ms=%d in_bytes=%d out_bytes=%d",
-			method, path, resp.StatusCode(), resp.Duration().Milliseconds(), 0, len(body))
+		// URL path (including the API prefix) only; the Authorization header
+		// value is never logged (SPEC.md §5.4). Logged at trace level via the
+		// ctx-aware logger so lines carry the same session_id/request_id as the
+		// tool and error lines, and stay hidden unless LOG_LEVEL=trace.
+		g.logger.Tracef(ctx, "pve request: %s %s%s upstream_http_status_code=%d duration_ms=%d in_bytes=%d out_bytes=%d",
+			method, apiPrefix, path, resp.StatusCode(), resp.Duration().Milliseconds(), 0, len(body))
 	}
 
 	if resp.StatusCode() >= http.StatusBadRequest {
-		// Surface the real Proxmox error message at debug level (truncated) so
-		// the journal reveals the exact reason (e.g. an auth/privilege issue).
-		// The body of an error response never contains the API token.
-		g.logger.Debugf(ctx, "pve error response %d: %s", resp.StatusCode(), truncate(body))
+		// Only the status is surfaced (at trace level); the error response body
+		// is never written to the journal — it could carry secret-adjacent data,
+		// and the requirement is to log no response bodies (SPEC.md §5.4).
+		g.logger.Tracef(ctx, "pve error response %d", resp.StatusCode())
 		return g.mapHTTPError(resp.StatusCode(), body)
 	}
 	return g.decode(body, out)
@@ -1048,14 +1049,4 @@ func (g *Gateway) RestoreVM(ctx context.Context, node string, req model.PVEResto
 		return nil, err
 	}
 	return &model.Task{UPID: upid}, nil
-}
-
-// truncate bounds an error-response body for debug logging, keeping the log
-// line compact and free of unbounded payloads.
-func truncate(b []byte) string {
-	const max = 300
-	if len(b) <= max {
-		return string(b)
-	}
-	return string(b[:max]) + "..."
 }

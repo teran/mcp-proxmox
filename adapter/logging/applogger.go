@@ -21,10 +21,16 @@ func NewAppLogger(l *logrus.Logger) port.AppLogger {
 	return &appLogger{l: l}
 }
 
+func (a *appLogger) Tracef(format string, args ...any) { a.l.Tracef(format, args...) }
 func (a *appLogger) Debugf(format string, args ...any) { a.l.Debugf(format, args...) }
 func (a *appLogger) Infof(format string, args ...any)  { a.l.Infof(format, args...) }
 func (a *appLogger) Warnf(format string, args ...any)  { a.l.Warnf(format, args...) }
 func (a *appLogger) Errorf(format string, args ...any) { a.l.Errorf(format, args...) }
+
+// TracefContext logs at trace level tagged with the session/request ID from ctx.
+func (a *appLogger) TracefContext(ctx context.Context, format string, args ...any) {
+	WithSession(ctx, a.l).Tracef(format, args...)
+}
 
 // DebugfContext logs at debug level tagged with the session/request ID from ctx.
 func (a *appLogger) DebugfContext(ctx context.Context, format string, args ...any) {
