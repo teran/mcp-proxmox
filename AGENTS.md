@@ -64,7 +64,9 @@ contradiction, raise it with the architect.
   server accesses, so `ALLOW_DIRS`/`ALLOW_SYMLINKS` are N/A (SPEC.md §4.8).
 
 ### DevOps
-- Owns the CI pipeline (lint → arch → test → cover → mutation → build → sec).
+- Owns the CI pipeline (lint → arch → test → cover → mutation → build → sec),
+  implemented in **GitHub Actions** (`.github/workflows/ci.yml`) as the single
+  CI provider (R6).
 - Maintains reproducible local run (goreleaser build / `go run ./cmd/mcp-proxmox`) over stdio.
 - Owns **release/build via [goreleaser](https://goreleaser.com/)** (`.goreleaser.yml`):
   cross-compiles binaries/archives and auto-releases from git tags; the `Dockerfile`
@@ -79,10 +81,10 @@ contradiction, raise it with the architect.
 
 ### Go
 - Go **1.27.1** (matches the org's flagship `mcp-regcloud`; satisfies the go-sdk
-  ≥ 1.24 requirement). Module name: `github.com/teran/mcp-proxmox` — a **conscious
-  deviation from S6/N16** (internal Forgejo → local-only namespace), recorded in
-  SPEC.md §2.4/§10. Do not rename the module without a SPEC-recorded decision;
-  if the server ever becomes `go get`-able or public, switch to a local-only path.
+  ≥ 1.24 requirement). Module name: `github.com/teran/mcp-proxmox` — the repo's
+  native namespace on **GitHub.com**, recorded in SPEC.md §2.4/§10. Do not
+  rename the module without a SPEC-recorded decision; revisit the namespace if
+  the server ever becomes `go get`-able or published to a public module proxy.
 - Idiomatic Go: `gofmt`/`goimports`, errors wrapped with `%w`, no panics in library code.
 - Use the official MCP SDK: `github.com/modelcontextprotocol/go-sdk v1.8.0` (import `.../mcp`).
 - Logging: **logrus**; the core only ever sees `port.AppLogger` /
@@ -205,8 +207,8 @@ contradiction, raise it with the architect.
 - `go test -race ./...` must pass (race detector is part of CI).
 - Coverage must meet the **95%** threshold on `cover-core`. **The CI pipeline
   fails the build when total `cover-core` is below 95%** — it is a hard gate,
-  not just a local convention (both `.gitlab-ci.yml` and
-  `.forgejo/workflows/ci.yml` enforce it).
+  not just a local convention (`.github/workflows/ci.yml` enforces it via
+  `make test`).
 - gremlins mutation score must not regress below 80% on `domain`/`application` (**efficacy ≥ 80% and mutant-coverage ≥ 80%**, per `gremlins.toml` and the `--threshold-efficacy=80 --threshold-mcover=80` flags); **it is a hard gate in CI** (fails the build on survivors — no `allow_failure`/`continue-on-error`, C7/C8/N15/N19).
 - No secrets in code, config, logs, or tool output.
 

@@ -4,16 +4,16 @@
 
 # mcp-proxmox
 
-[![CI](https://img.shields.io/github/actions/workflow/status/teran/mcp-proxmox/ci.yml?branch=master&label=CI&logo=github)](https://git.homelab.teran.dev/teran/mcp-proxmox/actions)
-[![Latest Release](https://img.shields.io/github/v/release/teran/mcp-proxmox?label=release)](https://git.homelab.teran.dev/teran/mcp-proxmox/releases)
+[![CI](https://github.com/teran/mcp-proxmox/actions/workflows/ci.yml/badge.svg)](https://github.com/teran/mcp-proxmox/actions)
+[![Latest Release](https://img.shields.io/github/v/release/teran/mcp-proxmox)](https://github.com/teran/mcp-proxmox/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![MCP: stdio Local server](https://img.shields.io/badge/MCP-stdio%20Local-orange)](SPEC.md)
 [![Go Reference](https://img.shields.io/badge/godoc-reference-blue.svg)](https://pkg.go.dev/github.com/teran/mcp-proxmox)
 [![Go Version](https://img.shields.io/badge/Go-1.27.1-blue)](https://go.dev/dl/)
-[![Coverage](https://img.shields.io/badge/coverage-%3E%3D95%25-brightgreen)](https://git.homelab.teran.dev/teran/mcp-proxmox/actions)
-[![gosec](https://img.shields.io/badge/gosec-passing-brightgreen)](https://git.homelab.teran.dev/teran/mcp-proxmox/actions)
-[![govulncheck](https://img.shields.io/badge/govulncheck-passing-brightgreen)](https://git.homelab.teran.dev/teran/mcp-proxmox/actions)
-[![gremlins mutation](https://img.shields.io/badge/gremlins-%3E%3D80%25-brightgreen)](https://git.homelab.teran.dev/teran/mcp-proxmox/actions)
+[![Coverage](https://img.shields.io/badge/coverage-%3E%3D95%25-brightgreen)](https://github.com/teran/mcp-proxmox/actions)
+[![gosec](https://img.shields.io/badge/gosec-passing-brightgreen)](https://github.com/teran/mcp-proxmox/actions)
+[![govulncheck](https://img.shields.io/badge/govulncheck-passing-brightgreen)](https://github.com/teran/mcp-proxmox/actions)
+[![gremlins mutation](https://img.shields.io/badge/gremlins-%3E%3D80%25-brightgreen)](https://github.com/teran/mcp-proxmox/actions)
 
 An **MCP (Model Context Protocol) server** that exposes the REST APIs of
 **Proxmox VE** and **Proxmox Backup Server (PBS)** as a set of callable tools
@@ -425,18 +425,25 @@ goreleaser release --snapshot  # local test build without a tag
 
 ## CI/CD
 
-Two CI pipelines run the same quality gates — **lint → arch → test (`-race`) →
-cover (95% gate) → mutation → build → sec → govulncheck** — depending on where
-the repository is hosted:
+A single **GitHub Actions** pipeline (`.github/workflows/ci.yml`) runs the quality
+gates **lint → arch → test (`-race`) → cover (95% gate) → mutation → build → sec →
+govulncheck** on every push and pull request:
 
-- **GitLab** (`.gitlab-ci.yml`): stages `lint → test → build → release`; the
-  test stage enforces `go test -race`, golangci-lint, go-arch-lint, gosec,
-  govulncheck, and a **hard 95% `cover-core` gate** (the build fails below it).
-- **Forgejo Actions** (`.forgejo/workflows/ci.yml`, GitHub-Actions-compatible):
-  the same checks on every push/PR.
+- **`lint`** — `make lint` (golangci-lint + vet + gofmt + go-arch-lint + gosec +
+  govulncheck).
+- **`test`** — `make test` (`go test -race` + a **hard 95% `cover-core` gate**; the
+  build fails below it).
+- **`mutation`** — `make mutation` (gremlins 80/80) as a **hard gate** (fails on
+  surviving mutants).
+- **`secrets`** — `make secrets` (gitleaks over the **full git history**) as a
+  **hard gate**.
+- **`build`** — `make build` (goreleaser snapshot into `dist/`).
 
-Both produce the binary via goreleaser / `go build` with the git-tag version
-injected; they do **not** build the container image (see [Docker](#docker)).
+A separate **release workflow** (`.github/workflows/release.yml`) runs
+[goreleaser](https://goreleaser.com) on every git tag `v*` and publishes the
+cross-compiled binaries/archives to the **GitHub Release** (waiting for CI to
+pass first). The container image is **not** built or published by CI (see
+[Docker](#docker)).
 
 ---
 

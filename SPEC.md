@@ -123,8 +123,8 @@ mcp-proxmox/
 ├── .go-arch-lint.yml            # clean-architecture boundaries (go-arch-lint check)
 ├── .golangci.yml                # golangci-lint v2 + depguard clean-arch rule
 ├── gremlins.toml                # mutation-testing config (domain/application)
-├── .gitlab-ci.yml               # GitLab pipeline (lint → arch → test → cover → mutation → build)
-├── .forgejo/workflows/ci.yml    # Forgejo Actions CI
+├── .github/workflows/ci.yml     # GitHub Actions CI (make lint/test/mutation/secrets/build)
+├── .github/workflows/release.yml # GitHub Actions release (goreleaser on tags)
 ├── LICENSE                      # Apache-2.0, © 2026 Igor Shishkin
 ├── SPEC.md                      # this document
 ├── AGENTS.md                    # derived later
@@ -140,26 +140,23 @@ and is enforced by `.go-arch-lint.yml` (`go-arch-lint check`), not
 by a hidden `internal/` directory. Dependencies point inward only through the
 `domain/port` interfaces.
 
-**Module namespace — conscious decision (S6/N16).** The repository is hosted on
-an internal **Forgejo** instance (`git.homelab.teran.dev`), where the MCP-server
-skill's security rule S6/N16 prefers a **local-only** module/package namespace
-(never a public/external domain). We deliberately keep the Go module path
-`github.com/teran/mcp-proxmox` for two reasons:
+**Module namespace — decision.** The repository is hosted on **GitHub.com**
+(`github.com/teran/mcp-proxmox`), so the Go module path
+`github.com/teran/mcp-proxmox` is the repo's native namespace. We deliberately
+keep this path for two reasons:
 1. `teran` is the single maintainer's own identity and is used consistently
-   across the org's internal fleet (`mcp-regcloud`, `mcp-entertainment`), so the
-   path is a stable, already-established namespace — not a claim of public
-   publication.
+   across the org's fleet (`mcp-regcloud`, `mcp-entertainment`), so the
+   path is a stable, already-established namespace.
 2. Renaming the module would require rewriting every import across all packages
    plus the `pkg.go.dev`/badge references, and would provide no additional
    runtime security: this server is a **local stdio** tool with **no
    `go get` consumers** and never publishes to any public module proxy, so a
-   local-only path would not change what is fetched or trusted.
+   different namespace would not change what is fetched or trusted.
 
 **Decision:** keep `github.com/teran/mcp-proxmox` as the module path. This is a
-**recorded, deliberate deviation** from S6/N16 rather than a silent choice. If
-the project is ever made a `go get`-able library, shared across org boundaries,
-or published publicly, the module path MUST be switched to a local-only
-namespace (`git.homelab.teran.dev/teran/mcp-proxmox`) as a dedicated refactor
+**recorded, deliberate decision** rather than a silent choice. If the project is
+ever made a `go get`-able library, shared across org boundaries, or published to
+a public module proxy, the module path MUST be revisited as a dedicated refactor
 commit — see §10.
 
 **Two distinct gateways, one shared shape.** PVE and PBS are separate products
@@ -905,23 +902,21 @@ make secrets   # gitleaks detect over the full git history (hard gate)
 make build     # goreleaser snapshot into dist/
 ```
 
-The CI pipeline runs on **two providers** (`.gitlab-ci.yml`, `.forgejo/workflows/ci.yml`):
+The CI pipeline runs on **a single provider — GitHub Actions**
+(`.github/workflows/ci.yml`):
 
-- **R6 — CI provider decision.** The repository is hosted on the internal
-  **Forgejo** instance (`git.homelab.teran.dev`), whose native CI is Forgejo
-  Actions (`.forgejo/workflows/ci.yml`). A **GitLab CI** (`.gitlab-ci.yml`) is
-  additionally maintained because the org's central fleet pipeline
-  (`cloud-infra-runner.msk1`, the shared `cicd:latest` image) is GitLab-based
-  and mirrors the same gates. **Both providers are an explicit, deliberate
-  choice** (R6 permits multiple providers only when explicitly stated): the two
-  pipelines are functionally equivalent and both bind to the same `make`
-  build-system interface (R7), so they cannot drift.
-- **N31 / R7.** Neither provider invokes a language-specific command directly;
+- **R6 — CI provider decision.** The repository is hosted on **GitHub.com**
+  (`github.com/teran/mcp-proxmox`), whose native CI is **GitHub Actions**
+  (`.github/workflows/ci.yml`); the release workflow
+  (`.github/workflows/release.yml`) publishes binaries to **GitHub Releases** on
+  tags. **GitHub Actions is the single, explicit CI provider** (R6): it is the
+  repo host's native CI and the only pipeline maintained.
+- **N31 / R7.** The workflow never invokes a language-specific command directly;
   each job calls a `make` target (`make lint`/`test`/`mutation`/`build`, and
-  `gitleaks` in its dedicated image). `e2e`/`container-image` targets are not
-  declared (this is a Local stdio-only server).
+  `make secrets`/`gitleaks` in its dedicated job). `e2e`/`container-image`
+  targets are not declared (this is a Local stdio-only server).
 
-Both pipelines **fail the build on any violation**: lint (`golangci-lint`), architecture
+The GitHub Actions pipeline **fails the build on any violation**: lint (`golangci-lint`), architecture
 (`go-arch-lint`), **`go test -race`**, **gosec**, **govulncheck**, a **hard
 coverage gate** — total `cover-core` below **95%** fails the pipeline — a
 **secret scan** (`gitleaks`) over the full git history, and a
@@ -984,11 +979,10 @@ e2e`, dedicated CI job) should be added.
 
 1. **Go version:** `1.27.1` (matches the org's flagship `mcp-regcloud`; satisfies
    the go-sdk ≥ 1.24 requirement). Confirm the installed toolchain.
-2. **Module name:** `github.com/teran/mcp-proxmox` — a **conscious deviation from
-   S6/N16** (internal Forgejo → local-only namespace), recorded in §2.4. If the
-   server ever becomes a `go get`-able library or is published, rename to a
-   local-only path (`git.homelab.teran.dev/teran/mcp-proxmox`) as a dedicated
-   refactor.
+2. **Module name:** `github.com/teran/mcp-proxmox` — the repo's native namespace
+   on **GitHub.com**, recorded in §2.4. If the server ever becomes a
+   `go get`-able library or is published to a public module proxy, revisit the
+   module path as a dedicated refactor.
 3. **MCP SDK:** `github.com/modelcontextprotocol/go-sdk v1.8.0`.
 4. **Config:** environment variables via `kelseyhightower/envconfig`
    (`PVE_ENDPOINT`/`PVE_TOKEN`/`PVE_CA_CERT_PATH`, `PBS_ENDPOINT`/`PBS_TOKEN`/
