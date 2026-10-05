@@ -87,8 +87,8 @@ type pbsVMRestoreIn struct {
 	Target      string `json:"target" jsonschema:"PVE storage to restore into"`
 	VMID        string `json:"vmid,omitempty" jsonschema:"Target VM ID, or 'next' to let PVE pick the next free ID"`
 	Host        string `json:"host,omitempty" jsonschema:"PVE node hostname/IP to restore to"`
-	Password    string `json:"password,omitempty" jsonschema:"Password to authenticate to the target PVE node"`
-	Fingerprint string `json:"fingerprint,omitempty" jsonschema:"TLS fingerprint of the target PVE node"`
+	Password    string `json:"password,omitempty" jsonschema:"Password to authenticate to the target PVE node" secret:"true"`
+	Fingerprint string `json:"fingerprint,omitempty" jsonschema:"TLS fingerprint of the target PVE node" secret:"true"`
 	Pool        string `json:"pool,omitempty" jsonschema:"Resource pool to place the restored VM in"`
 	Verbose     bool   `json:"verbose,omitempty" jsonschema:"Verbose restore output"`
 	Reload      bool   `json:"reload,omitempty" jsonschema:"Reload the VM configuration after restore"`

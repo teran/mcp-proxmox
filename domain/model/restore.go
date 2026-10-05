@@ -22,13 +22,14 @@ type PBSFileRestoreRequest struct {
 // POST /admin/datastore/{store}/backups/{type}/{id}/{snapshot}/restore. Target
 // is the PVE storage to restore into; VMID is either a numeric ID or the string
 // "next" to let PVE pick the next free ID. Password/Fingerprint are used to
-// authenticate to the target PVE node and are never logged.
+// authenticate to the target PVE node and are tagged secret:"true" so any
+// redaction path that honors the tag never logs their values.
 type PBSVMRestoreRequest struct {
 	Target      string `json:"target"`
 	VMID        string `json:"vmid,omitempty"`
 	Host        string `json:"host,omitempty"`
-	Password    string `json:"password,omitempty"`
-	Fingerprint string `json:"fingerprint,omitempty"`
+	Password    string `json:"password,omitempty" secret:"true"`
+	Fingerprint string `json:"fingerprint,omitempty" secret:"true"`
 	Pool        string `json:"pool,omitempty"`
 	Verbose     bool   `json:"verbose,omitempty"`
 	Reload      bool   `json:"reload,omitempty"`

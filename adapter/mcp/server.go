@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log/slog"
+	"reflect"
 	"strings"
 	"time"
 
@@ -103,9 +104,22 @@ func logIncomingRequest(deps Deps, ctx context.Context, method string, req mcpSD
 
 // sanitizeArgs returns a JSON-ish string of the tool arguments, omitting any
 // value whose key looks sensitive (token, password, secret, key, auth, cookie,
-// credential). Current tools take only node/vmid/store names, so this is
-// defensive for future mutation tools.
+// credential, fingerprint, host_key) or whose field is tagged secret:"true"
+// (S02). Typed struct inputs (e.g. pbsVMRestoreIn) are walked reflectively so a
+// secret-tagged field is redacted even when its json name is not in the
+// heuristic list; map inputs are handled by key name. Current tools take only
+// node/vmid/store names, so this is defensive for future mutation tools.
 func sanitizeArgs(args any) string {
+	rv := reflect.ValueOf(args)
+	for rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
+		if rv.IsNil() {
+			return "{}"
+		}
+		rv = rv.Elem()
+	}
+	if rv.IsValid() && rv.Kind() == reflect.Struct {
+		return sanitizeArgsStruct(rv)
+	}
 	m, ok := args.(map[string]any)
 	if !ok {
 		b, _ := json.Marshal(args)
@@ -123,11 +137,34 @@ func sanitizeArgs(args any) string {
 	return string(b)
 }
 
+// sanitizeArgsStruct walks a typed tool-input struct and redacts any field
+// tagged secret:"true" (S02) or whose json name looks sensitive, returning the
+// remaining fields as a JSON object keyed by their json tag names.
+func sanitizeArgsStruct(v reflect.Value) string {
+	m := make(map[string]any, v.NumField())
+	t := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		sf := t.Field(i)
+		name := sf.Name
+		if jsonTag := sf.Tag.Get("json"); jsonTag != "" {
+			name = strings.Split(jsonTag, ",")[0]
+		}
+		if sf.Tag.Get("secret") == "true" || isSensitiveKey(name) {
+			m[name] = "[redacted]"
+			continue
+		}
+		m[name] = v.Field(i).Interface()
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
+}
+
 // isSensitiveKey reports whether a tool-argument key should never be logged.
 func isSensitiveKey(k string) bool {
 	switch strings.ToLower(k) {
 	case "token", "tokens", "password", "pass", "secret", "secret_key", "secretkey",
-		"api_key", "apikey", "auth", "authorization", "cookie", "credential", "credentials":
+		"api_key", "apikey", "auth", "authorization", "cookie", "credential", "credentials",
+		"fingerprint", "host_key", "hostkey":
 		return true
 	}
 	return false
