@@ -62,12 +62,14 @@ func NewServer(impl *mcpSDK.Implementation, deps Deps, opts *mcpSDK.ServerOption
 	return s
 }
 
-// logIncomingRequest emits a structured per-request log line at debug level
-// (args/in_bytes/out_bytes only at trace level) when logging is enabled. It
-// carries the tool name, source ("STDIO"), duration and outcome, and is tagged
-// with session_id/request_id from ctx. Sensitive arguments are never logged.
+// logIncomingRequest emits a structured per-request access-log line at info
+// level (SPEC.md L8 — unconditionally when logging is enabled, NOT gated behind
+// debug). args/in_bytes/out_bytes are only captured at trace level. It carries
+// the tool name, source ("STDIO"), duration and outcome, and is tagged with
+// session_id/request_id from ctx. Sensitive arguments are never logged. A nil
+// logger is a silent no-op.
 func logIncomingRequest(deps Deps, ctx context.Context, method string, req mcpSDK.Request, res mcpSDK.Result, dur time.Duration, err error) {
-	if deps.Log == nil || !deps.Log.IsLevelEnabled(logrus.DebugLevel) {
+	if deps.Log == nil {
 		return
 	}
 	fields := logrus.Fields{
@@ -96,7 +98,7 @@ func logIncomingRequest(deps Deps, ctx context.Context, method string, req mcpSD
 	}
 
 	e := logging.WithSession(ctx, deps.Log)
-	e.WithFields(fields).Debugf("mcp request: %s", method)
+	e.WithFields(fields).Infof("mcp request: %s", method)
 }
 
 // sanitizeArgs returns a JSON-ish string of the tool arguments, omitting any
