@@ -23,9 +23,9 @@ type LXCConfig struct {
 	VMID     int               `json:"vmid"`
 	Hostname string            `json:"hostname,omitempty"`
 	OSType   string            `json:"ostype,omitempty"`
-	Cores    int               `json:"cores,omitempty"`
-	Memory   int               `json:"memory,omitempty"`
-	Swap     int               `json:"swap,omitempty"`
+	Cores    FlexInt           `json:"cores,omitempty"`
+	Memory   FlexInt           `json:"memory,omitempty"`
+	Swap     FlexInt           `json:"swap,omitempty"`
 	RootFS   string            `json:"rootfs,omitempty"`
 	Networks map[string]string `json:"net,omitempty"`
 	Tags     string            `json:"tags,omitempty"`

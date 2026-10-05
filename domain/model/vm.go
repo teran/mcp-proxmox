@@ -21,13 +21,14 @@ type VM struct {
 type VMConfig struct {
 	VMID     int               `json:"vmid"`
 	Name     string            `json:"name,omitempty"`
-	Cores    int               `json:"cores,omitempty"`
-	Sockets  int               `json:"sockets,omitempty"`
-	Memory   int               `json:"memory,omitempty"`
-	Balloon  int               `json:"balloon,omitempty"`
+	Cores    FlexInt           `json:"cores,omitempty"`
+	Sockets  FlexInt           `json:"sockets,omitempty"`
+	Memory   FlexInt           `json:"memory,omitempty"`
+	Balloon  FlexInt           `json:"balloon,omitempty"`
 	OSType   string            `json:"ostype,omitempty"`
 	Boot     string            `json:"boot,omitempty"`
-	Template int               `json:"template,omitempty"`
+	Template FlexInt           `json:"template,omitempty"`
+	OnBoot   FlexInt           `json:"onboot,omitempty"`
 	Agent    string            `json:"agent,omitempty"`
 	Networks map[string]string `json:"net,omitempty"`
 	Disks    map[string]string `json:"scsi,omitempty"`
