@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/teran/mcp-proxmox/application"
 	"github.com/teran/mcp-proxmox/domain/port"
 )
 
@@ -132,4 +134,116 @@ func TestLogIncomingRequestAtInfoLevel(t *testing.T) {
 	assert.NotPanics(t, func() {
 		logIncomingRequest(Deps{}, ctx, "tools/call", req, nil, time.Millisecond, nil)
 	})
+}
+
+// newTestServerWithLogger builds an mcpSDK.Server wired through the real
+// application.App and RegisterTools path with an injected logrus logger (so
+// per-tool trace lines can be captured), returning the server plus a connected
+// client session.
+func newTestServerWithLogger(t *testing.T, app *application.App, l *logrus.Logger) (*mcpSDK.Server, *mcpSDK.ClientSession) {
+	t.Helper()
+	s := NewServer(
+		&mcpSDK.Implementation{Name: "mcp-proxmox-test", Version: "v0.0.0-test"},
+		Deps{
+			App:             app,
+			Logger:          nopLogger{},
+			Log:             l,
+			SessionID:       "test-session",
+			EnableMutations: false,
+		},
+		nil,
+	)
+	t1, t2 := mcpSDK.NewInMemoryTransports()
+	if _, err := s.Connect(context.Background(), t1, nil); err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	client := mcpSDK.NewClient(&mcpSDK.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	sess, err := client.Connect(context.Background(), t2, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { _ = sess.Close() })
+	return s, sess
+}
+
+// traceLineContaining returns the first captured logrus line (JSON) whose level
+// is trace and which contains the given substring, or "" if none matches.
+func traceLineContaining(out, sub string) string {
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		if strings.Contains(line, `"level":"trace"`) && strings.Contains(line, sub) {
+			return line
+		}
+	}
+	return ""
+}
+
+// TestPerToolTraceLine verifies that, at LOG_LEVEL=trace, a real tool call
+// through the server additionally emits a dedicated trace-level line carrying
+// the tool name and the redacted args/byte-size fields, while the info access
+// line (L08) remains present.
+func TestPerToolTraceLine(t *testing.T) {
+	var buf bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&buf)
+	l.SetFormatter(&logrus.JSONFormatter{})
+	l.SetLevel(logrus.TraceLevel)
+
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(&stubPVEGateway{}))
+	_, sess := newTestServerWithLogger(t, app, l)
+
+	callTool(t, sess, "pve_vm_list", map[string]any{"node": "pve1"})
+
+	out := buf.String()
+	traceLine := traceLineContaining(out, `"tool":"pve_vm_list"`)
+	assert.NotEmpty(t, traceLine, "expected a trace-level line with the tool name")
+	assert.Contains(t, traceLine, `"in_bytes":`)
+	assert.Contains(t, traceLine, `"out_bytes":`)
+	assert.Contains(t, traceLine, `"duration_ms":`)
+	assert.Contains(t, traceLine, `"outcome":"ok"`)
+	// The existing info access line must still be present.
+	assert.Contains(t, out, `"level":"info"`)
+}
+
+// TestPerToolTraceLineRedactsSensitiveArgs verifies a sensitive tool argument
+// (e.g. password) never reaches the trace line: it is shown as [redacted].
+func TestPerToolTraceLineRedactsSensitiveArgs(t *testing.T) {
+	var buf bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&buf)
+	l.SetFormatter(&logrus.JSONFormatter{})
+	l.SetLevel(logrus.TraceLevel)
+
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(&stubPVEGateway{}))
+	_, sess := newTestServerWithLogger(t, app, l)
+
+	callTool(t, sess, "pve_vm_list", map[string]any{"node": "pve1", "password": "hunter2"})
+
+	out := buf.String()
+	traceLine := traceLineContaining(out, `"tool":"pve_vm_list"`)
+	assert.NotEmpty(t, traceLine, "expected a trace-level line with the tool name")
+	assert.Contains(t, traceLine, "[redacted]")
+	assert.NotContains(t, traceLine, "hunter2", "sensitive argument must be redacted in the trace line")
+}
+
+// TestPerToolTraceLineInfoGated verifies the per-tool trace line is NOT emitted
+// when logrus is at info level (trace disabled) — it is trace-gated.
+func TestPerToolTraceLineInfoGated(t *testing.T) {
+	var buf bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&buf)
+	l.SetFormatter(&logrus.JSONFormatter{})
+	l.SetLevel(logrus.InfoLevel)
+
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(&stubPVEGateway{}))
+	_, sess := newTestServerWithLogger(t, app, l)
+
+	callTool(t, sess, "pve_vm_list", map[string]any{"node": "pve1"})
+
+	out := buf.String()
+	assert.NotContains(t, out, `"level":"trace"`, "per-tool trace line must be trace-gated")
+	// The info access line still appears.
+	assert.Contains(t, out, `"level":"info"`)
 }
