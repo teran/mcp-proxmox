@@ -61,12 +61,17 @@ func descWithInstructions(desc, instr string) string {
 
 // mutTool registers a mutation tool (gated by EnableMutations). It mirrors
 // roTool's uniform handler shape but with write annotations: ReadOnlyHint=false
-// and, depending on the operation, IdempotentHint. `idempotent` is true for
-// create/resize/migrate/ha-add (safe to re-issue) and false for
-// backup/verify/gc/prune/sync-start (each call starts a new task). A mutation
-// tool is destructive only when the underlying operation is (all current tools
-// here are non-destructive, so DestructiveHint is always false).
-func mutTool[In, Out any](s *mcpSDK.Server, name, title, desc, instr string, log toolLogger, idempotent bool, fn func(context.Context, In) (Out, error)) {
+// and, depending on the operation, IdempotentHint. `idempotent` is true only for
+// genuinely safe-to-repeat operations (resize/migrate/ha-add) and false for
+// everything that starts a fresh side-effect, including create/clone/restore.
+// `destructive` is variadic and defaults to false; pass true only for truly
+// destructive delete operations (S12) so their DestructiveHint is set, while
+// every other mutation stays non-destructive.
+func mutTool[In, Out any](s *mcpSDK.Server, name, title, desc, instr string, log toolLogger, idempotent bool, fn func(context.Context, In) (Out, error), destructive ...bool) {
+	destructiveHint := false
+	if len(destructive) > 0 {
+		destructiveHint = destructive[0]
+	}
 	mcpSDK.AddTool(s, &mcpSDK.Tool{
 		Name:        name,
 		Title:       title,
@@ -76,7 +81,7 @@ func mutTool[In, Out any](s *mcpSDK.Server, name, title, desc, instr string, log
 			ReadOnlyHint:    false,
 			IdempotentHint:  idempotent,
 			OpenWorldHint:   boolPtr(false),
-			DestructiveHint: boolPtr(false),
+			DestructiveHint: boolPtr(destructiveHint),
 		},
 	}, func(ctx context.Context, _ *mcpSDK.CallToolRequest, in In) (*mcpSDK.CallToolResult, any, error) {
 		out, err := fn(ctx, in)

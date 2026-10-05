@@ -526,7 +526,7 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 				return nil, err
 			}
 			return map[string]any{"upid": t.UPID}, nil
-		})
+		}, true)
 
 	mutTool(s, "pve_vm_clone", "Clone QEMU VM",
 		"Clone a QEMU VM.",
@@ -572,7 +572,7 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 				return nil, err
 			}
 			return map[string]any{"upid": t.UPID}, nil
-		})
+		}, true)
 
 	mutTool(s, "pve_vm_snapshot_rollback", "Roll back QEMU VM to snapshot",
 		"Roll a QEMU VM back to a snapshot.",
@@ -638,7 +638,7 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 				return nil, err
 			}
 			return map[string]any{"upid": t.UPID}, nil
-		})
+		}, true)
 
 	mutTool(s, "pve_lxc_clone", "Clone LXC container",
 		"Clone an LXC container.",
@@ -682,7 +682,7 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 				return nil, err
 			}
 			return map[string]any{"upid": t.UPID}, nil
-		})
+		}, true)
 
 	mutTool(s, "pve_lxc_snapshot_rollback", "Roll back LXC container to snapshot",
 		"Roll an LXC container back to a snapshot.",
