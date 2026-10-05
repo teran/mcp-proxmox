@@ -1,0 +1,61 @@
+# GitHub Actions release workflow for mcp-proxmox.
+#
+# Dedicated binary release step (B01/B02): runs goreleaser on every git tag
+# `v*` and publishes the cross-compiled binaries/archives to the GitHub
+# Release. This is a Local (stdio-only) server — no container image is built
+# or published (B03/R01).
+#
+# "Depend on CI/tests passing": the goreleaser job blocks until the `CI`
+# workflow for the pushed commit concludes SUCCESS before publishing. A failing
+# or cancelled CI run never triggers a release (no continue-on-error).
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: "1.27"             # keep in sync with go.mod (go 1.27.1)
+
+jobs:
+  goreleaser:
+    name: goreleaser (binaries)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0         # goreleaser needs the full tag history
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "${{ env.GO_VERSION }}"
+          cache: true
+
+      - name: Wait for CI to pass
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Block until the `CI` workflow for this commit (tag push) concludes
+          # SUCCESS. Never publish on a failing/cancelled CI run.
+          for i in $(seq 1 60); do
+            conclusion=$(gh api \
+              "repos/${{ github.repository }}/actions/runs?event=push&head_sha=${{ github.sha }}" \
+              --jq '[.workflow_runs[] | select(.name=="CI")][0].conclusion // empty' 2>/dev/null || true)
+            case "$conclusion" in
+              success) echo "CI passed: $conclusion"; exit 0 ;;
+              failure|timed_out|action_required|cancelled|stale) echo "CI failed: $conclusion"; exit 1 ;;
+              *) echo "CI not finished ($conclusion) — retry $i/60"; sleep 30 ;;
+            esac
+          done
+          echo "timed out waiting for CI"; exit 1
+
+      - name: goreleaser release (publish binaries)
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean --skip=validate
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"

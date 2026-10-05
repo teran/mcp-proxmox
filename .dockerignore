@@ -1,0 +1,10 @@
+# Keep the image build isolated: the Dockerfile only consumes the goreleaser
+# artifact from dist/, so exclude everything else from the build context.
+.git
+.gitlab-ci.yml
+.github
+.forgejo
+bin
+coverage.out
+coverage-core.out
+*.md

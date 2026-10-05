@@ -1,0 +1,128 @@
+# go-arch-lint: enforce clean-architecture (inward-only) package boundaries.
+# See https://github.com/fe3dback/go-arch-lint
+#
+# Layer model (from SPEC.md §2 / ARCHITECTURE.md):
+#   domain/model          -> nothing (std only)
+#   domain/port           -> domain/model
+#   application/...       -> domain/model, domain/port
+#   adapter/...           -> domain/model, domain/port, application/... (adapters may use each other)
+#   cmd/mcp-proxmox       -> everything (composition root)
+#
+# External third-party packages (MCP SDK, logrus, envconfig, net/http, ...) are
+# NOT part of the layer model — they are legitimately used inside adapters, so
+# `depOnAnyVendor` is enabled to avoid flagging them. The real value this linter
+# adds is the *project* layer boundaries above, enforced via `deps.mayDependOn`.
+version: 3
+
+allow:
+  depOnAnyVendor: true
+  # Only enforce package *import* boundaries. Disable deepScan (method-call /
+  # dependency-injection analysis): this codebase uses the standard clean-arch
+  # DI pattern where the composition root injects adapters into application
+  # With*Client(...) methods, which deepScan would misreport as violations.
+  deepScan: false
+
+# Exclude test files from analysis (hermetic tests import stubs / extra deps).
+excludeFiles:
+  - "^.*_test\\.go$"
+
+components:
+  model:              { in: domain/model }
+  port:               { in: domain/port }
+  application:        { in: [ application, application/** ] }
+
+  adapter_pve:        { in: adapter/pve }
+  adapter_pbs:        { in: adapter/pbs }
+  adapter_token:      { in: adapter/token }
+  adapter_logging:    { in: adapter/logging }
+  adapter_config:     { in: adapter/config }
+  adapter_mcp:        { in: adapter/mcp }
+
+  cmd:                { in: [ cmd, cmd/** ] }
+
+deps:
+  # NOTE: `model` is intentionally omitted — it must depend on nothing
+  # (std only). If it ever starts importing another project package, the
+  # linter will flag it (unlisted components are not allowed project deps).
+
+  port:
+    mayDependOn:
+      - model
+
+  application:
+    mayDependOn:
+      - model
+      - port
+      - application  # intra-layer: application subpackages may use each other
+
+  # Adapters may depend on the inner layers and on each other.
+  adapter_pve:
+    mayDependOn:
+      - model
+      - port
+      - application
+      - adapter_pve
+      - adapter_pbs
+      - adapter_token
+      - adapter_logging
+      - adapter_config
+      - adapter_mcp
+  adapter_pbs:
+    mayDependOn:
+      - model
+      - port
+      - application
+      - adapter_pve
+      - adapter_pbs
+      - adapter_token
+      - adapter_logging
+      - adapter_config
+      - adapter_mcp
+  adapter_token:
+    mayDependOn:
+      - model
+      - port
+      - application
+      - adapter_pve
+      - adapter_pbs
+      - adapter_token
+      - adapter_logging
+      - adapter_config
+      - adapter_mcp
+  adapter_logging:
+    mayDependOn:
+      - model
+      - port
+      - application
+      - adapter_pve
+      - adapter_pbs
+      - adapter_token
+      - adapter_logging
+      - adapter_config
+      - adapter_mcp
+  adapter_config:
+    mayDependOn:
+      - model
+      - port
+      - application
+      - adapter_pve
+      - adapter_pbs
+      - adapter_token
+      - adapter_logging
+      - adapter_config
+      - adapter_mcp
+  adapter_mcp:
+    mayDependOn:
+      - model
+      - port
+      - application
+      - adapter_pve
+      - adapter_pbs
+      - adapter_token
+      - adapter_logging
+      - adapter_config
+      - adapter_mcp
+
+  # Composition root depends on everything.
+  cmd:
+    anyProjectDeps: true

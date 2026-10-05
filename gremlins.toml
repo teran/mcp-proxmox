@@ -1,0 +1,40 @@
+# gremlins.toml — mutation testing configuration (https://gremlins.dev)
+#
+# Goal (SPEC.md §8.3): mutation efficacy >= 80% on the core packages `domain`
+# and `application`. Package selection is done via the positional path argument
+# to `gremlins unleash` (this schema has no `packages` key); generated mocks are
+# excluded via the `-E` flag in the Makefile `mutation` target.
+#
+# schema: https://gremlins.dev/schema/configuration.json
+
+[unleash]
+  [unleash.threshold]
+    # Test efficacy: percent of KILLED over KILLED+LIVED (SPEC: >= 80%).
+    efficacy = 80.0
+    # Mutant coverage: percent of KILLED+LIVED over total mutants (SPEC C8GO:
+    # >= 80%). Raised from 0.0 to 80.0 so the mutation hard gate enforces both
+    # quality dimensions, matching `--threshold-mcover=80` in the Makefile/CI.
+    mutant-coverage = 80.0
+
+# Default mutant set. Only the default-enabled mutators are used; the advanced
+# ones (invert-assignments, invert-bitwise, ...) are left disabled.
+[mutants.arithmetic-base]
+  enabled = true
+[mutants.conditionals-boundary]
+  enabled = true
+[mutants.conditionals-negation]
+  enabled = true
+[mutants.increment-decrement]
+  enabled = true
+[mutants.invert-negatives]
+  enabled = true
+[mutants.invert-loopctrl]
+  enabled = false
+[mutants.invert-assignments]
+  enabled = false
+[mutants.invert-bitwise]
+  enabled = false
+[mutants.invert-bwassign]
+  enabled = false
+[mutants.remove-self-assignments]
+  enabled = false
