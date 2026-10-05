@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/teran/mcp-proxmox/adapter/token"
+	"github.com/teran/mcp-proxmox/domain/model"
 	"github.com/teran/mcp-proxmox/domain/port"
 )
 
@@ -230,6 +231,31 @@ func TestGateway_GetVMConfig_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 100, cfg.VMID)
 	assert.Equal(t, "web", cfg.Name)
+	assert.Equal(t, "/api2/json/nodes/pve1/qemu/100/config", rec.path)
+}
+
+// TestGateway_GetVMConfig_StringNumericFields verifies GetVMConfig decodes
+// numeric config fields that Proxmox VE emits as JSON strings (the conformance
+// bug that previously produced
+// "json: cannot unmarshal string into Go struct field VMConfig.memory of type
+// int"). This mirrors the real failure path.
+func TestGateway_GetVMConfig_StringNumericFields(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, 200, `{"data":{"vmid":100,"name":"web","memory":"8192","cores":"2","sockets":"1","balloon":"512","template":"0","onboot":"1","ostype":"l26"}}`, rec)
+	g, _ := newTestGateway(t, srv)
+
+	cfg, err := g.GetVMConfig(context.Background(), "pve1", 100)
+	skipIfStub(t, err)
+	require.NoError(t, err)
+
+	assert.Equal(t, 100, cfg.VMID)
+	assert.Equal(t, "web", cfg.Name)
+	assert.Equal(t, model.FlexInt(8192), cfg.Memory)
+	assert.Equal(t, model.FlexInt(2), cfg.Cores)
+	assert.Equal(t, model.FlexInt(1), cfg.Sockets)
+	assert.Equal(t, model.FlexInt(512), cfg.Balloon)
+	assert.Equal(t, model.FlexInt(0), cfg.Template)
+	assert.Equal(t, model.FlexInt(1), cfg.OnBoot)
 	assert.Equal(t, "/api2/json/nodes/pve1/qemu/100/config", rec.path)
 }
 
