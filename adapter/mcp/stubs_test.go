@@ -701,6 +701,7 @@ var _ port.PBSGateway = (*stubPBSGateway)(nil)
 // nopLogger is a no-op port.AppLogger for tests.
 type nopLogger struct{}
 
+func (nopLogger) Tracef(string, ...any) {}
 func (nopLogger) Debugf(string, ...any) {}
 func (nopLogger) Infof(string, ...any)  {}
 func (nopLogger) Warnf(string, ...any)  {}

@@ -18,6 +18,7 @@ type captureLogger struct {
 	lines []string
 }
 
+func (c *captureLogger) Tracef(f string, a ...any) { c.lines = append(c.lines, "trace") }
 func (c *captureLogger) Debugf(f string, a ...any) { c.lines = append(c.lines, "debug") }
 func (c *captureLogger) Infof(f string, a ...any)  { c.lines = append(c.lines, "info") }
 func (c *captureLogger) Warnf(f string, a ...any)  { c.lines = append(c.lines, "warn") }

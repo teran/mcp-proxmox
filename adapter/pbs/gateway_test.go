@@ -22,6 +22,7 @@ import (
 // noopLogger is a no-op port.AppLogger for gateway tests.
 type noopLogger struct{}
 
+func (noopLogger) Tracef(string, ...any) {}
 func (noopLogger) Debugf(string, ...any) {}
 func (noopLogger) Infof(string, ...any)  {}
 func (noopLogger) Warnf(string, ...any)  {}

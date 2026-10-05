@@ -13,6 +13,7 @@ type dummyLogger struct {
 	lines []string
 }
 
+func (d *dummyLogger) Tracef(format string, args ...any) { d.add("trace", format, args...) }
 func (d *dummyLogger) Debugf(format string, args ...any) { d.add("debug", format, args...) }
 func (d *dummyLogger) Infof(format string, args ...any)  { d.add("info", format, args...) }
 func (d *dummyLogger) Warnf(format string, args ...any)  { d.add("warn", format, args...) }
@@ -36,6 +37,7 @@ type awareLogger struct {
 	ctxCalls int
 }
 
+func (a *awareLogger) TracefContext(ctx context.Context, format string, args ...any) { a.ctxCalls++ }
 func (a *awareLogger) DebugfContext(ctx context.Context, format string, args ...any) { a.ctxCalls++ }
 func (a *awareLogger) InfofContext(ctx context.Context, format string, args ...any)  { a.ctxCalls++ }
 func (a *awareLogger) WarnfContext(ctx context.Context, format string, args ...any)  { a.ctxCalls++ }
@@ -58,13 +60,14 @@ func TestCtxLoggerFallsBackToPlain(t *testing.T) {
 	d := &dummyLogger{}
 	c := NewCtxLogger(d)
 
+	c.Tracef(context.Background(), "trc %d", 9)
 	c.Debugf(context.Background(), "dbg %d", 1)
 	c.Infof(context.Background(), "inf")
 	c.Warnf(context.Background(), "wrn")
 	c.Errorf(context.Background(), "err")
 
 	got := d.lines
-	want := []string{"debug:dbg %d", "info:inf", "warn:wrn", "error:err"}
+	want := []string{"trace:trc %d", "debug:dbg %d", "info:inf", "warn:wrn", "error:err"}
 	if len(got) != len(want) {
 		t.Fatalf("expected %d lines, got %d: %v", len(want), len(got), got)
 	}
@@ -79,13 +82,14 @@ func TestCtxLoggerUsesAwarePath(t *testing.T) {
 	a := &awareLogger{}
 	c := NewCtxLogger(a)
 
+	c.Tracef(context.Background(), "trc")
 	c.Debugf(context.Background(), "dbg")
 	c.Infof(context.Background(), "inf")
 	c.Warnf(context.Background(), "wrn")
 	c.Errorf(context.Background(), "err")
 
-	if a.ctxCalls != 4 {
-		t.Fatalf("expected 4 ctx-aware calls, got %d", a.ctxCalls)
+	if a.ctxCalls != 5 {
+		t.Fatalf("expected 5 ctx-aware calls, got %d", a.ctxCalls)
 	}
 	// No plain lines should have been recorded.
 	if len(a.lines) != 0 {
@@ -96,6 +100,7 @@ func TestCtxLoggerUsesAwarePath(t *testing.T) {
 func TestCtxLoggerNilIsNoop(t *testing.T) {
 	var c CtxLogger // zero value: plain and aware are nil
 	// Must not panic.
+	c.Tracef(context.Background(), "trc")
 	c.Debugf(context.Background(), "dbg")
 	c.Infof(context.Background(), "inf")
 	c.Warnf(context.Background(), "wrn")

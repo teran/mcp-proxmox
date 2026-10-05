@@ -13,6 +13,7 @@ import (
 // nopAppLogger is a no-op AppLogger for the App facade tests.
 type nopAppLogger struct{}
 
+func (nopAppLogger) Tracef(string, ...any) {}
 func (nopAppLogger) Debugf(string, ...any) {}
 func (nopAppLogger) Infof(string, ...any)  {}
 func (nopAppLogger) Warnf(string, ...any)  {}
