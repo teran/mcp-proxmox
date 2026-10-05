@@ -36,11 +36,22 @@ const (
 	emulatorListenPort = 8080
 
 	// emulatorImage is the base image used for the emulator container. The
-	// emulator is a static Go binary, so any minimal Linux image works; it can
-	// be overridden for offline/alternative environments via the
-	// MCP_PROXMOX_E2E_IMAGE env var.
-	emulatorImage = "alpine:latest"
+	// emulator is a static Go binary, so any minimal Linux image works. The
+	// fully-qualified name (index.docker.io/library/alpine) is used so the
+	// harness's IMAGE_PREFIX handling resolves it against a mirror without
+	// ambiguity. It can be overridden for offline/alternative environments via
+	// the MCP_PROXMOX_E2E_IMAGE env var.
+	emulatorImage = "index.docker.io/library/alpine:latest"
 )
+
+// emulatorImageName returns the base image for the emulator container,
+// defaulting to emulatorImage unless overridden via MCP_PROXMOX_E2E_IMAGE.
+func emulatorImageName() string {
+	if v := os.Getenv("MCP_PROXMOX_E2E_IMAGE"); v != "" {
+		return v
+	}
+	return emulatorImage
+}
 
 // TestPVEToolRoundTrip drives the real server over stdio against the emulator
 // and asserts a real PVE tool returns the emulator's canned data.
@@ -64,7 +75,7 @@ func TestPVEToolRoundTrip(t *testing.T) {
 	bindings := docker.NewPortBindings().PortDNAT(docker.ProtoTCP, emulatorListenPort)
 	c, err := docker.NewContainerWithLifecycle(
 		emulator,
-		emulatorImage,
+		emulatorImageName(),
 		[]string{"/usr/local/bin/emulator", "-addr", ":8080"},
 		docker.NewEnvironment(),
 		bindings,
