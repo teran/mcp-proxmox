@@ -36,13 +36,43 @@ func TestSanitizeArgs(t *testing.T) {
 }
 
 func TestIsSensitiveKey(t *testing.T) {
-	for _, k := range []string{"token", "password", "secret_key", "auth", "api_key", "cookie", "credential"} {
+	for _, k := range []string{"token", "password", "secret_key", "auth", "api_key", "cookie", "credential",
+		"fingerprint", "host_key", "hostkey"} {
 		assert.True(t, isSensitiveKey(k), "expected %q sensitive", k)
 	}
 	for _, k := range []string{"node", "vmid", "store", "upid", "backup_id"} {
 		assert.False(t, isSensitiveKey(k), "expected %q not sensitive", k)
 	}
 }
+
+// secretTagInput models a tool input struct whose sensitive fields are tagged
+// `secret:"true"` (S02 conformance fix). Fields tagged this way must be redacted
+// in sanitized args even though their json names are not in the heuristic list.
+type secretTagInput struct {
+	Node        string `json:"node"`
+	Password    string `json:"password,omitempty" secret:"true"`
+	Fingerprint string `json:"fingerprint,omitempty" secret:"true"`
+	Pool        string `json:"pool,omitempty"`
+}
+
+// TestSanitizeArgsSecretTag verifies sanitizeArgs honors the `secret:"true"`
+// struct tag (reflect-based) in addition to the key-name heuristic, so a secret
+// carried in a typed struct input is redacted and never reaches the log.
+func TestSanitizeArgsSecretTag(t *testing.T) {
+	out := sanitizeArgs(secretTagInput{
+		Node:        "pve1",
+		Password:    "hunter2",
+		Fingerprint: "SHA256:AA:BB",
+		Pool:        "pool1",
+	})
+
+	assert.Contains(t, out, `"node":"pve1"`)
+	assert.Contains(t, out, `"pool":"pool1"`)
+	assert.NotContains(t, out, "hunter2", "password tagged secret must be redacted")
+	assert.NotContains(t, out, "SHA256:AA:BB", "fingerprint tagged secret must be redacted")
+	assert.Contains(t, out, "[redacted]")
+}
+
 
 // TestLogIncomingRequest verifies the per-request access log is emitted at
 // info level (L08 — NOT gated behind debug), carries tool/source/duration/
