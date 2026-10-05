@@ -144,16 +144,19 @@ func TestMutationToolErrorPropagation(t *testing.T) {
 
 // TestMutationToolAnnotations verifies the MCP ToolAnnotations on the mutation
 // tools: ReadOnlyHint=false, OpenWorldHint=false, DestructiveHint=false, and
-// IdempotentHint true for safe-to-repeat operations and false for task-starting
-// operations (SPEC.md §2.5 / helpers.go mutTool).
+// IdempotentHint true only for genuinely safe-to-repeat operations
+// (resize/migrate/ha-add) and false for everything that starts a fresh
+// side-effect — including pve_vm_create, which is NOT idempotent because a
+// repeated create provisions a second VM (SPEC.md §2.5 / helpers.go mutTool,
+// X02 conformance fix).
 func TestMutationToolAnnotations(t *testing.T) {
 	app := application.New(nopLogger{}, "v1.0.0",
 		application.WithPVE(&stubPVEGateway{}), application.WithPBS(&stubPBSGateway{}))
 	_, sess := newTestServer(t, app, true)
 	tools := toolsByName(t, sess)
 
-	idempotent := []string{"pve_vm_create", "pve_vm_resize", "pve_vm_migrate", "pve_ha_add"}
-	nonIdempotent := []string{"pve_vm_backup", "pbs_verify_start", "pbs_gc_start", "pbs_prune_start", "pbs_sync_start"}
+	idempotent := []string{"pve_vm_resize", "pve_vm_migrate", "pve_ha_add"}
+	nonIdempotent := []string{"pve_vm_create", "pve_vm_backup", "pbs_verify_start", "pbs_gc_start", "pbs_prune_start", "pbs_sync_start"}
 
 	for _, name := range append(append([]string{}, idempotent...), nonIdempotent...) {
 		tl, ok := tools[name]
