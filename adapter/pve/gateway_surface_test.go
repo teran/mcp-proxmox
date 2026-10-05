@@ -145,7 +145,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 				cfg, err := g.GetVMConfig(context.Background(), "pve1", 100)
 				if assert.NoError(t, err) {
 					assert.Equal(t, 100, cfg.VMID)
-					assert.Equal(t, 2, cfg.Cores)
+					assert.Equal(t, model.FlexInt(2), cfg.Cores)
 				}
 				return err
 			},
