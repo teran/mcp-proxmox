@@ -44,15 +44,15 @@ func TestIsSensitiveKey(t *testing.T) {
 	}
 }
 
-// TestLogIncomingRequest verifies the per-request structured log is emitted
-// only when debug is enabled, carries tool/source/duration/outcome fields and
-// the session/request IDs, and redacts args.
+// TestLogIncomingRequest verifies the per-request access log is emitted at
+// info level (L08 — NOT gated behind debug), carries tool/source/duration/
+// outcome fields and the session/request IDs, and redacts sensitive args.
 func TestLogIncomingRequest(t *testing.T) {
 	var buf bytes.Buffer
 	l := logrus.New()
 	l.SetOutput(&buf)
 	l.SetFormatter(&logrus.JSONFormatter{})
-	l.SetLevel(logrus.DebugLevel)
+	l.SetLevel(logrus.InfoLevel)
 
 	deps := Deps{Log: l}
 	ctx := port.WithSessionID(context.Background(), "sess")
@@ -77,21 +77,29 @@ func TestLogIncomingRequest(t *testing.T) {
 	assert.Contains(t, buf.String(), `"outcome":"error"`)
 }
 
-// TestLogIncomingRequestDisabled verifies nothing is logged when debug is off or
-// the logger is nil.
-func TestLogIncomingRequestDisabled(t *testing.T) {
+// TestLogIncomingRequestAtInfoLevel verifies the per-request access line is
+// emitted at info level even when trace/debug are disabled (L08 conformance
+// fix): the line must NOT be suppressed at Info. A nil logger stays a silent
+// no-op.
+func TestLogIncomingRequestAtInfoLevel(t *testing.T) {
 	var buf bytes.Buffer
 	l := logrus.New()
 	l.SetOutput(&buf)
-	l.SetLevel(logrus.InfoLevel) // debug disabled
+	l.SetFormatter(&logrus.JSONFormatter{})
+	l.SetLevel(logrus.InfoLevel) // debug/trace disabled, info enabled
 
 	deps := Deps{Log: l}
-	ctx := context.Background()
+	ctx := port.WithSessionID(context.Background(), "sess")
 	req := &mcpSDK.ServerRequest[*mcpSDK.CallToolParams]{Params: &mcpSDK.CallToolParams{Name: "x"}}
-	logIncomingRequest(deps, ctx, "tools/call", req, nil, time.Millisecond, nil)
-	assert.Empty(t, buf.String())
 
-	// nil logger is a no-op.
+	logIncomingRequest(deps, ctx, "tools/call", req, nil, time.Millisecond, nil)
+
+	// The access line must be present at info level.
+	assert.NotEmpty(t, buf.String(), "access log must be emitted at info level")
+	assert.Contains(t, buf.String(), `"source":"STDIO"`)
+	assert.Contains(t, buf.String(), `"session_id":"sess"`)
+
+	// nil logger is a silent no-op: no panic, no output.
 	assert.NotPanics(t, func() {
 		logIncomingRequest(Deps{}, ctx, "tools/call", req, nil, time.Millisecond, nil)
 	})
