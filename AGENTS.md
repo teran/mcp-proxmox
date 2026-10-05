@@ -57,6 +57,11 @@ contradiction, raise it with the architect.
   switch; self-signed/custom CAs are supported only via a `ca_cert_path` per
   backend (used to build the client TLS `RootCAs`).
 - Verifies the auth adapters don't leak credentials via error messages or logs.
+- **No user-supplied local filesystem access (S04):** this is a Local stdio server
+  that performs **no user-supplied local filesystem access** — the only file I/O
+  is reading `ca_cert_path` (per backend, for the TLS `RootCAs`) and writing
+  `LOG_FILENAME` when `LOG_LEVEL` is set; no tool argument names a local path the
+  server accesses, so `ALLOW_DIRS`/`ALLOW_SYMLINKS` are N/A (SPEC.md §4.8).
 
 ### DevOps
 - Owns the CI pipeline (lint → arch → test → cover → mutation → build → sec).

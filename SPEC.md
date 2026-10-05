@@ -462,6 +462,22 @@ apply here:
 - **Concurrency (X5).** Not applicable — there are no file/DB writes to
   serialize; the server issues independent HTTP requests per call.
 
+### 4.8 No user-supplied local filesystem access (S04)
+
+This is a **Local stdio server** that performs **no user-supplied local
+filesystem access**. It never opens, reads, writes, lists, or walks any local
+path named by a tool argument — no tool argument references a path the server
+accesses on its own host. The **only** file I/O the process ever performs is:
+
+- reading `ca_cert_path` (**per backend**, `PVE_CA_CERT_PATH` /
+  `PBS_CA_CERT_PATH`) to build the TLS `RootCAs` for the outbound HTTPS client;
+- writing `LOG_FILENAME` (default `/tmp/mcp-proxmox.log`) when `LOG_LEVEL` is
+  set.
+
+Because no tool argument names a local path the server touches,
+`ALLOW_DIRS` / `ALLOW_SYMLINKS` (and any client-side filesystem sandboxing) are
+**N/A** for this server — there is nothing to sandbox on the server side.
+
 ---
 
 ## 5. Logging
