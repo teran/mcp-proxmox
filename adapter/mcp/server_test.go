@@ -73,7 +73,6 @@ func TestSanitizeArgsSecretTag(t *testing.T) {
 	assert.Contains(t, out, "[redacted]")
 }
 
-
 // TestLogIncomingRequest verifies the per-request access log is emitted at
 // info level (L08 — NOT gated behind debug), carries tool/source/duration/
 // outcome fields and the session/request IDs, and redacts sensitive args.
