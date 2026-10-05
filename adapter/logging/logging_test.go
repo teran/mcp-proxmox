@@ -243,12 +243,41 @@ func TestLogrusHandler(t *testing.T) {
 	})
 
 	t.Run("slogToLogrus mapping", func(t *testing.T) {
-		assert.Equal(t, logrus.DebugLevel, slogToLogrus(-8))
-		assert.Equal(t, logrus.DebugLevel, slogToLogrus(-4))
+		// The SDK's most verbose events (debug and below) must surface only at
+		// logrus trace level so they stay hidden unless LOG_LEVEL=trace.
+		assert.Equal(t, logrus.TraceLevel, slogToLogrus(-8))
+		assert.Equal(t, logrus.TraceLevel, slogToLogrus(-4))
 		assert.Equal(t, logrus.InfoLevel, slogToLogrus(0))
 		assert.Equal(t, logrus.WarnLevel, slogToLogrus(4))
 		assert.Equal(t, logrus.ErrorLevel, slogToLogrus(8))
 	})
+}
+
+// TestSlogDebugSurfacesAtTraceOnly verifies that an SDK slog debug record is
+// emitted as a logrus TRACE line when trace is enabled, and is suppressed (the
+// handler reports it disabled) when logrus is only at debug level — so the SDK's
+// most verbose events never appear unless LOG_LEVEL=trace.
+func TestSlogDebugSurfacesAtTraceOnly(t *testing.T) {
+	var buf bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&buf)
+	l.SetFormatter(&logrus.JSONFormatter{})
+	h := NewLogrusHandler(l)
+
+	// At trace level the SDK debug record must be emitted as a logrus trace line.
+	l.SetLevel(logrus.TraceLevel)
+	require.True(t, h.Enabled(context.Background(), slog.LevelDebug),
+		"slog debug must be enabled when logrus is at trace")
+	require.NoError(t, h.Handle(context.Background(), *newSlogRecord(slog.LevelDebug, "sdk debug")))
+	out := buf.String()
+	assert.Contains(t, out, `"level":"trace"`, "SDK debug must map to logrus trace, not debug")
+	assert.Contains(t, out, `"msg":"sdk debug"`)
+
+	// At debug level (trace disabled) the same SDK debug record must NOT appear.
+	buf.Reset()
+	l.SetLevel(logrus.DebugLevel)
+	assert.False(t, h.Enabled(context.Background(), slog.LevelDebug),
+		"slog debug must not be enabled when logrus is only at debug")
 }
 
 func TestNewSlogLogger(t *testing.T) {
