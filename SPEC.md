@@ -546,15 +546,22 @@ through `wrapOutput` → `sanitizeOutput` (`adapter/mcp/helpers.go`) before
 reaching the MCP client:
 
 - **S2 (no secret leakage):** any map key whose name looks sensitive (`token`,
-  `secret`, `api_key`, `auth`, `password`, `credential`, …) is replaced with
-  `[redacted]` in tool output. The typed domain models returned by tools carry
-  no secret fields — API tokens never enter the model or the output path — so
-  this is a defensive guarantee for any map-based output.
-- **S9 (output validation & sanitization):** the SDK validates every tool result
-  against the `outputSchema` derived from the typed return type (via
-  `applySchema`), and `stripControl` removes ANSI escape sequences and C0
-  control bytes from string values so no raw escape/control bytes can reach the
-  client.
+  `secret`, `api_key`, `auth`, `password`, `credential`, `fingerprint`, …) is
+  replaced with `[redacted]` in tool output. The typed domain models returned by
+  tools carry no secret fields — API tokens never enter the model or the output
+  path — so this is a defensive guarantee for any map-based output.
+- **S9 (output sanitization):** output is NOT schema-validated per tool. Tool
+  handlers return `Out == any` (not a concrete typed output), so no per-tool
+  `outputSchema` is generated and the SDK does not validate results against one.
+  What actually happens to every result: it is wrapped into a JSON object
+  (`wrapOutput` — top-level slices/scalars are wrapped in `{"items":...}` /
+  `{"value":...}`), passed through `sanitizeOutput` (which redacts sensitive map
+  keys per S2 and runs `stripControl` to remove ANSI escape sequences and C0
+  control bytes from string values), and only then returned as the tool's
+  structured content. In a future pass, either type `Out` to a concrete model or
+  set an explicit `Tool.OutputSchema` so the SDK can validate each result against
+  a derived schema; today the guarantee is wrap + redact + strip, not schema
+  validation.
 
 Input arguments are likewise redacted in log lines (`sanitizeArgs`, §5.1c) using
 the same sensitive-key policy.
