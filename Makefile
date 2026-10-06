@@ -37,7 +37,10 @@ build:
 test:
 	$(GO) test -race ./...
 	$(GO) test ./... -coverprofile=$(COVER_OUT)
-	awk '!/\/cmd\/mcp-proxmox\//' $(COVER_OUT) > $(COVER_CORE)
+	# cover-core = all real code except the composition root (cmd/mcp-proxmox)
+	# and the e2e test-support packages (e2e/emulator has no tests by design and
+	# is not part of the hermetic core coverage gate).
+	awk '!/\/cmd\/mcp-proxmox\// && !/^github.com\/teran\/mcp-proxmox\/e2e\//' $(COVER_OUT) > $(COVER_CORE)
 	cov=$$($(GO) tool cover -func=$(COVER_CORE) | tail -1 | awk '{print $$NF}' | tr -d '%'); \
 		echo "cover-core: $$cov%"; \
 		if ! awk -v c="$$cov" 'BEGIN { exit !(c >= 95) }'; then \
