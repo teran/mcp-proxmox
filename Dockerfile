@@ -4,7 +4,8 @@
 # The binary is NOT built here. Build it first with goreleaser, e.g.:
 #   GOOS=linux GOARCH=amd64 goreleaser build --snapshot --clean \
 #     --single-target --id mcp-proxmox --output dist/mcp-proxmox
-# then build the image. See `make image` (Makefile) / README.md.
+# then build the image from this Dockerfile (there is no `make image` target —
+# the Makefile exposes build/test/lint/mutation/secrets/e2e; see AGENTS.md).
 #
 # Produces a minimal `FROM scratch` runtime image carrying only the single
 # static binary plus the CA certificate bundle (required for TLS to the

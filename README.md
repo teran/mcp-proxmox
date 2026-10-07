@@ -368,6 +368,19 @@ Design coverage target is **95%+** (measured by `cover-core`, excluding generate
 mocks and the composition root); tests are hermetic (mocks / `httptest` / stubs —
 no real network). `go test -race ./...` and `govulncheck ./...` are part of CI.
 
+In addition to the hermetic unit tests, a **hermetic e2e suite** lives in
+[`e2e/`](./e2e) (build-tagged `//go:build e2e`): it runs an in-repo emulator of
+the Proxmox VE / PBS REST APIs (`e2e/emulator`) in a Docker container via
+`go-docker-testsuite`, builds the real binary, and drives the MCP protocol over
+stdio to assert a real tool round-trip. Run it with:
+
+```sh
+make e2e   # hermetic e2e via go-docker-testsuite against e2e/emulator (requires Docker)
+```
+
+It runs in a dedicated `e2e` CI job and does **not** run in the default
+`go test ./...` pass.
+
 Development follows a **TDD workflow**: QA writes the tests and the developer
 writes the implementation in parallel, each in an isolated context, reconciled
 by the task manager before merge (see `AGENTS.md`).

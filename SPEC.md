@@ -900,6 +900,7 @@ make test      # go test -race + coverage >= 95% (cover-core) gate
 make mutation  # gremlins --threshold-efficacy=80 --threshold-mcover=80 (hard gate)
 make secrets   # gitleaks detect over the full git history (hard gate)
 make build     # goreleaser snapshot into dist/
+make e2e       # hermetic e2e via go-docker-testsuite against e2e/emulator (requires Docker)
 ```
 
 The CI pipeline runs on **a single provider — GitHub Actions**
@@ -913,8 +914,10 @@ The CI pipeline runs on **a single provider — GitHub Actions**
   repo host's native CI and the only pipeline maintained.
 - **N31 / R7.** The workflow never invokes a language-specific command directly;
   each job calls a `make` target (`make lint`/`test`/`mutation`/`build`, and
-  `make secrets`/`gitleaks` in its dedicated job). `e2e`/`container-image`
-  targets are not declared (this is a Local stdio-only server).
+  `make secrets`/`gitleaks` in its dedicated job). `make e2e` is declared and
+  run in a dedicated `e2e` job (against the `e2e/emulator` Docker container via
+  `go-docker-testsuite`); the `container-image` target is **not** declared (this
+  is a Local stdio-only server).
 
 The GitHub Actions pipeline **fails the build on any violation**: lint (`golangci-lint`), architecture
 (`go-arch-lint`), **`go test -race`**, **gosec**, **govulncheck**, a **hard
@@ -941,27 +944,27 @@ All fixes and features follow a **TDD workflow** with **isolated contexts**:
 
 ### 8.6 e2e decision (C9GO / T2 / C4)
 
-**No e2e test suite is present, by design.** The Go profile recommends e2e via
-the `go-docker-testsuite` harness (`make e2e`, `//go:build e2e`, C9GO) to cover
-the full tool-handler → upstream path. This project does **not** implement it
-for two reasons:
+**A hermetic e2e suite is present.** The Go profile (C9GO) recommends e2e via
+the `go-docker-testsuite` harness (`make e2e`, `//go:build e2e`) to cover the
+full tool-handler → upstream path. This project implements it **without needing
+a live Proxmox cluster**:
 
-1. **The upstream is an external Proxmox VE / PBS cluster**, not a container the
-   harness can spin up — a real e2e would require a live, credentialed Proxmox
-   cluster, which the hermetic CI cannot provision.
-2. **The adapter/mcp layer already exercises the full path** against
-   `httptest` mocks of the real Proxmox/PBS JSON APIs (asserting method, URL
-   path and `Authorization` header; §8.1), closing most of the integration gap
-   a docker-based e2e would cover.
+- **The upstream is emulated in-container.** `e2e/emulator` is an in-repo
+  emulator of the Proxmox VE / PBS REST APIs that serves the **real** JSON
+  payloads on `/api2/json`. The `go-docker-testsuite` harness runs the emulator
+  as a Docker container, so e2e stays hermetic and CI-provisionable.
+- **The real binary is driven over stdio.** The suite builds the actual
+  `cmd/mcp-proxmox` binary, launches it as a subprocess pointed at the emulator,
+  and drives the MCP protocol to assert a **real tool round-trip** (handler →
+  adapter → emulator → response → tool output).
 
-The conditional e2e criteria therefore do **not** apply: **C4/T2** apply "if a
-server has e2e tests", and **N30/N7GO** are violated only when e2e exists but is
-not build-tagged or not run in CI. Since no e2e suite exists, no `make e2e`
-target or e2e CI job is declared (consistent with N31) and the unit + coverage
-≥95% (C1) + mutation (C2) gates remain the hard gates. If a live Proxmox
-cluster becomes available for testing, an e2e suite using
-`github.com/teran/go-docker-testsuite` (build-tagged `//go:build e2e`, `make
-e2e`, dedicated CI job) should be added.
+The suite is **build-tagged `//go:build e2e`** — it is excluded from the default
+`go test ./...` unit pass (**T2/N30** satisfy the "build-tagged" requirement and
+keep hermetic unit tests fast). It is run via the dedicated `make e2e` target
+and a **dedicated `e2e` CI job** in `.github/workflows/ci.yml` (**C4/C9GO**;
+requires Docker, provided by the job runner). The hermetic unit + coverage ≥95%
+(**C1**) + mutation (**C2**) gates remain the hard gates; the e2e job
+complements, never replaces, them.
 
 ---
 
