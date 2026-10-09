@@ -2,9 +2,12 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/teran/mcp-proxmox/domain/port"
@@ -23,10 +26,12 @@ import (
 // and per-tool natural-language instructions (encoded into the SDK Description,
 // which the go-sdk treats as the model hint).
 func roTool[In, Out any](s *mcpSDK.Server, name, title, desc, instr string, log toolLogger, fn func(context.Context, In) (Out, error)) {
+	outSchema := outputSchema[Out]()
 	mcpSDK.AddTool(s, &mcpSDK.Tool{
-		Name:        name,
-		Title:       title,
-		Description: descWithInstructions(desc, instr),
+		Name:         name,
+		Title:        title,
+		Description:  descWithInstructions(desc, instr),
+		OutputSchema: outSchema,
 		Annotations: &mcpSDK.ToolAnnotations{
 			Title:           title,
 			ReadOnlyHint:    true,
@@ -44,7 +49,11 @@ func roTool[In, Out any](s *mcpSDK.Server, name, title, desc, instr string, log 
 			}
 			return nil, nil, err
 		}
-		return nil, wrapOutput(out), nil
+		wrapped, err := wrapAndValidate(ctx, name, log, outSchema, out)
+		if err != nil {
+			return nil, nil, err
+		}
+		return nil, wrapped, nil
 	})
 }
 
@@ -72,10 +81,12 @@ func mutTool[In, Out any](s *mcpSDK.Server, name, title, desc, instr string, log
 	if len(destructive) > 0 {
 		destructiveHint = destructive[0]
 	}
+	outSchema := outputSchema[Out]()
 	mcpSDK.AddTool(s, &mcpSDK.Tool{
-		Name:        name,
-		Title:       title,
-		Description: descWithInstructions(desc, instr),
+		Name:         name,
+		Title:        title,
+		Description:  descWithInstructions(desc, instr),
+		OutputSchema: outSchema,
 		Annotations: &mcpSDK.ToolAnnotations{
 			Title:           title,
 			ReadOnlyHint:    false,
@@ -93,12 +104,102 @@ func mutTool[In, Out any](s *mcpSDK.Server, name, title, desc, instr string, log
 			}
 			return nil, nil, err
 		}
-		return nil, wrapOutput(out), nil
+		wrapped, err := wrapAndValidate(ctx, name, log, outSchema, out)
+		if err != nil {
+			return nil, nil, err
+		}
+		return nil, wrapped, nil
 	})
 }
 
 // boolPtr returns a pointer to b (for the SDK's *bool annotation hints).
 func boolPtr(b bool) *bool { return &b }
+
+// outputSchema derives the JSON Schema describing a tool's structured output
+// (S09/N22). The schema is generated from the typed output type Out using the
+// same reflection/jsonschema path the go-sdk uses to derive input schemas
+// (jsonschema.ForType), and mirrors the wrapping shape that wrapOutput produces:
+//
+//   - slices/arrays are wrapped as {"items": <Out>};
+//   - scalars are wrapped as {"value": <Out>};
+//   - structs and maps pass through unwrapped.
+//
+// When Out is the empty interface (`any`) — the shape returned by tools whose
+// handler erases the concrete type — the runtime shape is unknown, so a
+// permissive schema that accepts any JSON value is returned so output is never
+// spuriously rejected.
+func outputSchema[Out any]() *jsonschema.Schema {
+	rt := reflect.TypeFor[Out]()
+	elem := rt
+	for elem.Kind() == reflect.Pointer {
+		elem = elem.Elem()
+	}
+	if elem.Kind() == reflect.Interface {
+		// Out is `any` (or a nil interface): the runtime shape is unknown, so
+		// advertise a permissive schema that accepts any JSON value.
+		return &jsonschema.Schema{}
+	}
+	base, err := jsonschema.ForType(elem, &jsonschema.ForOptions{})
+	if err != nil || base == nil {
+		return &jsonschema.Schema{}
+	}
+	switch elem.Kind() {
+	case reflect.Slice, reflect.Array:
+		return &jsonschema.Schema{
+			Type:       "object",
+			Properties: map[string]*jsonschema.Schema{"items": base},
+		}
+	case reflect.Struct, reflect.Map:
+		return base
+	default:
+		// scalar (int, string, bool, float, ...)
+		return &jsonschema.Schema{
+			Type:       "object",
+			Properties: map[string]*jsonschema.Schema{"value": base},
+		}
+	}
+}
+
+// validateOutput reports whether the value that will reach the MCP client
+// conforms to the tool's outputSchema (S09). It marshals the (already wrapped
+// and sanitized) value to JSON and validates the resulting instance against the
+// resolved schema, mirroring the go-sdk's own output validation. A nil schema
+// or nil output short-circuits to success (nothing to validate).
+func validateOutput(schema *jsonschema.Schema, out any) error {
+	if schema == nil || out == nil {
+		return nil
+	}
+	resolved, err := schema.Resolve(&jsonschema.ResolveOptions{ValidateDefaults: true})
+	if err != nil {
+		return fmt.Errorf("resolving output schema: %w", err)
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return fmt.Errorf("marshaling output: %w", err)
+	}
+	var unmarshaled any
+	if err := json.Unmarshal(b, &unmarshaled); err != nil {
+		return fmt.Errorf("unmarshaling output: %w", err)
+	}
+	if err := resolved.Validate(&unmarshaled); err != nil {
+		return fmt.Errorf("output does not conform to outputSchema: %w", err)
+	}
+	return nil
+}
+
+// wrapAndValidate wraps the tool output (via wrapOutput) and validates the
+// result against the tool's outputSchema before it reaches the client (S09/N22).
+// A non-conforming result is logged via toolLogger (with the tool name) and
+// returned as an error so the MCP result is flagged IsError instead of emitting
+// non-conforming output.
+func wrapAndValidate(ctx context.Context, name string, log toolLogger, schema *jsonschema.Schema, out any) (any, error) {
+	wrapped := wrapOutput(out)
+	if err := validateOutput(schema, wrapped); err != nil {
+		log.Errorf(ctx, "%s: %v", name, err)
+		return nil, err
+	}
+	return wrapped, nil
+}
 
 // wrapOutput ensures the value returned to the MCP client is a JSON object, as
 // required for structuredContent. A top-level slice (a list tool) or scalar

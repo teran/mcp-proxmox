@@ -37,10 +37,12 @@ func registerSystemTools(s *mcpSDK.Server, app *application.App, log toolLogger)
 // (read-only, non-destructive, idempotent, closed world) and per-tool
 // instructions, sharing the same uniform handler shape as roTool.
 func sysTool[In any, Out any](s *mcpSDK.Server, name, title, desc, instr string, log toolLogger, fn func(context.Context, In) (Out, error)) {
+	outSchema := outputSchema[Out]()
 	mcpSDK.AddTool(s, &mcpSDK.Tool{
-		Name:        name,
-		Title:       title,
-		Description: descWithInstructions(desc, instr),
+		Name:         name,
+		Title:        title,
+		Description:  descWithInstructions(desc, instr),
+		OutputSchema: outSchema,
 		Annotations: &mcpSDK.ToolAnnotations{
 			Title:           title,
 			ReadOnlyHint:    true,
@@ -54,6 +56,10 @@ func sysTool[In any, Out any](s *mcpSDK.Server, name, title, desc, instr string,
 			log.Errorf(ctx, "%s: %v", name, err)
 			return nil, nil, err
 		}
-		return nil, wrapOutput(out), nil
+		wrapped, err := wrapAndValidate(ctx, name, log, outSchema, out)
+		if err != nil {
+			return nil, nil, err
+		}
+		return nil, wrapped, nil
 	})
 }
