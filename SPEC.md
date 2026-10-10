@@ -563,18 +563,21 @@ reaching the MCP client:
   replaced with `[redacted]` in tool output. The typed domain models returned by
   tools carry no secret fields — API tokens never enter the model or the output
   path — so this is a defensive guarantee for any map-based output.
-- **S9 (output sanitization):** output is NOT schema-validated per tool. Tool
-  handlers return `Out == any` (not a concrete typed output), so no per-tool
-  `outputSchema` is generated and the SDK does not validate results against one.
-  What actually happens to every result: it is wrapped into a JSON object
-  (`wrapOutput` — top-level slices/scalars are wrapped in `{"items":...}` /
-  `{"value":...}`), passed through `sanitizeOutput` (which redacts sensitive map
-  keys per S2 and runs `stripControl` to remove ANSI escape sequences and C0
-  control bytes from string values), and only then returned as the tool's
-  structured content. In a future pass, either type `Out` to a concrete model or
-  set an explicit `Tool.OutputSchema` so the SDK can validate each result against
-  a derived schema; today the guarantee is wrap + redact + strip, not schema
-  validation.
+- **S9 (output sanitization & validation):** every tool result is validated
+  against a per-tool `outputSchema` derived from the tool's typed output type.
+  `roTool`, `mutTool` and `sysTool` (`adapter/mcp/helpers.go`) set `Tool.OutputSchema`
+  via `outputSchema[Out]()` — generated with the same `jsonschema.ForType`
+  reflection path the go-sdk uses for input schemas, and shaped to match the
+  wrapping `wrapOutput` produces (slices/arrays → `{"items":...}`, scalars →
+  `{"value":...}`, structs/maps pass through). Tools whose handler returns
+  `Out == any` (the erased shape) advertise a permissive schema that accepts any
+  JSON, since the runtime shape is unknown. Before a result reaches the client it
+  is wrapped (`wrapOutput`), passed through `sanitizeOutput` (redacting sensitive
+  map keys per S2 and stripping ANSI/control bytes per S9), and validated against
+  the derived `outputSchema`; a non-conforming result is logged via the
+  `toolLogger` and returned as an error (the MCP result is flagged `IsError`)
+  instead of emitting non-conforming output. The guarantee is therefore
+  wrap + redact + strip + schema validation.
 
 Input arguments are likewise redacted in log lines (`sanitizeArgs`, §5.1c) using
 the same sensitive-key policy.
