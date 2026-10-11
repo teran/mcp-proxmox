@@ -42,6 +42,8 @@ type stubPVEGateway struct {
 	migrateVM        func(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error
 	addHAResource    func(ctx context.Context, req model.HAResourceRequest) error
 	startVMBackup    func(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
+	setVMConfig      func(ctx context.Context, node string, vmid int, req model.SetVMConfigRequest) error
+	setLXCConfig     func(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error
 
 	listVMSnapshots     func(ctx context.Context, node string, vmid int) ([]model.Snapshot, error)
 	listLXCSnapshots    func(ctx context.Context, node string, vmid int) ([]model.Snapshot, error)
@@ -286,6 +288,24 @@ func (s *stubPVEGateway) StartVMBackup(ctx context.Context, node string, req mod
 		return s.startVMBackup(ctx, node, req)
 	}
 	return &model.Task{UPID: "UPID:pve:backup:..."}, nil
+}
+func (s *stubPVEGateway) SetVMConfig(ctx context.Context, node string, vmid int, req model.SetVMConfigRequest) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.setVMConfig != nil {
+		return s.setVMConfig(ctx, node, vmid, req)
+	}
+	return nil
+}
+func (s *stubPVEGateway) SetLXCConfig(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.setLXCConfig != nil {
+		return s.setLXCConfig(ctx, node, vmid, req)
+	}
+	return nil
 }
 func (s *stubPVEGateway) ListVMSnapshots(ctx context.Context, node string, vmid int) ([]model.Snapshot, error) {
 	if s.fail() {
@@ -732,10 +752,10 @@ var pveMutationTools = []string{
 	"pve_vm_start", "pve_vm_stop", "pve_vm_shutdown", "pve_vm_reboot",
 	"pve_vm_reset", "pve_vm_suspend", "pve_vm_resume", "pve_vm_delete",
 	"pve_vm_clone", "pve_vm_snapshot_create", "pve_vm_snapshot_delete",
-	"pve_vm_snapshot_rollback", "pve_vm_restore",
+	"pve_vm_snapshot_rollback", "pve_vm_restore", "pve_vm_set",
 	"pve_lxc_start", "pve_lxc_stop", "pve_lxc_shutdown", "pve_lxc_reboot",
 	"pve_lxc_delete", "pve_lxc_clone", "pve_lxc_snapshot_create",
-	"pve_lxc_snapshot_delete", "pve_lxc_snapshot_rollback",
+	"pve_lxc_snapshot_delete", "pve_lxc_snapshot_rollback", "pve_lxc_set",
 }
 
 // pbsMutationTools is the gated PBS mutation tool surface (SPEC.md §6.x).

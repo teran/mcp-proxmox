@@ -51,6 +51,14 @@ func TestMutationRequestRoundTrip(t *testing.T) {
 				SkipLost: true, NotifyUser: "admin@example.com",
 			},
 		},
+		{
+			name: "set-vm-config",
+			in:   SetVMConfigRequest{Config: map[string]string{"onboot": "0", "memory": "2048"}},
+		},
+		{
+			name: "set-lxc-config",
+			in:   SetLXCConfigRequest{Config: map[string]string{"onboot": "0", "cores": "2"}},
+		},
 	}
 
 	for _, tt := range tests {
@@ -88,6 +96,10 @@ func TestMutationRequestOptionalOmitted(t *testing.T) {
 		{"vm-backup-minimal", VMBackupRequest{VMID: 100, Storage: "local", Mode: "snapshot"},
 			`{"vmid":100,"storage":"local","mode":"snapshot"}`},
 		{"pbs-sync-empty", PBSSyncRequest{}, `{}`},
+		// config carries no omitempty, so an empty map serializes as null and the
+		// adapter never omits the key (the tool handler always supplies a map).
+		{"set-vm-config-empty", SetVMConfigRequest{}, `{"config":null}`},
+		{"set-lxc-config-empty", SetLXCConfigRequest{}, `{"config":null}`},
 	}
 
 	for _, tt := range cases {

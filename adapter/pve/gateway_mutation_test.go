@@ -196,6 +196,79 @@ func TestGateway_MutationErrorMapping(t *testing.T) {
 	})
 }
 
+// TestGateway_SetVMConfig_Success verifies PUT /nodes/{node}/qemu/{vmid}/config
+// sends the config map as form-encoded body parameters.
+func TestGateway_SetVMConfig_Success(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, 200, `{"data":null}`, rec)
+	g, _ := newTestGateway(t, srv)
+
+	err := g.SetVMConfig(context.Background(), "pve1", 100, model.SetVMConfigRequest{
+		Config: map[string]string{"onboot": "0", "memory": "2048"},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, http.MethodPut, rec.method)
+	assert.Equal(t, "/api2/json/nodes/pve1/qemu/100/config", rec.path)
+	assert.Equal(t, "PVEAPIToken=user@pam!tokenid=secret", rec.auth)
+	assert.Equal(t, "0", rec.form.Get("onboot"))
+	assert.Equal(t, "2048", rec.form.Get("memory"))
+}
+
+// TestGateway_SetLXCConfig_Success verifies PUT /nodes/{node}/lxc/{vmid}/config
+// sends the config map as form-encoded body parameters.
+func TestGateway_SetLXCConfig_Success(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, 200, `{"data":null}`, rec)
+	g, _ := newTestGateway(t, srv)
+
+	err := g.SetLXCConfig(context.Background(), "pve1", 200, model.SetLXCConfigRequest{
+		Config: map[string]string{"onboot": "0", "cores": "2"},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, http.MethodPut, rec.method)
+	assert.Equal(t, "/api2/json/nodes/pve1/lxc/200/config", rec.path)
+	assert.Equal(t, "PVEAPIToken=user@pam!tokenid=secret", rec.auth)
+	assert.Equal(t, "0", rec.form.Get("onboot"))
+	assert.Equal(t, "2", rec.form.Get("cores"))
+}
+
+// TestGateway_SetConfigErrorMapping verifies SetVMConfig/SetLXCConfig failures
+// map through the error family and are never retried (mutations are not
+// replayed): 401 -> ErrUnauthorized, 5xx -> error with a single request.
+func TestGateway_SetConfigErrorMapping(t *testing.T) {
+	t.Run("set vm config unauthorized", func(t *testing.T) {
+		rec := &reqCapture{}
+		srv := mockServer(t, http.StatusUnauthorized, `{"data":null}`, rec)
+		g, _ := newTestGateway(t, srv)
+		err := g.SetVMConfig(context.Background(), "pve1", 100, model.SetVMConfigRequest{Config: map[string]string{"onboot": "0"}})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, port.ErrUnauthorized)
+		assert.Equal(t, 1, rec.count)
+	})
+
+	t.Run("set vm config upstream error no retry", func(t *testing.T) {
+		rec := &reqCapture{}
+		srv := mockServer(t, http.StatusInternalServerError, `{"data":null}`, rec)
+		g, _ := newTestGateway(t, srv)
+		err := g.SetVMConfig(context.Background(), "pve1", 100, model.SetVMConfigRequest{Config: map[string]string{"onboot": "0"}})
+		require.Error(t, err)
+		var ue *UpstreamError
+		assert.ErrorAs(t, err, &ue)
+		assert.Equal(t, 1, rec.count, "mutations must not be retried")
+	})
+
+	t.Run("set lxc config upstream error no retry", func(t *testing.T) {
+		rec := &reqCapture{}
+		srv := mockServer(t, http.StatusInternalServerError, `{"data":null}`, rec)
+		g, _ := newTestGateway(t, srv)
+		err := g.SetLXCConfig(context.Background(), "pve1", 200, model.SetLXCConfigRequest{Config: map[string]string{"onboot": "0"}})
+		require.Error(t, err)
+		assert.Equal(t, 1, rec.count, "mutations must not be retried")
+	})
+}
+
 // TestGateway_MutationErrorBranch covers the remaining mutation error return
 // paths so the gateways' error branches are fully exercised.
 func TestGateway_MutationErrorBranch(t *testing.T) {

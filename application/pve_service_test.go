@@ -257,6 +257,42 @@ func TestPVEService_MutationSuccess(t *testing.T) {
 		assert.Equal(t, "UPID:...", task.UPID)
 		assert.Equal(t, req, gotReq)
 	})
+
+	t.Run("SetVMConfig", func(t *testing.T) {
+		gotNode := ""
+		gotVMID := 0
+		gotReq := model.SetVMConfigRequest{}
+		gw := &mockPVEGateway{setVMConfig: func(ctx context.Context, node string, vmid int, req model.SetVMConfigRequest) error {
+			gotNode = node
+			gotVMID = vmid
+			gotReq = req
+			return nil
+		}}
+		req := model.SetVMConfigRequest{Config: map[string]string{"onboot": "0"}}
+		err := (&PVEService{gw: gw}).SetVMConfig(context.Background(), "pve1", 100, req)
+		require.NoError(t, err)
+		assert.Equal(t, "pve1", gotNode)
+		assert.Equal(t, 100, gotVMID)
+		assert.Equal(t, req, gotReq)
+	})
+
+	t.Run("SetLXCConfig", func(t *testing.T) {
+		gotNode := ""
+		gotVMID := 0
+		gotReq := model.SetLXCConfigRequest{}
+		gw := &mockPVEGateway{setLXCConfig: func(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error {
+			gotNode = node
+			gotVMID = vmid
+			gotReq = req
+			return nil
+		}}
+		req := model.SetLXCConfigRequest{Config: map[string]string{"onboot": "0"}}
+		err := (&PVEService{gw: gw}).SetLXCConfig(context.Background(), "pve1", 200, req)
+		require.NoError(t, err)
+		assert.Equal(t, "pve1", gotNode)
+		assert.Equal(t, 200, gotVMID)
+		assert.Equal(t, req, gotReq)
+	})
 }
 
 // TestPVEService_ErrorPropagation verifies that gateway errors propagate
@@ -301,6 +337,12 @@ func TestPVEService_ErrorPropagation(t *testing.T) {
 			_, e := s.StartVMBackup(context.Background(), "n", model.VMBackupRequest{})
 			return e
 		}},
+		{"SetVMConfig", func(s *PVEService) error {
+			return s.SetVMConfig(context.Background(), "n", 1, model.SetVMConfigRequest{})
+		}},
+		{"SetLXCConfig", func(s *PVEService) error {
+			return s.SetLXCConfig(context.Background(), "n", 1, model.SetLXCConfigRequest{})
+		}},
 	}
 
 	// Build a gateway where every method returns the sentinel error.
@@ -334,6 +376,12 @@ func TestPVEService_ErrorPropagation(t *testing.T) {
 	gw.addHAResource = func(ctx context.Context, req model.HAResourceRequest) error { return sentinel }
 	gw.startVMBackup = func(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error) {
 		return nil, sentinel
+	}
+	gw.setVMConfig = func(ctx context.Context, node string, vmid int, req model.SetVMConfigRequest) error {
+		return sentinel
+	}
+	gw.setLXCConfig = func(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error {
+		return sentinel
 	}
 
 	svc := &PVEService{gw: gw}

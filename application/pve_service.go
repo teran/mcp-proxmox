@@ -255,3 +255,13 @@ func (s *PVEService) RollbackVMSnapshot(ctx context.Context, node string, vmid i
 func (s *PVEService) RestoreVM(ctx context.Context, node string, req model.PVERestoreRequest) (*model.Task, error) {
 	return s.gw.RestoreVM(ctx, node, req)
 }
+
+// SetVMConfig updates a QEMU VM's configuration options on a node.
+func (s *PVEService) SetVMConfig(ctx context.Context, node string, vmid int, req model.SetVMConfigRequest) error {
+	return s.gw.SetVMConfig(ctx, node, vmid, req)
+}
+
+// SetLXCConfig updates an LXC container's configuration options on a node.
+func (s *PVEService) SetLXCConfig(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error {
+	return s.gw.SetLXCConfig(ctx, node, vmid, req)
+}

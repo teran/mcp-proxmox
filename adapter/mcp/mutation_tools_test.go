@@ -69,6 +69,8 @@ func TestMutationToolSuccess(t *testing.T) {
 		{"pve_vm_migrate", map[string]any{"node": "pve1", "vmid": 100, "target": "pve2", "online": true}, false},
 		{"pve_ha_add", map[string]any{"sid": "vm:100", "type": "vm", "nodes": []string{"pve1"}}, false},
 		{"pve_vm_backup", map[string]any{"node": "pve1", "vmid": 100, "storage": "backup", "mode": "snapshot"}, true},
+		{"pve_vm_set", map[string]any{"node": "pve1", "vmid": 100, "config": map[string]any{"onboot": "0"}}, false},
+		{"pve_lxc_set", map[string]any{"node": "pve1", "vmid": 200, "config": map[string]any{"onboot": "0"}}, false},
 		{"pbs_verify_start", map[string]any{"store": "backup"}, true},
 		{"pbs_gc_start", map[string]any{"store": "backup"}, true},
 		{"pbs_prune_start", map[string]any{"store": "backup"}, true},
@@ -128,6 +130,8 @@ func TestMutationToolErrorPropagation(t *testing.T) {
 		{"pve_vm_migrate", map[string]any{"node": "pve1", "vmid": 100, "target": "pve2"}},
 		{"pve_ha_add", map[string]any{"sid": "vm:100", "type": "vm"}},
 		{"pve_vm_backup", map[string]any{"node": "pve1", "vmid": 100, "storage": "backup", "mode": "snapshot"}},
+		{"pve_vm_set", map[string]any{"node": "pve1", "vmid": 100, "config": map[string]any{"onboot": "0"}}},
+		{"pve_lxc_set", map[string]any{"node": "pve1", "vmid": 200, "config": map[string]any{"onboot": "0"}}},
 		{"pbs_verify_start", map[string]any{"store": "backup"}},
 		{"pbs_gc_start", map[string]any{"store": "backup"}},
 		{"pbs_prune_start", map[string]any{"store": "backup"}},
@@ -155,7 +159,7 @@ func TestMutationToolAnnotations(t *testing.T) {
 	_, sess := newTestServer(t, app, true)
 	tools := toolsByName(t, sess)
 
-	idempotent := []string{"pve_vm_resize", "pve_vm_migrate", "pve_ha_add"}
+	idempotent := []string{"pve_vm_resize", "pve_vm_migrate", "pve_ha_add", "pve_vm_set", "pve_lxc_set"}
 	nonIdempotent := []string{"pve_vm_create", "pve_vm_backup", "pbs_verify_start", "pbs_gc_start", "pbs_prune_start", "pbs_sync_start"}
 
 	for _, name := range append(append([]string{}, idempotent...), nonIdempotent...) {

@@ -1050,3 +1050,22 @@ func (g *Gateway) RestoreVM(ctx context.Context, node string, req model.PVEResto
 	}
 	return &model.Task{UPID: upid}, nil
 }
+
+// SetVMConfig updates a QEMU VM's config via PUT /nodes/{node}/qemu/{vmid}/config.
+func (g *Gateway) SetVMConfig(ctx context.Context, node string, vmid int, req model.SetVMConfigRequest) error {
+	return g.doMutation(ctx, http.MethodPut, vmPath(node, vmid)+"/config", valuesFromMap(req.Config), nil)
+}
+
+// SetLXCConfig updates an LXC container's config via PUT /nodes/{node}/lxc/{vmid}/config.
+func (g *Gateway) SetLXCConfig(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error {
+	return g.doMutation(ctx, http.MethodPut, lxcPath(node, vmid)+"/config", valuesFromMap(req.Config), nil)
+}
+
+// valuesFromMap converts a config map into form-encoded values (mutation body).
+func valuesFromMap(m map[string]string) url.Values {
+	form := url.Values{}
+	for k, v := range m {
+		form.Set(k, v)
+	}
+	return form
+}

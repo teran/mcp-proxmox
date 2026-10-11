@@ -102,6 +102,18 @@ type PVERestoreRequest struct {
 	BwLimit int    `json:"bwlimit,omitempty"`
 }
 
+// SetVMConfigRequest is the form body of PUT /nodes/{node}/qemu/{vmid}/config.
+// Config is an arbitrary set of QEMU VM config options (e.g. {"onboot":"0"}).
+type SetVMConfigRequest struct {
+	Config map[string]string `json:"config"`
+}
+
+// SetLXCConfigRequest is the form body of PUT /nodes/{node}/lxc/{vmid}/config.
+// Config is an arbitrary set of LXC container config options (e.g. {"onboot":"0"}).
+type SetLXCConfigRequest struct {
+	Config map[string]string `json:"config"`
+}
+
 // PBSSyncRequest is the form body of POST /admin/datastore/{store}/sync. It
 // describes a one-off sync job that pulls from a remote PBS datastore.
 type PBSSyncRequest struct {
