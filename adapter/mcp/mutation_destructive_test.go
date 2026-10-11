@@ -39,6 +39,8 @@ func TestMutationToolDestructiveHints(t *testing.T) {
 		"pve_vm_start",
 		"pve_vm_stop",
 		"pve_vm_backup",
+		"pve_vm_set",
+		"pve_lxc_set",
 		"pbs_verify_start",
 		"pbs_gc_start",
 		"pbs_backup_restore_file",

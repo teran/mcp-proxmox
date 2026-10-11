@@ -34,6 +34,8 @@ type mockPVEGateway struct {
 	migrateVM        func(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error
 	addHAResource    func(ctx context.Context, req model.HAResourceRequest) error
 	startVMBackup    func(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
+	setVMConfig      func(ctx context.Context, node string, vmid int, req model.SetVMConfigRequest) error
+	setLXCConfig     func(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error
 
 	// VM/LXC snapshots (read-only).
 	listVMSnapshots  func(ctx context.Context, node string, vmid int) ([]model.Snapshot, error)
@@ -211,6 +213,18 @@ func (m *mockPVEGateway) StartVMBackup(ctx context.Context, node string, req mod
 		return m.startVMBackup(ctx, node, req)
 	}
 	return nil, nil
+}
+func (m *mockPVEGateway) SetVMConfig(ctx context.Context, node string, vmid int, req model.SetVMConfigRequest) error {
+	if m.setVMConfig != nil {
+		return m.setVMConfig(ctx, node, vmid, req)
+	}
+	return nil
+}
+func (m *mockPVEGateway) SetLXCConfig(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error {
+	if m.setLXCConfig != nil {
+		return m.setLXCConfig(ctx, node, vmid, req)
+	}
+	return nil
 }
 func (m *mockPVEGateway) ListVMSnapshots(ctx context.Context, node string, vmid int) ([]model.Snapshot, error) {
 	if m.listVMSnapshots != nil {

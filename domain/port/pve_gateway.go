@@ -83,6 +83,8 @@ type PVEGateway interface {
 	SuspendVM(ctx context.Context, node string, vmid int, todisk bool) (*model.Task, error)
 	ResumeVM(ctx context.Context, node string, vmid int) (*model.Task, error)
 	DeleteVM(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks bool) (*model.Task, error)
+	SetVMConfig(ctx context.Context, node string, vmid int, req model.SetVMConfigRequest) error
+	SetLXCConfig(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error
 	CloneVM(ctx context.Context, node string, vmid int, req model.CloneVMRequest) (*model.Task, error)
 	CreateVMSnapshot(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error)
 	DeleteVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)

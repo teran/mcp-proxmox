@@ -230,6 +230,20 @@ type vmRestoreIn struct {
 	BwLimit int    `json:"bwlimit,omitempty" jsonschema:"Restore bandwidth limit (KB/s)"`
 }
 
+// vmSetIn is the input of pve_vm_set.
+type vmSetIn struct {
+	Node   string            `json:"node" jsonschema:"PVE node name"`
+	VMID   int               `json:"vmid" jsonschema:"VM ID"`
+	Config map[string]string `json:"config" jsonschema:"VM config options to set (e.g. {\"onboot\":\"0\"}). Requires the VM.Config privilege"`
+}
+
+// lxcSetIn is the input of pve_lxc_set.
+type lxcSetIn struct {
+	Node   string            `json:"node" jsonschema:"PVE node name"`
+	VMID   int               `json:"vmid" jsonschema:"Container ID"`
+	Config map[string]string `json:"config" jsonschema:"Container config options to set (e.g. {\"onboot\":\"0\"}). Requires the VM.Config privilege"`
+}
+
 // registerPVETools registers the Proxmox VE tools. Read-only (query) tools are
 // always registered for an enabled PVE backend. Mutation tools are registered
 // only when enableMutations is true (SPEC.md §2.5).
@@ -712,5 +726,19 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 				return nil, err
 			}
 			return map[string]any{"upid": t.UPID}, nil
+		})
+
+	mutTool(s, "pve_vm_set", "Set QEMU VM config",
+		"Update a QEMU VM's configuration options.",
+		"Provide node, vmid and a config map of options to set (e.g. {\"onboot\":\"0\"}). Applies the same changes as `qm set <vmid> --<key> <value>`. Requires the VM.Config privilege. Idempotent.",
+		log, true, func(ctx context.Context, in vmSetIn) (any, error) {
+			return nil, app.PVE.SetVMConfig(ctx, in.Node, in.VMID, model.SetVMConfigRequest{Config: in.Config})
+		})
+
+	mutTool(s, "pve_lxc_set", "Set LXC config",
+		"Update an LXC container's configuration options.",
+		"Provide node, vmid and a config map of options to set (e.g. {\"onboot\":\"0\"}). Applies the same changes as `pct set <vmid> --<key> <value>`. Requires the VM.Config privilege. Idempotent.",
+		log, true, func(ctx context.Context, in lxcSetIn) (any, error) {
+			return nil, app.PVE.SetLXCConfig(ctx, in.Node, in.VMID, model.SetLXCConfigRequest{Config: in.Config})
 		})
 }
