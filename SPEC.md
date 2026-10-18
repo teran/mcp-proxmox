@@ -475,6 +475,133 @@ Because no tool argument names a local path the server touches,
 `ALLOW_DIRS` / `ALLOW_SYMLINKS` (and any client-side filesystem sandboxing) are
 **N/A** for this server — there is nothing to sandbox on the server side.
 
+### 4.9 Security — domain security audit (S14)
+
+Produced by the `security` agent per `security-audit.md`; layered on the generic
+S01–S13 baseline this SPEC applies throughout (TLS always on — S01; secret
+redaction in output/logs — S02/L05; no user-supplied filesystem access — S04;
+read-only-by-default / least privilege — S10; injection — S08/S11; HITL — S12;
+supply chain — S13). This subsection records the **domain-specific** audit for a
+Proxmox control-plane tool. Its presence satisfies **S14**; its absence is the
+**N38** violation.
+
+#### Domain security audit (S14)
+
+**1. Audit inputs**
+
+- **Purpose:** local stdio MCP server exposing the Proxmox VE and PBS REST APIs
+  as callable tools so an LLM agent / IDE can inspect **and** (when
+  `ENABLE_MUTATIONS=true`) operate a Proxmox virtualization cluster and its
+  backup server. Primary job: **control-plane proxy / state-modifying operator**
+  over two external management APIs.
+- **Callers:** the local MCP client / model host (editor, CLI, agent runtime)
+  that launches the server as a subprocess over **stdio**. In local mode these
+  callers hold the full privilege of the configured API tokens (they can delete
+  VMs, forget snapshots, start backups). No unauthenticated / network callers.
+- **External systems:** **PVE** (`https://pve…:8006/api2/json`) and **PBS**
+  (`https://pbs…:8007/api2/json`) over HTTPS, authenticated with long-lived,
+  privilege-scoped **API tokens**. Upstream responses are treated as
+  **untrusted** (S07/S9).
+- **Data:** API tokens (credentials); VM / LXC / HA / storage / network /
+  cluster configs; backup/snapshot metadata and notes; verify/prune/gc task
+  status and logs; PVE/PBS version and node/cluster status.
+- **Transport & deployment:** **Local (stdio)**, no network listener, no TLS
+  inside the server (in any future remote mode TLS termination is the reverse
+  proxy's job, §8); config and tokens supplied via environment variables.
+- **Language / runtime:** Go 1.27.2; supply-chain gates `govulncheck`/gosec
+  (S13) apply.
+
+**2. Trust boundaries & threat model**
+
+| Zone | What crosses the boundary | From → To |
+|---|---|---|
+| Model host / MCP client | user/model-supplied **tool arguments** (`vmid`, `node`, `snapshot`, `upid`, `store`, …) | client → server (stdio) |
+| Server process (`adapter/mcp` → `application` → `adapter/pve\|pbs`) | validated args, `Authorization: PVEAPIToken=…` header | server → upstream |
+| Upstream **PVE / PBS** | upstream JSON responses (untrusted, S07), task UPIDs | upstream → server |
+| Local filesystem | `ca_cert_path` (read-only, per backend), `LOG_FILENAME` (append, `0600`) | server → fs |
+| Credentials store (env) | `PVE_TOKEN` / `PBS_TOKEN` read once at startup | env → server memory |
+
+Domain threat model (STRIDE applied to *this* server's boundaries):
+
+- **Compromised / malicious model host** (highest realistic risk — the caller is
+  the component most likely to be driven by an adversarial prompt):
+  - *Spoofing / Tampering / DoS of the virtualization estate:* issue tool calls
+    to delete or alter the **wrong** VM/CT/snapshot, restore a bad snapshot,
+    register an HA resource, or launch a destructive backup/prune/GC —
+    a **control-plane** version of prompt-injection / tool-abuse (relates to X02
+    and S12). Impact: **data loss, environment outage, pruning of the last good
+    backup copy**.
+  - *Information disclosure:* request configs of any VM/CT/storage/snapshot the
+    token can read (S02/S10 limiting).
+  - *Argument injection:* forge `vmid`/`node`/`snapshot`/`upid`/`store` values
+    interpolated into URL path segments to hit unintended endpoints or trigger
+    path-injection (S08/S11 hardening; `url.PathEscape`).
+- **Malicious upstream PVE/PBS response:**
+  - *Tampering / info-leak via output:* a hostile upstream returns crafted JSON
+    that reaches the model through tool output; mitigated by strict
+    `outputSchema` validation + `sanitizeOutput` (S9/S2) and treating upstream as
+    untrusted (S07).
+  - *Task-status spoofing:* a forged UPID/status could mislead the model into
+    believing a prune/backup completed (integrity of operations).
+- **Hostile local filesystem:**
+  - *Token leak via log:* `LOG_FILENAME` must never capture token values
+    (L05/S2); the token is never logged, only the header *name* at trace.
+  - *`ca_cert_path` tampering:* a compromised `ca_cert_path` file could inject a
+    CA that trusts a MITM — mitigated by S01 "TLS verification always on" and
+    treating the path as operator-controlled config, never a tool argument (S04).
+- **Local stdio protocol attacker:** the stdio channel is the trusted client
+  channel; any process able to write to the server's stdin holds the same power
+  as the model host — reinforcing that the server is a **local, single-user
+  trust** boundary with **no network exposure**.
+
+**3. Data sensitivity classification → C-I-A**
+
+| Data class | Sensitivity | Confidentiality | Integrity | Availability |
+|---|---|---|---|---|
+| API tokens (`PVE_TOKEN`/`PBS_TOKEN`, `Authorization` header) | **Secret** | redact (S02/L05); never logged, never in tool output; read once, in-memory (X1) | — | must remain available for authorized reads |
+| Infra / control-plane config of VMs, CTs, HA, storage, network, cluster | **High** | least-privilege token (S10) | **authorized-op-only writes; idempotency (X02) on non-idempotent mutations; no wrong-resource ops** | operations must not be disrupted by destructive ops |
+| Backup/snapshot metadata, notes, verify/prune/GC task status | **High** (backups are the last line of defense) | least privilege (S10) | **no double-execution of prune/GC/verify/backup (X02)** | destructive `prune`/`forget`/`gc` must be gated (S12) |
+| PVE/PBS version, node/cluster status, datastore usage | **Public** | treat as untrusted (S07); still schema-validated | — | — |
+| `ca_cert_path` (PEM), `LOG_FILENAME` | **Secret** / **config** | cert content never logged (L05) | TLS integrity (S01) | — |
+
+Derived stances: tokens and `ca_cert_path` must **never be persisted or logged**
+(the server is stateless, X1, so **no encryption-at-rest** applies); destructive/
+unsafe ops (`*_delete`, restore/rollback, prune, forget, gc, backup) require
+`destructiveHint` + HITL (S12) and the `ENABLE_MUTATIONS` gate (default off, §2.5).
+
+**4. Domain-specific attack vectors (beyond generic S01–S13)**
+
+| Vector | Threat | Impact | Domain-specific requirement |
+|---|---|---|---|
+| **Per-operation authz on destructive ops** (`pve_vm_delete`, `pve_lxc_delete`, snapshot delete, restore/rollback, HA) | Compromised/malicious model host issues a delete/alter call against the **wrong** resource — spoofed `vmid`/`node`/`snapshot` | Irreversible VM/CT deletion, snapshot loss, bad restore, HA misconfiguration; control-plane **availability/integrity loss** | **MUST (new):** destructive tools carry `destructiveHint=true` and require HITL (S12); mutations registered only under `ENABLE_MUTATIONS` (§2.5); per-tool `instructions` state the resource identity and require confirming the target before a destructive call |
+| **Command/path-injection via `vmid`/`node`/`snapshot`/`upid`/`store` interpolated into URL path segments** | Attacker-controlled value embedded in the URL path reaches a different or malformed upstream endpoint | SSRF-adjacent path confusion, hitting unintended PVE/PBS endpoints, malformed requests (S11 hardening) | **MUST (hardens S08/S11):** every path-segment value strictly validated against the upstream schema and **URL-path-escaped with `url.PathEscape`** before interpolation; no raw concatenation; reject non-conforming values at `inputSchema` (S8) |
+| **Non-idempotent mutations double-execution** (`pve_vm_create`, `pve_vm_backup`, `pbs_verify_start`, `pbs_gc_start`, `pbs_prune_start`, `pbs_sync_start`) | A client/transport retry or a model retry re-issues a mutation → duplicate create, parallel backup, double prune/GC | Duplicate resources, wasted I/O, corrupted prune/verify window | **MUST (cross-ref X02, §4.7):** mutations are **never retried** (§7.5); rely on upstream idempotency where present (`pve_nextid` search-before-create, HA key); set `idempotentHint` only when the upstream op is truly idempotent |
+| **Token confidentiality across output/log** | API token leaks through tool output or log lines (S02/L05) | Full credential compromise of the PVE/PBS estate | **MUST (hardens S02/L05):** `sanitizeOutput`/`sanitizeArgs` redact token-like keys; tokens never enter domain models, tool output, or log lines — only the header *name* at trace; `gitleaks` scans history (S05) |
+| **TLS / CA handling** | Disabling verification or trusting a forged CA (S01) | MITM of the control-plane API, token theft in transit | **MUST (hardens S01):** TLS verification **always on**, no `insecure_skip_verify`; custom CA only via operator `ca_cert_path` building the client `RootCAs`; never a tool argument (S04) |
+| **Upstream response integrity** | Forged/tampered upstream JSON reaching the model (S07/S9) | Model acts on false VM/snapshot/task state, e.g. believing a prune finished | **MUST (hardens S7/S9):** upstream treated as untrusted; every output validated against per-tool `outputSchema` and passed through `sanitizeOutput`; failures returned as `IsError` |
+
+**5. Filled auditor checklist (security-audit.md §6)** — all **YES**:
+
+- [x] Trust zones and boundaries enumerated and documented (audit §2).
+- [x] A concrete threat model for this domain recorded, not a generic list
+      (audit §2: malicious model host, hostile upstream, hostile filesystem).
+- [x] Every data class classified with C-I-A requirements (audit §3).
+- [x] Domain-specific attack vectors identified beyond generic S01–S13
+      (audit §4: destructive-op authz, path-injection, non-idempotent
+      double-execution, token leak, TLS/CA, upstream integrity).
+- [x] Each vector mapped to a concrete requirement (hardened S-code or new MUST)
+      (audit §4).
+- [x] Sensitive data redaction (S02) and no-secrets-in-logs (L05) confirmed for
+      this domain's data (tokens/CA cert).
+- [x] Destructive/irreversible operations flagged `destructiveHint` with HITL
+      (S12) where the domain demands it (delete/restore/prune/forget/gc/backup).
+- [x] Mutating tools carry a real data-level idempotency mechanism (X02) where
+      double-execution is harmful (never-retry + upstream idempotency, §7.5).
+- [x] Filesystem access scoped per S04 and extended for this domain's file
+      classes (`ca_cert_path` read-only, `LOG_FILENAME` `0600` append; no tool
+      argument names a path).
+- [x] The audit is produced by the `security` agent and embedded verbatim (S14).
+
 ---
 
 ## 5. Logging

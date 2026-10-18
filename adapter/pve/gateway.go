@@ -367,6 +367,78 @@ func (g *Gateway) ListBackupJobs(ctx context.Context) ([]model.BackupJob, error)
 	return out, nil
 }
 
+// CreateBackupJob creates a vzdump backup job via POST /cluster/backup. The
+// response `data` is the new job's ID; an empty/absent ID is treated as success
+// without a name, so an empty return is possible only when the API returns no
+// data.
+func (g *Gateway) CreateBackupJob(ctx context.Context, req model.CreateBackupJobRequest) (string, error) {
+	var id string
+	if err := g.doMutation(ctx, http.MethodPost, "/cluster/backup", backupJobForm(req), &id); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// UpdateBackupJob updates a vzdump backup job via PUT /cluster/backup/{id}. The
+// response `data` is the job's ID. id is URL-escaped so it is safe inside the
+// path.
+func (g *Gateway) UpdateBackupJob(ctx context.Context, id string, req model.CreateBackupJobRequest) (string, error) {
+	var out string
+	if err := g.doMutation(ctx, http.MethodPut, "/cluster/backup/"+url.PathEscape(id), backupJobForm(req), &out); err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+// DeleteBackupJob deletes a vzdump backup job via DELETE /cluster/backup/{id}.
+// id is URL-escaped so it is safe inside the path. Mutations are never retried:
+// use the single-attempt doOnce path (doMutation sends a form body, which this
+// DELETE does not use).
+func (g *Gateway) DeleteBackupJob(ctx context.Context, id string) error {
+	return g.doOnce(ctx, http.MethodDelete, "/cluster/backup/"+url.PathEscape(id), nil, nil)
+}
+
+// backupJobForm builds the form-encoded mutation body for create/update of a
+// vzdump backup job. Empty/zero fields are omitted (X02); Enabled is a pointer
+// so an explicit false can be sent to disable a job.
+func backupJobForm(req model.CreateBackupJobRequest) url.Values {
+	form := url.Values{}
+	if req.ID != "" {
+		form.Set("id", req.ID)
+	}
+	if req.All {
+		form.Set("all", "1")
+	}
+	if req.VMID != "" {
+		form.Set("vmid", req.VMID)
+	}
+	form.Set("storage", req.Storage)
+	form.Set("schedule", req.Schedule)
+	if req.Mode != "" {
+		form.Set("mode", req.Mode)
+	}
+	if req.Compress != "" {
+		form.Set("compress", req.Compress)
+	}
+	if req.Enabled != nil {
+		if *req.Enabled {
+			form.Set("enabled", "1")
+		} else {
+			form.Set("enabled", "0")
+		}
+	}
+	if req.NotesTemplate != "" {
+		form.Set("notes-template", req.NotesTemplate)
+	}
+	if req.Comment != "" {
+		form.Set("comment", req.Comment)
+	}
+	if req.Node != "" {
+		form.Set("node", req.Node)
+	}
+	return form
+}
+
 // GetNextID returns the next free VMID.
 func (g *Gateway) GetNextID(ctx context.Context) (string, error) {
 	var out string

@@ -71,6 +71,9 @@ type PVEGateway interface {
 	MigrateVM(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error
 	AddHAResource(ctx context.Context, req model.HAResourceRequest) error
 	StartVMBackup(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
+	CreateBackupJob(ctx context.Context, req model.CreateBackupJobRequest) (string, error)
+	UpdateBackupJob(ctx context.Context, id string, req model.CreateBackupJobRequest) (string, error)
+	DeleteBackupJob(ctx context.Context, id string) error
 
 	// VM lifecycle. These are mutations (gated by EnableMutations) and are never
 	// retried. PVE runs each operation as a task, so they return a Task whose

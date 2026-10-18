@@ -42,6 +42,9 @@ type stubPVEGateway struct {
 	migrateVM        func(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error
 	addHAResource    func(ctx context.Context, req model.HAResourceRequest) error
 	startVMBackup    func(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
+	createBackupJob  func(ctx context.Context, req model.CreateBackupJobRequest) (string, error)
+	updateBackupJob  func(ctx context.Context, id string, req model.CreateBackupJobRequest) (string, error)
+	deleteBackupJob  func(ctx context.Context, id string) error
 	setVMConfig      func(ctx context.Context, node string, vmid int, req model.SetVMConfigRequest) error
 	setLXCConfig     func(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error
 
@@ -288,6 +291,33 @@ func (s *stubPVEGateway) StartVMBackup(ctx context.Context, node string, req mod
 		return s.startVMBackup(ctx, node, req)
 	}
 	return &model.Task{UPID: "UPID:pve:backup:..."}, nil
+}
+func (s *stubPVEGateway) CreateBackupJob(ctx context.Context, req model.CreateBackupJobRequest) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.createBackupJob != nil {
+		return s.createBackupJob(ctx, req)
+	}
+	return "backup-100", nil
+}
+func (s *stubPVEGateway) UpdateBackupJob(ctx context.Context, id string, req model.CreateBackupJobRequest) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.updateBackupJob != nil {
+		return s.updateBackupJob(ctx, id, req)
+	}
+	return "backup-100", nil
+}
+func (s *stubPVEGateway) DeleteBackupJob(ctx context.Context, id string) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.deleteBackupJob != nil {
+		return s.deleteBackupJob(ctx, id)
+	}
+	return nil
 }
 func (s *stubPVEGateway) SetVMConfig(ctx context.Context, node string, vmid int, req model.SetVMConfigRequest) error {
 	if s.fail() {
@@ -756,6 +786,7 @@ var pveMutationTools = []string{
 	"pve_lxc_start", "pve_lxc_stop", "pve_lxc_shutdown", "pve_lxc_reboot",
 	"pve_lxc_delete", "pve_lxc_clone", "pve_lxc_snapshot_create",
 	"pve_lxc_snapshot_delete", "pve_lxc_snapshot_rollback", "pve_lxc_set",
+	"pve_backup_job_create", "pve_backup_job_update", "pve_backup_job_delete",
 }
 
 // pbsMutationTools is the gated PBS mutation tool surface (SPEC.md §6.x).

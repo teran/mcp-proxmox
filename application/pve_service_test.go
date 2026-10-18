@@ -293,6 +293,46 @@ func TestPVEService_MutationSuccess(t *testing.T) {
 		assert.Equal(t, 200, gotVMID)
 		assert.Equal(t, req, gotReq)
 	})
+
+	t.Run("CreateBackupJob", func(t *testing.T) {
+		gotReq := model.CreateBackupJobRequest{}
+		gw := &mockPVEGateway{createBackupJob: func(ctx context.Context, req model.CreateBackupJobRequest) (string, error) {
+			gotReq = req
+			return "backup-100", nil
+		}}
+		req := model.CreateBackupJobRequest{ID: "backup-100", Storage: "local", Schedule: "00 2 * * 1", Mode: "snapshot"}
+		id, err := (&PVEService{gw: gw}).CreateBackupJob(context.Background(), req)
+		require.NoError(t, err)
+		assert.Equal(t, "backup-100", id)
+		assert.Equal(t, req, gotReq)
+	})
+
+	t.Run("UpdateBackupJob", func(t *testing.T) {
+		gotID := ""
+		gotReq := model.CreateBackupJobRequest{}
+		gw := &mockPVEGateway{updateBackupJob: func(ctx context.Context, id string, req model.CreateBackupJobRequest) (string, error) {
+			gotID = id
+			gotReq = req
+			return "backup-100", nil
+		}}
+		req := model.CreateBackupJobRequest{Storage: "local", Schedule: "00 3 * * 1"}
+		id, err := (&PVEService{gw: gw}).UpdateBackupJob(context.Background(), "backup-100", req)
+		require.NoError(t, err)
+		assert.Equal(t, "backup-100", id)
+		assert.Equal(t, "backup-100", gotID)
+		assert.Equal(t, req, gotReq)
+	})
+
+	t.Run("DeleteBackupJob", func(t *testing.T) {
+		gotID := ""
+		gw := &mockPVEGateway{deleteBackupJob: func(ctx context.Context, id string) error {
+			gotID = id
+			return nil
+		}}
+		err := (&PVEService{gw: gw}).DeleteBackupJob(context.Background(), "backup-100")
+		require.NoError(t, err)
+		assert.Equal(t, "backup-100", gotID)
+	})
 }
 
 // TestPVEService_ErrorPropagation verifies that gateway errors propagate
@@ -343,6 +383,17 @@ func TestPVEService_ErrorPropagation(t *testing.T) {
 		{"SetLXCConfig", func(s *PVEService) error {
 			return s.SetLXCConfig(context.Background(), "n", 1, model.SetLXCConfigRequest{})
 		}},
+		{"CreateBackupJob", func(s *PVEService) error {
+			_, e := s.CreateBackupJob(context.Background(), model.CreateBackupJobRequest{})
+			return e
+		}},
+		{"UpdateBackupJob", func(s *PVEService) error {
+			_, e := s.UpdateBackupJob(context.Background(), "id", model.CreateBackupJobRequest{})
+			return e
+		}},
+		{"DeleteBackupJob", func(s *PVEService) error {
+			return s.DeleteBackupJob(context.Background(), "id")
+		}},
 	}
 
 	// Build a gateway where every method returns the sentinel error.
@@ -383,6 +434,11 @@ func TestPVEService_ErrorPropagation(t *testing.T) {
 	gw.setLXCConfig = func(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error {
 		return sentinel
 	}
+	gw.createBackupJob = func(ctx context.Context, req model.CreateBackupJobRequest) (string, error) { return "", sentinel }
+	gw.updateBackupJob = func(ctx context.Context, id string, req model.CreateBackupJobRequest) (string, error) {
+		return "", sentinel
+	}
+	gw.deleteBackupJob = func(ctx context.Context, id string) error { return sentinel }
 
 	svc := &PVEService{gw: gw}
 	for _, tc := range cases {
