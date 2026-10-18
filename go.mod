@@ -1,6 +1,6 @@
 module github.com/teran/mcp-proxmox
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/kelseyhightower/envconfig v1.4.0

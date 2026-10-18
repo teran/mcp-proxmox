@@ -2,7 +2,7 @@
 
 **Language:** English (fixed by the user — do not translate).
 **Module:** `github.com/teran/mcp-proxmox`
-**Go:** 1.27.1
+**Go:** 1.27.2
 **Status:** design snapshot (authoritative technical reference; implementation to follow).
 
 This document is the authoritative technical reference for the `mcp-proxmox`
@@ -983,7 +983,7 @@ complements, never replaces, them.
 
 ## 10. Open assumptions (to confirm before implementation)
 
-1. **Go version:** `1.27.1` (matches the org's flagship `mcp-regcloud`; satisfies
+1. **Go version:** `1.27.2` (matches the org's flagship `mcp-regcloud`; satisfies
    the go-sdk ≥ 1.24 requirement). Confirm the installed toolchain.
 2. **Module name:** `github.com/teran/mcp-proxmox` — the repo's native namespace
    on **GitHub.com**, recorded in §2.4. If the server ever becomes a
