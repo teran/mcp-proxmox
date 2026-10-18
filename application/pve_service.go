@@ -41,6 +41,21 @@ func (s *PVEService) ListBackupJobs(ctx context.Context) ([]model.BackupJob, err
 	return s.gw.ListBackupJobs(ctx)
 }
 
+// CreateBackupJob creates a vzdump backup job and returns its ID.
+func (s *PVEService) CreateBackupJob(ctx context.Context, req model.CreateBackupJobRequest) (string, error) {
+	return s.gw.CreateBackupJob(ctx, req)
+}
+
+// UpdateBackupJob updates a vzdump backup job and returns its ID.
+func (s *PVEService) UpdateBackupJob(ctx context.Context, id string, req model.CreateBackupJobRequest) (string, error) {
+	return s.gw.UpdateBackupJob(ctx, id, req)
+}
+
+// DeleteBackupJob deletes a vzdump backup job by ID.
+func (s *PVEService) DeleteBackupJob(ctx context.Context, id string) error {
+	return s.gw.DeleteBackupJob(ctx, id)
+}
+
 // GetNextID returns the next free VMID.
 func (s *PVEService) GetNextID(ctx context.Context) (string, error) {
 	return s.gw.GetNextID(ctx)

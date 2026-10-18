@@ -36,6 +36,9 @@ type mockPVEGateway struct {
 	startVMBackup    func(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
 	setVMConfig      func(ctx context.Context, node string, vmid int, req model.SetVMConfigRequest) error
 	setLXCConfig     func(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error
+	createBackupJob  func(ctx context.Context, req model.CreateBackupJobRequest) (string, error)
+	updateBackupJob  func(ctx context.Context, id string, req model.CreateBackupJobRequest) (string, error)
+	deleteBackupJob  func(ctx context.Context, id string) error
 
 	// VM/LXC snapshots (read-only).
 	listVMSnapshots  func(ctx context.Context, node string, vmid int) ([]model.Snapshot, error)
@@ -223,6 +226,24 @@ func (m *mockPVEGateway) SetVMConfig(ctx context.Context, node string, vmid int,
 func (m *mockPVEGateway) SetLXCConfig(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error {
 	if m.setLXCConfig != nil {
 		return m.setLXCConfig(ctx, node, vmid, req)
+	}
+	return nil
+}
+func (m *mockPVEGateway) CreateBackupJob(ctx context.Context, req model.CreateBackupJobRequest) (string, error) {
+	if m.createBackupJob != nil {
+		return m.createBackupJob(ctx, req)
+	}
+	return "", nil
+}
+func (m *mockPVEGateway) UpdateBackupJob(ctx context.Context, id string, req model.CreateBackupJobRequest) (string, error) {
+	if m.updateBackupJob != nil {
+		return m.updateBackupJob(ctx, id, req)
+	}
+	return "", nil
+}
+func (m *mockPVEGateway) DeleteBackupJob(ctx context.Context, id string) error {
+	if m.deleteBackupJob != nil {
+		return m.deleteBackupJob(ctx, id)
 	}
 	return nil
 }

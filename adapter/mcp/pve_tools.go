@@ -98,6 +98,28 @@ type vmBackupIn struct {
 	Compress      string `json:"compress,omitempty" jsonschema:"Compression: 0 | lzo | gzip | zstd"`
 }
 
+// backupJobIn is the input of pve_backup_job_create / pve_backup_job_update.
+// ID is the job's natural key: required on update (the target job), optional on
+// create (PVE assigns an ID when omitted). Storage and Schedule are required.
+type backupJobIn struct {
+	ID            string `json:"id,omitempty" jsonschema:"Backup job ID (natural key); required on update, optional on create"`
+	All           bool   `json:"all,omitempty" jsonschema:"Back up all VMs/CTs on the cluster"`
+	VMID          string `json:"vmid,omitempty" jsonschema:"Comma-separated VM/CT IDs to back up, or 'all'"`
+	Storage       string `json:"storage" jsonschema:"Backup storage (e.g. local, nfs-backup)"`
+	Schedule      string `json:"schedule" jsonschema:"Backup schedule in standard cron format (e.g. 00 2 * * 1)"`
+	Mode          string `json:"mode,omitempty" jsonschema:"Backup mode: snapshot | suspend | stop (default snapshot)"`
+	Compress      string `json:"compress,omitempty" jsonschema:"Compression: 0 | lzo | gzip | zstd"`
+	Enabled       *bool  `json:"enabled,omitempty" jsonschema:"Whether the job is enabled (omit to keep the current/default value)"`
+	NotesTemplate string `json:"notes_template,omitempty" jsonschema:"Template string for the backup notes"`
+	Comment       string `json:"comment,omitempty" jsonschema:"Free-form comment describing the job"`
+	Node          string `json:"node,omitempty" jsonschema:"Run the job only on this node"`
+}
+
+// backupJobIDIn is the input of pve_backup_job_delete.
+type backupJobIDIn struct {
+	ID string `json:"id" jsonschema:"Backup job ID to delete"`
+}
+
 // vmStopIn is the input of pve_vm_stop.
 type vmStopIn struct {
 	Node     string `json:"node" jsonschema:"PVE node name"`
@@ -453,6 +475,58 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 				Compress:      in.Compress,
 			})
 		})
+
+	mutTool(s, "pve_backup_job_create", "Create PVE backup job",
+		"Create a new vzdump backup job (schedule) on the PVE cluster.",
+		"Provide the backup storage and schedule; optionally set the target VMs/CTs (vmid as comma-separated IDs or 'all'), mode, compression, enabled, notes template, comment and node. Set id to pin a specific job ID, or omit it to let PVE assign one. Returns the created job ID. Idempotent: creating a job with a fixed id is safe to repeat (X02).",
+		log, true, func(ctx context.Context, in backupJobIn) (any, error) {
+			id, err := app.PVE.CreateBackupJob(ctx, model.CreateBackupJobRequest{
+				ID:            in.ID,
+				All:           in.All,
+				VMID:          in.VMID,
+				Storage:       in.Storage,
+				Schedule:      in.Schedule,
+				Mode:          in.Mode,
+				Compress:      in.Compress,
+				Enabled:       in.Enabled,
+				NotesTemplate: in.NotesTemplate,
+				Comment:       in.Comment,
+				Node:          in.Node,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"id": id}, nil
+		})
+
+	mutTool(s, "pve_backup_job_update", "Update PVE backup job",
+		"Update an existing vzdump backup job (schedule) on the PVE cluster.",
+		"Provide the job id and the fields to change (storage, schedule, targets, mode, compression, enabled, notes template, comment, node). Returns the job ID. Idempotent: applying the same update twice converges to the same state.",
+		log, true, func(ctx context.Context, in backupJobIn) (any, error) {
+			id, err := app.PVE.UpdateBackupJob(ctx, in.ID, model.CreateBackupJobRequest{
+				All:           in.All,
+				VMID:          in.VMID,
+				Storage:       in.Storage,
+				Schedule:      in.Schedule,
+				Mode:          in.Mode,
+				Compress:      in.Compress,
+				Enabled:       in.Enabled,
+				NotesTemplate: in.NotesTemplate,
+				Comment:       in.Comment,
+				Node:          in.Node,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"id": id}, nil
+		})
+
+	mutTool(s, "pve_backup_job_delete", "Delete PVE backup job",
+		"Delete a vzdump backup job (schedule) from the PVE cluster.",
+		"Provide the job id to delete. The job is removed and its schedule stops running. Not idempotent and destructive.",
+		log, false, func(ctx context.Context, in backupJobIDIn) (any, error) {
+			return map[string]any{"deleted": true}, app.PVE.DeleteBackupJob(ctx, in.ID)
+		}, true)
 
 	mutTool(s, "pve_vm_start", "Start QEMU VM",
 		"Start a QEMU VM.",

@@ -42,6 +42,7 @@ type logrusAppLogger struct {
 type reqCapture struct {
 	method    string
 	path      string
+	rawPath   string
 	query     string
 	auth      string
 	requestID string
@@ -172,6 +173,7 @@ func mockServer(t *testing.T, status int, body string, rec *reqCapture) *httptes
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec.method = r.Method
 		rec.path = r.URL.Path
+		rec.rawPath = r.URL.RawPath
 		rec.query = r.URL.RawQuery
 		rec.auth = r.Header.Get("Authorization")
 		rec.requestID = r.Header.Get("X-Request-ID")

@@ -58,3 +58,20 @@ type BackupJob struct {
 	PruneBackups     string `json:"prune-backups,omitempty"`
 	ExcludePath      string `json:"exclude-path,omitempty"`
 }
+
+// CreateBackupJobRequest is the form body of POST /cluster/backup (and the
+// updatable subset for PUT /cluster/backup/{id}). ID is the job's natural key
+// (resource key for idempotency, X02). Empty/zero fields are omitted.
+type CreateBackupJobRequest struct {
+	ID            string `json:"id,omitempty"`
+	All           bool   `json:"all,omitempty"`
+	VMID          string `json:"vmid,omitempty"` // comma-separated IDs or "all"
+	Storage       string `json:"storage"`
+	Schedule      string `json:"schedule"`
+	Mode          string `json:"mode,omitempty"` // snapshot|suspend|stop (default snapshot)
+	Compress      string `json:"compress,omitempty"`
+	Enabled       *bool  `json:"enabled,omitempty"`
+	NotesTemplate string `json:"notes-template,omitempty"`
+	Comment       string `json:"comment,omitempty"`
+	Node          string `json:"node,omitempty"`
+}
