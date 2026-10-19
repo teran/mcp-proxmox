@@ -664,14 +664,14 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 
 	mutTool(s, "pve_vm_snapshot_rollback", "Roll back QEMU VM to snapshot",
 		"Roll a QEMU VM back to a snapshot.",
-		"Provide node, vmid and the snapshot name to roll back to. Returns the task UPID. Not idempotent.",
+		"Provide node, vmid and the snapshot name to roll back to. Destructive: reverts the VM to the snapshot state, discarding changes since the snapshot. Returns the task UPID. Not idempotent.",
 		log, false, func(ctx context.Context, in vmSnapshotIn) (any, error) {
 			t, err := app.PVE.RollbackVMSnapshot(ctx, in.Node, in.VMID, in.Snapname)
 			if err != nil {
 				return nil, err
 			}
 			return map[string]any{"upid": t.UPID}, nil
-		})
+		}, true)
 
 	mutTool(s, "pve_lxc_start", "Start LXC container",
 		"Start an LXC container.",
@@ -774,18 +774,18 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 
 	mutTool(s, "pve_lxc_snapshot_rollback", "Roll back LXC container to snapshot",
 		"Roll an LXC container back to a snapshot.",
-		"Provide node, vmid (container ID) and the snapshot name to roll back to. Returns the task UPID. Not idempotent.",
+		"Provide node, vmid (container ID) and the snapshot name to roll back to. Destructive: reverts the container to the snapshot state, discarding changes since the snapshot. Returns the task UPID. Not idempotent.",
 		log, false, func(ctx context.Context, in lxcSnapshotIn) (any, error) {
 			t, err := app.PVE.RollbackLXCSnapshot(ctx, in.Node, in.VMID, in.Snapname)
 			if err != nil {
 				return nil, err
 			}
 			return map[string]any{"upid": t.UPID}, nil
-		})
+		}, true)
 
 	mutTool(s, "pve_vm_restore", "Restore QEMU VM backup",
 		"Restore a QEMU VM from a backup archive (qmrestore).",
-		"Provide node and the archive path. Optionally set vmid (otherwise the VM is restored to its original ID), storage, unique, force, pool and bwlimit. Returns the task UPID to poll with pve_task_status. Not idempotent: each call starts a new restore.",
+		"Provide node and the archive path. Optionally set vmid (otherwise the VM is restored to its original ID), storage, unique, force, pool and bwlimit. Destructive: may overwrite an existing VM unless unique is set. Returns the task UPID to poll with pve_task_status. Not idempotent: each call starts a new restore.",
 		log, false, func(ctx context.Context, in vmRestoreIn) (any, error) {
 			t, err := app.PVE.RestoreVM(ctx, in.Node, model.PVERestoreRequest{
 				Archive: in.Archive,
@@ -800,7 +800,7 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 				return nil, err
 			}
 			return map[string]any{"upid": t.UPID}, nil
-		})
+		}, true)
 
 	mutTool(s, "pve_vm_set", "Set QEMU VM config",
 		"Update a QEMU VM's configuration options.",

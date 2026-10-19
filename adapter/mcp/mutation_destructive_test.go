@@ -9,10 +9,11 @@ import (
 	"github.com/teran/mcp-proxmox/application"
 )
 
-// TestMutationToolDestructiveHints verifies the S12 conformance fix: only the
-// truly destructive delete operations carry DestructiveHint=true on their MCP
-// ToolAnnotations, while every other mutation (including all PBS mutations —
-// there are no PBS delete tools yet) is flagged non-destructive.
+// TestMutationToolDestructiveHints verifies the S12 conformance fix: truly
+// destructive mutations — deletes, restores, rollbacks, and destructive PBS
+// jobs (prune, GC) — carry DestructiveHint=true on their MCP ToolAnnotations,
+// while non-destructive mutations (create/start/stop/set/sync/verify, etc.) are
+// flagged non-destructive.
 func TestMutationToolDestructiveHints(t *testing.T) {
 	app := application.New(nopLogger{}, "v1.0.0",
 		application.WithPVE(&stubPVEGateway{}), application.WithPBS(&stubPBSGateway{}))
@@ -22,8 +23,15 @@ func TestMutationToolDestructiveHints(t *testing.T) {
 	destructive := []string{
 		"pve_vm_delete",
 		"pve_vm_snapshot_delete",
+		"pve_vm_snapshot_rollback",
+		"pve_vm_restore",
 		"pve_lxc_delete",
 		"pve_lxc_snapshot_delete",
+		"pve_lxc_snapshot_rollback",
+		"pbs_gc_start",
+		"pbs_prune_start",
+		"pbs_backup_restore_file",
+		"pbs_backup_vm_restore",
 	}
 
 	for _, name := range destructive {
@@ -31,7 +39,7 @@ func TestMutationToolDestructiveHints(t *testing.T) {
 		require.True(t, ok, "expected tool %s in registry", name)
 		require.NotNil(t, tl.Annotations, "tool %s must carry annotations", name)
 		require.NotNil(t, tl.Annotations.DestructiveHint, "tool %s must set DestructiveHint", name)
-		assert.True(t, *tl.Annotations.DestructiveHint, "delete tool %s must be flagged destructive", name)
+		assert.True(t, *tl.Annotations.DestructiveHint, "destructive tool %s must be flagged destructive", name)
 	}
 
 	nonDestructive := []string{
@@ -42,9 +50,7 @@ func TestMutationToolDestructiveHints(t *testing.T) {
 		"pve_vm_set",
 		"pve_lxc_set",
 		"pbs_verify_start",
-		"pbs_gc_start",
-		"pbs_backup_restore_file",
-		"pbs_backup_vm_restore",
+		"pbs_sync_start",
 	}
 
 	for _, name := range nonDestructive {
@@ -52,6 +58,6 @@ func TestMutationToolDestructiveHints(t *testing.T) {
 		require.True(t, ok, "expected tool %s in registry", name)
 		require.NotNil(t, tl.Annotations, "tool %s must carry annotations", name)
 		require.NotNil(t, tl.Annotations.DestructiveHint, "tool %s must set DestructiveHint", name)
-		assert.False(t, *tl.Annotations.DestructiveHint, "non-delete tool %s must NOT be flagged destructive", name)
+		assert.False(t, *tl.Annotations.DestructiveHint, "non-destructive tool %s must NOT be flagged destructive", name)
 	}
 }
