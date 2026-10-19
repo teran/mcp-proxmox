@@ -198,25 +198,25 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 
 	mutTool(s, "pbs_gc_start", "Start PBS garbage collection",
 		"Start a garbage-collection job on a PBS datastore.",
-		"Provide the datastore name. Returns the job UPID. Not idempotent: each call starts a new GC.",
+		"Provide the datastore name. Returns the job UPID. Destructive: GC removes unreferenced data from the datastore. Not idempotent: each call starts a new GC.",
 		log, false, func(ctx context.Context, in storeIn) (any, error) {
 			upid, err := app.PBS.StartGC(ctx, in.Store)
 			if err != nil {
 				return nil, err
 			}
 			return map[string]any{"upid": upid}, nil
-		})
+		}, true)
 
 	mutTool(s, "pbs_prune_start", "Start PBS prune",
 		"Start a prune job on a PBS datastore.",
-		"Provide the datastore name. Returns the job UPID to poll with pbs_prune_status. Not idempotent: each call starts a new prune.",
+		"Provide the datastore name. Returns the job UPID to poll with pbs_prune_status. Destructive: prune removes backup snapshots per the datastore's retention policy. Not idempotent: each call starts a new prune.",
 		log, false, func(ctx context.Context, in storeIn) (any, error) {
 			upid, err := app.PBS.StartPrune(ctx, in.Store)
 			if err != nil {
 				return nil, err
 			}
 			return map[string]any{"upid": upid}, nil
-		})
+		}, true)
 
 	mutTool(s, "pbs_sync_start", "Start PBS sync",
 		"Start a one-off sync job on a PBS datastore.",
@@ -241,17 +241,17 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 
 	mutTool(s, "pbs_backup_restore_file", "Restore single file from PBS backup",
 		"Restore a single file out of a PBS backup snapshot to a target path on the PBS filesystem.",
-		"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier, the source path inside the backup and the target path on the PBS filesystem. Returns no task UPID. Not idempotent.",
+		"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier, the source path inside the backup and the target path on the PBS filesystem. Destructive: overwrites the target path on the PBS filesystem. Returns no task UPID. Not idempotent.",
 		log, false, func(ctx context.Context, in pbsFileRestoreIn) (any, error) {
 			return nil, app.PBS.RestoreFile(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, model.PBSFileRestoreRequest{
 				Path:   in.Path,
 				Target: in.Target,
 			})
-		})
+		}, true)
 
 	mutTool(s, "pbs_backup_vm_restore", "Restore PBS VM backup",
 		"Restore a PBS VM backup snapshot into a PVE datastore.",
-		"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier, the target PVE storage, and optionally a VM ID (or 'next'), host, password, fingerprint, pool, verbose and reload. Returns the task UPID to poll with pbs_task_status. Not idempotent: each call starts a new restore.",
+		"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier, the target PVE storage, and optionally a VM ID (or 'next'), host, password, fingerprint, pool, verbose and reload. Destructive: restores/overwrites VM state on the target PVE storage. Returns the task UPID to poll with pbs_task_status. Not idempotent: each call starts a new restore.",
 		log, false, func(ctx context.Context, in pbsVMRestoreIn) (any, error) {
 			upid, err := app.PBS.RestoreVMBackup(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, model.PBSVMRestoreRequest{
 				Target:      in.Target,
@@ -267,5 +267,5 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 				return nil, err
 			}
 			return map[string]any{"upid": upid}, nil
-		})
+		}, true)
 }
