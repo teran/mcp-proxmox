@@ -46,6 +46,7 @@ type reqCapture struct {
 	query     string
 	auth      string
 	requestID string
+	userAgent string
 	count     int
 	// form holds the parsed form body (POST/PUT mutations); empty for GETs.
 	form url.Values
@@ -76,6 +77,38 @@ func newTestGateway(t *testing.T, srv *httptest.Server) (*Gateway, *reqCapture) 
 		Retries:      1,
 		RetryBackoff: time.Millisecond,
 	}), rec
+}
+
+// newTestGatewayWithUA builds a Gateway pointing at the given httptest server
+// with the given User-Agent value in its Config, plus a static PVE token and
+// fast retry settings.
+func newTestGatewayWithUA(t *testing.T, srv *httptest.Server, ua string) (*Gateway, *reqCapture) {
+	t.Helper()
+	rec := &reqCapture{}
+	return NewGateway(Config{
+		Endpoint:     srv.URL,
+		TokenSource:  token.NewStaticTokenSource("user@pam!tokenid=secret"),
+		HTTPClient:   srv.Client(),
+		Logger:       noopLogger{},
+		Retries:      1,
+		RetryBackoff: time.Millisecond,
+		UserAgent:    ua,
+	}), rec
+}
+
+// TestGateway_SendsUserAgent verifies the outbound HTTP client identifies
+// itself with the configured User-Agent header in the M10/N44 format
+// `mcp-proxmox/<version> (https://github.com/teran/mcp-proxmox)`.
+func TestGateway_SendsUserAgent(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, 200, `{"data":[{"node":"pve1","status":"online"}]}`, rec)
+	g, _ := newTestGatewayWithUA(t, srv, "mcp-proxmox/v1.2.3 (https://github.com/teran/mcp-proxmox)")
+
+	_, err := g.ListNodes(context.Background())
+	skipIfStub(t, err)
+	require.NoError(t, err)
+
+	assert.Equal(t, "mcp-proxmox/v1.2.3 (https://github.com/teran/mcp-proxmox)", rec.userAgent)
 }
 
 // newTraceGatewayLogger returns a logrus-backed port.AppLogger writing to a
@@ -177,6 +210,7 @@ func mockServer(t *testing.T, status int, body string, rec *reqCapture) *httptes
 		rec.query = r.URL.RawQuery
 		rec.auth = r.Header.Get("Authorization")
 		rec.requestID = r.Header.Get("X-Request-ID")
+		rec.userAgent = r.Header.Get("User-Agent")
 		rec.count++
 		// ParseForm reads the form body for POST/PUT/PATCH into r.PostForm.
 		_ = r.ParseForm()

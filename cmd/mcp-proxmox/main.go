@@ -65,6 +65,7 @@ func buildApp(cfg config.Config, logger port.AppLogger, version string) *applica
 			Logger:       logger,
 			Retries:      2,
 			RetryBackoff: 200 * time.Millisecond,
+			UserAgent:    fmt.Sprintf("%s/%s (https://github.com/teran/mcp-proxmox)", appName, appVersion),
 		})
 		opts = append(opts, application.WithPVE(pveGW))
 		logger.Infof("PVE backend enabled: %s", cfg.PVEEndpoint)
@@ -79,6 +80,7 @@ func buildApp(cfg config.Config, logger port.AppLogger, version string) *applica
 			Logger:       logger,
 			Retries:      2,
 			RetryBackoff: 200 * time.Millisecond,
+			UserAgent:    fmt.Sprintf("%s/%s (https://github.com/teran/mcp-proxmox)", appName, appVersion),
 		})
 		opts = append(opts, application.WithPBS(pbsGW))
 		logger.Infof("PBS backend enabled: %s", cfg.PBSEndpoint)

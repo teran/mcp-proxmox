@@ -38,6 +38,8 @@ type Config struct {
 	Logger       port.AppLogger
 	Retries      int           // 2 (read-only idempotent requests)
 	RetryBackoff time.Duration // 200ms
+	// UserAgent is the value sent as the User-Agent header on outbound requests.
+	UserAgent string
 }
 
 // Gateway is an implementation of port.PVEGateway on top of the PVE REST API.
@@ -66,6 +68,9 @@ func NewGateway(cfg Config) *Gateway {
 // verification stays on).
 func buildClient(cfg Config) (*resty.Client, error) {
 	rc := resty.New()
+	if cfg.UserAgent != "" {
+		rc.SetHeader("User-Agent", cfg.UserAgent)
+	}
 	timeout := defaultTimeout
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	if cfg.HTTPClient != nil {
