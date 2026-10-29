@@ -40,14 +40,15 @@ type logrusAppLogger struct {
 
 // reqCapture records the last request the httptest server received.
 type reqCapture struct {
-	method    string
-	path      string
-	rawPath   string
-	query     string
-	auth      string
-	requestID string
-	userAgent string
-	count     int
+	method      string
+	path        string
+	rawPath     string
+	escapedPath string
+	query       string
+	auth        string
+	requestID   string
+	userAgent   string
+	count       int
 	// form holds the parsed form body (POST/PUT mutations); empty for GETs.
 	form url.Values
 	// rawBody holds the raw request body bytes (verbatim).
@@ -207,6 +208,7 @@ func mockServer(t *testing.T, status int, body string, rec *reqCapture) *httptes
 		rec.method = r.Method
 		rec.path = r.URL.Path
 		rec.rawPath = r.URL.RawPath
+		rec.escapedPath = r.URL.EscapedPath()
 		rec.query = r.URL.RawQuery
 		rec.auth = r.Header.Get("Authorization")
 		rec.requestID = r.Header.Get("X-Request-ID")
@@ -433,6 +435,57 @@ func TestGateway_DoNotImplementedFlag(t *testing.T) {
 	_, err := g.ListNodes(context.Background())
 	assert.True(t, errors.Is(err, ErrNotImplemented) || err == nil,
 		"expected ErrNotImplemented (scaffold) or nil (implemented)")
+}
+
+// TestGateway_PathSegmentsEscaped verifies that user-supplied path segments
+// interpolated into PVE API URL paths reach the wire url.PathEscape'd end-to-end
+// through the real resty gateway against the httptest mock (S11 path-injection
+// conformance). A segment containing '/' must arrive at the server as a single
+// escaped path element (`%2F`), NOT as extra literal path segments. The
+// assertion target is r.URL.EscapedPath(), i.e. exactly what the server
+// receives.
+func TestGateway_PathSegmentsEscaped(t *testing.T) {
+	t.Run("node", func(t *testing.T) {
+		rec := &reqCapture{}
+		srv := mockServer(t, 200, `{"data":{"node":"x","status":"online"}}`, rec)
+		g, _ := newTestGateway(t, srv)
+
+		_, err := g.GetNodeStatus(context.Background(), "node/with/slash")
+		skipIfStub(t, err)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, rec.count)
+		assert.Equal(t, "/api2/json/nodes/node%2Fwith%2Fslash/status", rec.escapedPath,
+			"node segment must be escaped; raw '/' would inject extra path segments")
+	})
+
+	t.Run("upid", func(t *testing.T) {
+		rec := &reqCapture{}
+		srv := mockServer(t, 200, `{"data":{"upid":"x","status":"running"}}`, rec)
+		g, _ := newTestGateway(t, srv)
+
+		_, err := g.GetTaskStatus(context.Background(), "node/with/slash", "upid/with/slash")
+		skipIfStub(t, err)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, rec.count)
+		assert.Equal(t, "/api2/json/nodes/node%2Fwith%2Fslash/tasks/upid%2Fwith%2Fslash/status", rec.escapedPath,
+			"node and upid segments must be escaped")
+	})
+
+	t.Run("storage", func(t *testing.T) {
+		rec := &reqCapture{}
+		srv := mockServer(t, 200, `{"data":{"storage":"x","status":"active"}}`, rec)
+		g, _ := newTestGateway(t, srv)
+
+		_, err := g.GetStorageStatus(context.Background(), "node/with/slash", "st/orage")
+		skipIfStub(t, err)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, rec.count)
+		assert.Equal(t, "/api2/json/nodes/node%2Fwith%2Fslash/storage/st%2Forage/status", rec.escapedPath,
+			"node and storage segments must be escaped")
+	})
 }
 
 // compile-time: Gateway implements port.PVEGateway.

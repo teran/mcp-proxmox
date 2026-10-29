@@ -338,7 +338,7 @@ func (g *Gateway) ListNodes(ctx context.Context) ([]model.Node, error) {
 // GetNodeStatus returns the status of a single node.
 func (g *Gateway) GetNodeStatus(ctx context.Context, node string) (*model.NodeStatus, error) {
 	var out model.NodeStatus
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+node+"/status", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/status", nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -456,7 +456,7 @@ func (g *Gateway) GetNextID(ctx context.Context) (string, error) {
 // ListVMs returns the QEMU VMs on a node.
 func (g *Gateway) ListVMs(ctx context.Context, node string) ([]model.VM, error) {
 	var out []model.VM
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+node+"/qemu", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/qemu", nil, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -465,7 +465,7 @@ func (g *Gateway) ListVMs(ctx context.Context, node string) ([]model.VM, error) 
 // GetVMConfig returns the config of a VM.
 func (g *Gateway) GetVMConfig(ctx context.Context, node string, vmid int) (*model.VMConfig, error) {
 	var out model.VMConfig
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+node+"/qemu/"+strconv.Itoa(vmid)+"/config", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/qemu/"+strconv.Itoa(vmid)+"/config", nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -474,7 +474,7 @@ func (g *Gateway) GetVMConfig(ctx context.Context, node string, vmid int) (*mode
 // GetVMStatus returns the status of a VM.
 func (g *Gateway) GetVMStatus(ctx context.Context, node string, vmid int) (*model.VMStatus, error) {
 	var out model.VMStatus
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+node+"/qemu/"+strconv.Itoa(vmid)+"/status/current", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/qemu/"+strconv.Itoa(vmid)+"/status/current", nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -483,7 +483,7 @@ func (g *Gateway) GetVMStatus(ctx context.Context, node string, vmid int) (*mode
 // ListLXCs returns the LXC containers on a node.
 func (g *Gateway) ListLXCs(ctx context.Context, node string) ([]model.LXC, error) {
 	var out []model.LXC
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+node+"/lxc", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/lxc", nil, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -492,7 +492,7 @@ func (g *Gateway) ListLXCs(ctx context.Context, node string) ([]model.LXC, error
 // GetLXCConfig returns the config of a container.
 func (g *Gateway) GetLXCConfig(ctx context.Context, node string, vmid int) (*model.LXCConfig, error) {
 	var out model.LXCConfig
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+node+"/lxc/"+strconv.Itoa(vmid)+"/config", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/lxc/"+strconv.Itoa(vmid)+"/config", nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -501,7 +501,7 @@ func (g *Gateway) GetLXCConfig(ctx context.Context, node string, vmid int) (*mod
 // GetLXCStatus returns the status of a container.
 func (g *Gateway) GetLXCStatus(ctx context.Context, node string, vmid int) (*model.LXCStatus, error) {
 	var out model.LXCStatus
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+node+"/lxc/"+strconv.Itoa(vmid)+"/status/current", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/lxc/"+strconv.Itoa(vmid)+"/status/current", nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -519,7 +519,7 @@ func (g *Gateway) ListStorage(ctx context.Context) ([]model.Storage, error) {
 // GetStorageStatus returns the status of a storage on a node.
 func (g *Gateway) GetStorageStatus(ctx context.Context, node, storage string) (*model.StorageStatus, error) {
 	var out model.StorageStatus
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+node+"/storage/"+storage+"/status", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/storage/"+url.PathEscape(storage)+"/status", nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -528,7 +528,7 @@ func (g *Gateway) GetStorageStatus(ctx context.Context, node, storage string) (*
 // ListNetwork returns the network interfaces of a node.
 func (g *Gateway) ListNetwork(ctx context.Context, node string) ([]model.NetworkInterface, error) {
 	var out []model.NetworkInterface
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+node+"/network", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/network", nil, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -559,7 +559,7 @@ func (g *Gateway) ListTasks(ctx context.Context, node string, opts port.TaskList
 			q.Set("limit", strconv.Itoa(opts.Limit))
 		}
 	}
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+node+"/tasks", q, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/tasks", q, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -568,7 +568,7 @@ func (g *Gateway) ListTasks(ctx context.Context, node string, opts port.TaskList
 // GetTaskStatus returns the status of a task by UPID.
 func (g *Gateway) GetTaskStatus(ctx context.Context, node, upid string) (*model.TaskStatus, error) {
 	var out model.TaskStatus
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+node+"/tasks/"+upid+"/status", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/tasks/"+url.PathEscape(upid)+"/status", nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -581,7 +581,7 @@ func (g *Gateway) GetTaskLog(ctx context.Context, node, upid string, limit int) 
 	if limit > 0 {
 		q = url.Values{"limit": []string{strconv.Itoa(limit)}}
 	}
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+node+"/tasks/"+upid+"/log", q, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/tasks/"+url.PathEscape(upid)+"/log", q, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -664,7 +664,7 @@ func (g *Gateway) CreateVM(ctx context.Context, node string, req model.CreateVMR
 	}
 
 	var vmid int
-	if err := g.doMutation(ctx, http.MethodPost, "/nodes/"+node+"/qemu", form, &vmid); err != nil {
+	if err := g.doMutation(ctx, http.MethodPost, "/nodes/"+url.PathEscape(node)+"/qemu", form, &vmid); err != nil {
 		return 0, err
 	}
 	return vmid, nil
@@ -676,7 +676,7 @@ func (g *Gateway) ResizeVM(ctx context.Context, node string, vmid int, req model
 	form := url.Values{}
 	form.Set("disk", req.Disk)
 	form.Set("size", fmt.Sprintf("%+dG", req.SizeGB))
-	return g.doMutation(ctx, http.MethodPut, "/nodes/"+node+"/qemu/"+strconv.Itoa(vmid)+"/resize", form, nil)
+	return g.doMutation(ctx, http.MethodPut, "/nodes/"+url.PathEscape(node)+"/qemu/"+strconv.Itoa(vmid)+"/resize", form, nil)
 }
 
 // MigrateVM migrates a VM to another node via
@@ -690,7 +690,7 @@ func (g *Gateway) MigrateVM(ctx context.Context, node string, vmid int, req mode
 	if req.WithLocalDisks {
 		form.Set("with-local-disks", "1")
 	}
-	return g.doMutation(ctx, http.MethodPost, "/nodes/"+node+"/qemu/"+strconv.Itoa(vmid)+"/migrate", form, nil)
+	return g.doMutation(ctx, http.MethodPost, "/nodes/"+url.PathEscape(node)+"/qemu/"+strconv.Itoa(vmid)+"/migrate", form, nil)
 }
 
 // AddHAResource registers a new HA resource via POST /cluster/ha/resources.
@@ -723,15 +723,16 @@ func (g *Gateway) StartVMBackup(ctx context.Context, node string, req model.VMBa
 	}
 
 	var upid string
-	if err := g.doMutation(ctx, http.MethodPost, "/nodes/"+node+"/vzdump", form, &upid); err != nil {
+	if err := g.doMutation(ctx, http.MethodPost, "/nodes/"+url.PathEscape(node)+"/vzdump", form, &upid); err != nil {
 		return nil, err
 	}
 	return &model.Task{UPID: upid}, nil
 }
 
-// vmPath builds the QEMU VM path prefix for a node + vmid.
+// vmPath builds the QEMU VM path prefix for a node + vmid. node is path-escaped
+// so a value containing reserved path characters cannot inject extra segments.
 func vmPath(node string, vmid int) string {
-	return "/nodes/" + node + "/qemu/" + strconv.Itoa(vmid)
+	return "/nodes/" + url.PathEscape(node) + "/qemu/" + strconv.Itoa(vmid)
 }
 
 // StartVM starts a QEMU VM via POST /nodes/{node}/qemu/{vmid}/status/start.
@@ -911,7 +912,7 @@ func (g *Gateway) CreateVMSnapshot(ctx context.Context, node string, vmid int, r
 // DELETE /nodes/{node}/qemu/{vmid}/snapshot/{snapname}.
 func (g *Gateway) DeleteVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
 	var upid string
-	if err := g.doMutation(ctx, http.MethodDelete, vmPath(node, vmid)+"/snapshot/"+snapname, nil, &upid); err != nil {
+	if err := g.doMutation(ctx, http.MethodDelete, vmPath(node, vmid)+"/snapshot/"+url.PathEscape(snapname), nil, &upid); err != nil {
 		return nil, err
 	}
 	return &model.Task{UPID: upid}, nil
@@ -921,15 +922,17 @@ func (g *Gateway) DeleteVMSnapshot(ctx context.Context, node string, vmid int, s
 // POST /nodes/{node}/qemu/{vmid}/snapshot/{snapname}/rollback.
 func (g *Gateway) RollbackVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
 	var upid string
-	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/snapshot/"+snapname+"/rollback", nil, &upid); err != nil {
+	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/snapshot/"+url.PathEscape(snapname)+"/rollback", nil, &upid); err != nil {
 		return nil, err
 	}
 	return &model.Task{UPID: upid}, nil
 }
 
-// lxcPath builds the LXC container path prefix for a node + vmid.
+// lxcPath builds the LXC container path prefix for a node + vmid. node is
+// path-escaped so a value containing reserved path characters cannot inject
+// extra segments.
 func lxcPath(node string, vmid int) string {
-	return "/nodes/" + node + "/lxc/" + strconv.Itoa(vmid)
+	return "/nodes/" + url.PathEscape(node) + "/lxc/" + strconv.Itoa(vmid)
 }
 
 // StartLXC starts an LXC container via
@@ -1077,7 +1080,7 @@ func (g *Gateway) CreateLXCSnapshot(ctx context.Context, node string, vmid int, 
 // DELETE /nodes/{node}/lxc/{vmid}/snapshot/{snapname}.
 func (g *Gateway) DeleteLXCSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
 	var upid string
-	if err := g.doMutation(ctx, http.MethodDelete, lxcPath(node, vmid)+"/snapshot/"+snapname, nil, &upid); err != nil {
+	if err := g.doMutation(ctx, http.MethodDelete, lxcPath(node, vmid)+"/snapshot/"+url.PathEscape(snapname), nil, &upid); err != nil {
 		return nil, err
 	}
 	return &model.Task{UPID: upid}, nil
@@ -1089,7 +1092,7 @@ func (g *Gateway) DeleteLXCSnapshot(ctx context.Context, node string, vmid int, 
 // is left unset so PVE's default applies.
 func (g *Gateway) RollbackLXCSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
 	var upid string
-	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/snapshot/"+snapname+"/rollback", nil, &upid); err != nil {
+	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/snapshot/"+url.PathEscape(snapname)+"/rollback", nil, &upid); err != nil {
 		return nil, err
 	}
 	return &model.Task{UPID: upid}, nil
@@ -1122,7 +1125,7 @@ func (g *Gateway) RestoreVM(ctx context.Context, node string, req model.PVEResto
 		form.Set("bwlimit", strconv.Itoa(req.BwLimit))
 	}
 	var upid string
-	if err := g.doMutation(ctx, http.MethodPost, "/nodes/"+node+"/qemu", form, &upid); err != nil {
+	if err := g.doMutation(ctx, http.MethodPost, "/nodes/"+url.PathEscape(node)+"/qemu", form, &upid); err != nil {
 		return nil, err
 	}
 	return &model.Task{UPID: upid}, nil
