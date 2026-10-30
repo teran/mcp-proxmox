@@ -19,7 +19,7 @@ permissions:
   contents: write
 
 env:
-  GO_VERSION: "1.27"             # keep in sync with go.mod (go 1.27.2)
+  GO_VERSION: "1.27"             # keep in sync with go.mod (go 1.27.3)
 
 jobs:
   goreleaser:

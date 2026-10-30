@@ -37,7 +37,7 @@ on:
   workflow_dispatch:
 
 env:
-  GO_VERSION: "1.27"             # keep in sync with go.mod (go 1.27.2)
+  GO_VERSION: "1.27"             # keep in sync with go.mod (go 1.27.3)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -56,17 +56,17 @@ jobs:
           cache: true
       - name: install lint/arch/sec/vuln tools
         run: |
-          # golangci-lint >= v2.14.0 bundles x/tools >= v0.50.0, which is required
-          # to read Go 1.27.x export data (version V5). v2.13.1 (x/tools v0.49.0,
-          # max V4) fails to typecheck stdlib under `go 1.27.2` in go.mod.
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+          # golangci-lint v2.15.0 bundles x/tools >= v0.50.0, which is required
+          # to read Go 1.27.x export data (version V5). Earlier v2.13.x (x/tools
+          # v0.49.0, max V4) fails to typecheck stdlib under `go 1.27.x` in go.mod.
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
           go install github.com/fe3dback/go-arch-lint@latest
-          # gosec must be built with x/tools >= v0.50.0 to read Go 1.27.x export
-          # data (version V5). The latest RELEASE (v2.29.0) bundles x/tools
-          # v0.49.0 (max V4) and fails to typecheck any package under `go 1.27.x`,
-          # so we pin to a master pseudo-version that bumps x/tools to v0.51.0.
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.29.1-0.20261009120814-7b1b5cebe007
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          # gosec v2.30.0 is the minimum verified to read Go 1.27.x export data
+          # (version V5); it is compatible with the pinned Go 1.27.3 toolchain.
+          # Earlier releases (<= v2.29.0, x/tools v0.49.0, max V4) fail to
+          # typecheck packages under `go 1.27.x`.
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
       - name: Lint (make lint)
         run: make lint
 
