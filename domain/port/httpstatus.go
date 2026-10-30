@@ -29,5 +29,6 @@ func HTTPStatus(err error) (int, bool) {
 	if errors.As(err, &sc) && sc.StatusCode() > 0 {
 		return sc.StatusCode(), true
 	}
+
 	return 0, false
 }

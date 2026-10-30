@@ -42,9 +42,18 @@ var (
 	version       = "v0.0.0-dev"
 )
 
-// defaultLogFile is the stdio-friendly file sink used when LOG_LEVEL is set
-// (override via LOG_FILENAME). See SPEC.md §5.2 / L1–L3.
-const defaultLogFile = "/tmp/mcp-proxmox.log"
+const (
+	// defaultLogFile is the stdio-friendly file sink used when LOG_LEVEL is set
+	// (override via LOG_FILENAME). See SPEC.md §5.2 / L1–L3.
+	defaultLogFile = "/tmp/mcp-proxmox.log"
+	// maxBackends is the capacity hint for the App options slice (PVE + PBS).
+	maxBackends = 2
+	// defaultRetries / defaultRetryBackoff configure the gateway read retries.
+	defaultRetries      = 2
+	defaultRetryBackoff = 200 * time.Millisecond
+	// logFileMode is the permission mask applied to the log file (0600).
+	logFileMode = 0o600
+)
 
 // versionString returns the human-readable version line printed by the
 // -version flag (e.g. "mcp-proxmox v1.2.3").
@@ -54,7 +63,7 @@ func versionString() string {
 
 // buildApp wires the backends enabled in cfg into a single App.
 func buildApp(cfg config.Config, logger port.AppLogger, version string) *application.App {
-	opts := make([]application.Option, 0, 2)
+	opts := make([]application.Option, 0, maxBackends)
 
 	if cfg.PVEEnabled() {
 		pveToken := token.NewStaticTokenSource(cfg.PVEToken)
@@ -63,8 +72,8 @@ func buildApp(cfg config.Config, logger port.AppLogger, version string) *applica
 			TokenSource:  pveToken,
 			CACertPath:   cfg.PVECACertPath,
 			Logger:       logger,
-			Retries:      2,
-			RetryBackoff: 200 * time.Millisecond,
+			Retries:      defaultRetries,
+			RetryBackoff: defaultRetryBackoff,
 			UserAgent:    fmt.Sprintf("%s/%s (https://github.com/teran/mcp-proxmox)", appName, appVersion),
 		})
 		opts = append(opts, application.WithPVE(pveGW))
@@ -78,8 +87,8 @@ func buildApp(cfg config.Config, logger port.AppLogger, version string) *applica
 			TokenSource:  pbsToken,
 			CACertPath:   cfg.PBSCACertPath,
 			Logger:       logger,
-			Retries:      2,
-			RetryBackoff: 200 * time.Millisecond,
+			Retries:      defaultRetries,
+			RetryBackoff: defaultRetryBackoff,
 			UserAgent:    fmt.Sprintf("%s/%s (https://github.com/teran/mcp-proxmox)", appName, appVersion),
 		})
 		opts = append(opts, application.WithPBS(pbsGW))
@@ -99,9 +108,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
 	// Configuration comes from environment variables (kelseyhightower/envconfig):
 	// PVE_ENDPOINT/PVE_TOKEN(/PVE_CA_CERT_PATH), PBS_ENDPOINT/PBS_TOKEN
 	// (/PBS_CA_CERT_PATH), LOG_LEVEL, LOG_FILENAME, LOG_FORMAT. See SPEC.md §4.4.
@@ -110,6 +116,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		os.Exit(1)
 	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	// Logging (SPEC.md §5 / L2). When LOG_LEVEL is set, logs are ENABLED and
 	// written to LOG_FILENAME (default /tmp/mcp-proxmox.log) at that level in
@@ -128,7 +137,7 @@ func main() {
 		// #nosec G304 -- logFile is a configuration-supplied LOG_FILENAME path
 		// (default /tmp/mcp-proxmox.log), never attacker-controlled input. Its
 		// content is never logged.
-		f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, logFileMode)
 		if err != nil {
 			logrusLogger.Fatalf("open log file %s: %v", logFile, err)
 		}

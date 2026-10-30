@@ -56,7 +56,7 @@ func NewPBSStaticTokenSource(rawToken string) *StaticTokenSource {
 //
 //	PVE: PVEAPIToken=user@realm!tokenid=secret
 //	PBS: PBSAPIToken=user@realm!tokenid:secret
-func (s *StaticTokenSource) AuthorizationHeader(ctx context.Context) (string, error) {
+func (s *StaticTokenSource) AuthorizationHeader(_ context.Context) (string, error) {
 	if strings.TrimSpace(s.token) == "" {
 		return "", errors.New("token: empty API token")
 	}
@@ -64,6 +64,7 @@ func (s *StaticTokenSource) AuthorizationHeader(ctx context.Context) (string, er
 	if i := strings.LastIndex(value, "="); i >= 0 {
 		value = value[:i] + s.sep + value[i+1:]
 	}
+
 	return s.scheme + "=" + value, nil
 }
 

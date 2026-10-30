@@ -15,6 +15,7 @@ func WithSessionID(ctx context.Context, id string) context.Context {
 // SessionIDFromContext returns the session ID set by WithSessionID.
 func SessionIDFromContext(ctx context.Context) (string, bool) {
 	id, ok := ctx.Value(sessionIDCtxKey{}).(string)
+
 	return id, ok
 }
 
@@ -30,5 +31,6 @@ func WithRequestID(ctx context.Context, id string) context.Context {
 // RequestIDFromContext returns the request ID set by WithRequestID.
 func RequestIDFromContext(ctx context.Context) (string, bool) {
 	id, ok := ctx.Value(requestIDCtxKey{}).(string)
+
 	return id, ok
 }

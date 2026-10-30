@@ -16,6 +16,7 @@ func (f *FlexInt) UnmarshalJSON(b []byte) error {
 	b = bytes.TrimSpace(b)
 	if len(b) == 0 || bytes.Equal(b, []byte("null")) {
 		*f = 0
+
 		return nil
 	}
 
@@ -25,6 +26,7 @@ func (f *FlexInt) UnmarshalJSON(b []byte) error {
 
 	if len(b) == 0 {
 		*f = 0
+
 		return nil
 	}
 
@@ -33,6 +35,7 @@ func (f *FlexInt) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	*f = FlexInt(n)
+
 	return nil
 }
 

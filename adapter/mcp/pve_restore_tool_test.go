@@ -24,8 +24,8 @@ func TestPVMReRestoreToolSuccess(t *testing.T) {
 
 // TestPVMReRestoreToolErrorPropagation verifies IsError on gateway failure.
 func TestPVMReRestoreToolErrorPropagation(t *testing.T) {
-	gw := &stubPVEGateway{err: port.ErrNotFound}
-	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(gw))
+	gateway := &stubPVEGateway{err: port.ErrNotFound}
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(gateway))
 	_, sess := newTestServer(t, app, true)
 
 	res := callTool(t, sess, "pve_vm_restore", map[string]any{"node": "pve1", "archive": "/a.bak"})

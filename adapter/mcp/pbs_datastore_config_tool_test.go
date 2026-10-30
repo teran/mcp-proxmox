@@ -15,14 +15,14 @@ import (
 // TestPBSDatastoreConfigToolSuccess verifies pbs_datastore_config_get succeeds
 // and returns the DatastoreConfig as structured output.
 func TestPBSDatastoreConfigToolSuccess(t *testing.T) {
-	gw := &stubPBSGateway{
-		getDatastoreConfig: func(_ context.Context, store string) (*model.DatastoreConfig, error) {
+	gateway := &stubPBSGateway{
+		getDatastoreConfig: func(_ context.Context, _ string) (*model.DatastoreConfig, error) {
 			return &model.DatastoreConfig{
 				Path: "/backup", Backend: "filesystem", KeepDaily: 7, VerifyNew: true,
 			}, nil
 		},
 	}
-	app := application.New(nopLogger{}, "v1.0.0", application.WithPBS(gw))
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPBS(gateway))
 	_, sess := newTestServer(t, app, false)
 
 	res := callTool(t, sess, "pbs_datastore_config_get", map[string]any{"store": "backup"})
@@ -39,8 +39,8 @@ func TestPBSDatastoreConfigToolSuccess(t *testing.T) {
 // TestPBSDatastoreConfigToolErrorPropagation verifies IsError on gateway
 // failure.
 func TestPBSDatastoreConfigToolErrorPropagation(t *testing.T) {
-	gw := &stubPBSGateway{err: port.ErrNotFound}
-	app := application.New(nopLogger{}, "v1.0.0", application.WithPBS(gw))
+	gateway := &stubPBSGateway{err: port.ErrNotFound}
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPBS(gateway))
 	_, sess := newTestServer(t, app, false)
 
 	res := callTool(t, sess, "pbs_datastore_config_get", map[string]any{"store": "missing"})

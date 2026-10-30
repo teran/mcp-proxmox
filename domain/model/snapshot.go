@@ -11,7 +11,7 @@ type Snapshot struct {
 	VMState     int    `json:"vmstate,omitempty"`
 	Parent      string `json:"parent,omitempty"`
 	Type        string `json:"type,omitempty"`
-	Ram         int64  `json:"ram,omitempty"`
+	RAM         int64  `json:"ram,omitempty"`
 	Disk        int64  `json:"disk,omitempty"`
 }
 

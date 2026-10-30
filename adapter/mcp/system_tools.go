@@ -17,10 +17,12 @@ func registerSystemTools(s *mcpSDK.Server, app *application.App, log toolLogger)
 	sysTool(s, "ping",
 		"Liveness check",
 		"Liveness check; reports which backends (pve, pbs) are enabled.",
-		"Call this to verify the server is responsive. Returns status \"ok\" and the list of enabled backends (pve, pbs). Read-only; no side effects.",
+		"Call this to verify the server is responsive. Returns status \"ok\" and the "+
+			"list of enabled backends (pve, pbs). Read-only; no side effects.",
 		log, func(ctx context.Context, _ emptyIn) (any, error) {
 			backends := app.System.Ping(ctx)
 			log.Debugf(ctx, "ping: backends=%v", backends)
+
 			return map[string]any{"status": "ok", "backends": backends}, nil
 		})
 
@@ -36,7 +38,9 @@ func registerSystemTools(s *mcpSDK.Server, app *application.App, log toolLogger)
 // sysTool registers a system (always-on) tool with its M4/N11 annotations
 // (read-only, non-destructive, idempotent, closed world) and per-tool
 // instructions, sharing the same uniform handler shape as roTool.
-func sysTool[In any, Out any](s *mcpSDK.Server, name, title, desc, instr string, log toolLogger, fn func(context.Context, In) (Out, error)) {
+func sysTool[In any, Out any](
+	s *mcpSDK.Server, name, title, desc, instr string, log toolLogger, handler func(context.Context, In) (Out, error),
+) {
 	outSchema := outputSchema[Out]()
 	mcpSDK.AddTool(s, &mcpSDK.Tool{
 		Name:         name,
@@ -47,19 +51,21 @@ func sysTool[In any, Out any](s *mcpSDK.Server, name, title, desc, instr string,
 			Title:           title,
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
-			OpenWorldHint:   boolPtr(false),
-			DestructiveHint: boolPtr(false),
+			OpenWorldHint:   new(bool),
+			DestructiveHint: new(bool),
 		},
 	}, func(ctx context.Context, _ *mcpSDK.CallToolRequest, in In) (*mcpSDK.CallToolResult, any, error) {
-		out, err := fn(ctx, in)
+		out, err := handler(ctx, in)
 		if err != nil {
 			log.Errorf(ctx, "%s: %v", name, err)
+
 			return nil, nil, err
 		}
 		wrapped, err := wrapAndValidate(ctx, name, log, outSchema, out)
 		if err != nil {
 			return nil, nil, err
 		}
+
 		return nil, wrapped, nil
 	})
 }

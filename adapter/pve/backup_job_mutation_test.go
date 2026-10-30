@@ -12,9 +12,6 @@ import (
 	"github.com/teran/mcp-proxmox/domain/port"
 )
 
-// boolPtr returns a pointer to b so an explicit false can be sent for Enabled.
-func boolPtr(b bool) *bool { return &b }
-
 // TestGateway_CreateBackupJob_Success verifies POST /cluster/backup sends the
 // job config as form parameters and decodes the returned job ID from `data`.
 func TestGateway_CreateBackupJob_Success(t *testing.T) {
@@ -30,7 +27,7 @@ func TestGateway_CreateBackupJob_Success(t *testing.T) {
 		Schedule:      "00 2 * * 1",
 		Mode:          "snapshot",
 		Compress:      "zstd",
-		Enabled:       boolPtr(true),
+		Enabled:       new(true),
 		NotesTemplate: "{{guestname}}",
 		Comment:       "prod cluster",
 		Node:          "pve1",
@@ -62,7 +59,7 @@ func TestGateway_CreateBackupJob_Disabled(t *testing.T) {
 	g, _ := newTestGateway(t, srv)
 
 	_, err := g.CreateBackupJob(context.Background(), model.CreateBackupJobRequest{
-		Storage: "local", Schedule: "00 2 * * 1", Enabled: boolPtr(false),
+		Storage: "local", Schedule: "00 2 * * 1", Enabled: new(false),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "0", rec.form.Get("enabled"))

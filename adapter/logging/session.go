@@ -20,5 +20,6 @@ func WithSession(ctx context.Context, l *logrus.Logger) *logrus.Entry {
 	if rid, ok := port.RequestIDFromContext(ctx); ok && rid != "" {
 		e = e.WithField("request_id", rid)
 	}
+
 	return e
 }

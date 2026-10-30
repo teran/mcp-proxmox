@@ -63,7 +63,11 @@ func (f *fakeTransport) Connect(ctx context.Context) (mcpSDK.Connection, error) 
 	if f.connectFn != nil {
 		return f.connectFn(ctx)
 	}
-	return nil, nil
+
+	// Return a non-nil stub connection when no factory is set, so the wrapper
+	// path (TestSessionTransportWrapsConnection) is exercised and the stub
+	// never returns a nil error alongside a nil connection (nilnil).
+	return &fakeConnection{}, nil
 }
 
 func (f *fakeTransport) Close() error { return nil }
@@ -85,7 +89,7 @@ func TestSessionTransportWrapsConnection(t *testing.T) {
 }
 
 func TestSessionTransportPropagatesError(t *testing.T) {
-	inner := &fakeTransport{connectFn: func(ctx context.Context) (mcpSDK.Connection, error) {
+	inner := &fakeTransport{connectFn: func(_ context.Context) (mcpSDK.Connection, error) {
 		return nil, context.Canceled
 	}}
 	tp := NewSessionTransport(inner, "s")

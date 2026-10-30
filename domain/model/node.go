@@ -38,7 +38,7 @@ type NodeStatus struct {
 	LoadAvg []float64 `json:"loadavg,omitempty"`
 	KVM     int       `json:"kvm,omitempty"` // Proxmox returns kvm as 0/1
 	PVE     int       `json:"pve,omitempty"` // Proxmox returns pve as 0/1
-	Swap    SwapInfo  `json:"swap,omitempty"`
+	Swap    SwapInfo  `json:"swap"`
 	KSmem   int64     `json:"ksm,omitempty"`
 	Wait    float64   `json:"wait,omitempty"`
 }

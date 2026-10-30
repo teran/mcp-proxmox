@@ -17,7 +17,8 @@ import (
 // Authorization header and using a GET on the escaped store path.
 func TestGateway_GetDatastoreConfig_Success(t *testing.T) {
 	rec := &reqCapture{}
-	body := `{"data":{"path":"/backup","backend":"filesystem","backing-device":"/dev/sdb","keep-daily":7,"verify-new":true,"gc-schedule":"sun","notify-user":"root@pam","maintenance-mode":"off","tuning":"example"}}`
+	body := `{"data":{"path":"/backup","backend":"filesystem","backing-device":"/dev/sdb",` +
+		`"keep-daily":7,"verify-new":true,"gc-schedule":"sun","notify-user":"root@pam","maintenance-mode":"off","tuning":"example"}}`
 	srv := mockServer(t, 200, body, rec)
 	g, _ := newTestGateway(t, srv)
 

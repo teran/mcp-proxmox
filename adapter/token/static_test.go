@@ -63,6 +63,7 @@ func TestStaticTokenSource_AuthorizationHeader(t *testing.T) {
 			got, err := s.AuthorizationHeader(context.Background())
 			if tt.werr {
 				require.Error(t, err)
+
 				return
 			}
 			require.NoError(t, err)
@@ -73,7 +74,7 @@ func TestStaticTokenSource_AuthorizationHeader(t *testing.T) {
 
 // TestStaticTokenSourceImplementsTokenSource is a compile-time assertion that
 // StaticTokenSource satisfies port.TokenSource.
-func TestStaticTokenSourceImplementsTokenSource(t *testing.T) {
+func TestStaticTokenSourceImplementsTokenSource(_ *testing.T) {
 	var _ port.TokenSource = NewStaticTokenSource("x")
 }
 

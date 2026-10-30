@@ -38,8 +38,10 @@ func TestSanitizeArgs(t *testing.T) {
 }
 
 func TestIsSensitiveKey(t *testing.T) {
-	for _, k := range []string{"token", "password", "secret_key", "auth", "api_key", "cookie", "credential",
-		"fingerprint", "host_key", "hostkey"} {
+	for _, k := range []string{
+		"token", "password", "secret_key", "auth", "api_key", "cookie", "credential",
+		"fingerprint", "host_key", "hostkey",
+	} {
 		assert.True(t, isSensitiveKey(k), "expected %q sensitive", k)
 	}
 	for _, k := range []string{"node", "vmid", "store", "upid", "backup_id"} {
@@ -92,7 +94,7 @@ func TestLogIncomingRequest(t *testing.T) {
 	req := &mcpSDK.ServerRequest[*mcpSDK.CallToolParams]{
 		Params: &mcpSDK.CallToolParams{Name: "pve_node_list", Arguments: map[string]any{"node": "pve1", "token": "x"}},
 	}
-	logIncomingRequest(deps, ctx, "tools/call", req, nil, 5*time.Millisecond, nil)
+	logIncomingRequest(ctx, deps, "tools/call", req, nil, 5*time.Millisecond, nil)
 
 	out := buf.String()
 	assert.Contains(t, out, `"tool":"pve_node_list"`)
@@ -107,7 +109,7 @@ func TestLogIncomingRequest(t *testing.T) {
 
 	// Error path.
 	buf.Reset()
-	logIncomingRequest(deps, ctx, "tools/call", req, nil, 3*time.Millisecond, errors.New("boom"))
+	logIncomingRequest(ctx, deps, "tools/call", req, nil, 3*time.Millisecond, errors.New("boom"))
 	assert.Contains(t, buf.String(), `"outcome":"error"`)
 }
 
@@ -126,7 +128,7 @@ func TestLogIncomingRequestAtInfoLevel(t *testing.T) {
 	ctx := port.WithSessionID(context.Background(), "sess")
 	req := &mcpSDK.ServerRequest[*mcpSDK.CallToolParams]{Params: &mcpSDK.CallToolParams{Name: "x"}}
 
-	logIncomingRequest(deps, ctx, "tools/call", req, nil, time.Millisecond, nil)
+	logIncomingRequest(ctx, deps, "tools/call", req, nil, time.Millisecond, nil)
 
 	// The access line must be present at info level.
 	assert.NotEmpty(t, buf.String(), "access log must be emitted at info level")
@@ -135,7 +137,7 @@ func TestLogIncomingRequestAtInfoLevel(t *testing.T) {
 
 	// nil logger is a silent no-op: no panic, no output.
 	assert.NotPanics(t, func() {
-		logIncomingRequest(Deps{}, ctx, "tools/call", req, nil, time.Millisecond, nil)
+		logIncomingRequest(ctx, Deps{}, "tools/call", req, nil, time.Millisecond, nil)
 	})
 }
 
@@ -166,13 +168,14 @@ func newTestServerWithLogger(t *testing.T, app *application.App, l *logrus.Logge
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { _ = sess.Close() })
+
 	return s, sess
 }
 
 // traceLineContaining returns the first captured logrus line (JSON) whose level
 // is trace and which contains the given substring, or "" if none matches.
 func traceLineContaining(out, sub string) string {
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if line == "" {
 			continue
 		}
@@ -180,6 +183,7 @@ func traceLineContaining(out, sub string) string {
 			return line
 		}
 	}
+
 	return ""
 }
 

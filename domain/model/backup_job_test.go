@@ -8,10 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// boolPtr returns a pointer to b, so an explicit false can be serialized for
-// the Enabled field (which must be present when set to false).
-func boolPtr(b bool) *bool { return &b }
-
 // TestCreateBackupJobRequestMarshalMinimal pins the exact JSON for a minimal
 // create request: only the required Storage and Schedule fields appear, and
 // every optional field (ID, All, VMID, Mode, Compress, Enabled, NotesTemplate,
@@ -33,7 +29,7 @@ func TestCreateBackupJobRequestMarshalFull(t *testing.T) {
 		Schedule:      "00 2 * * 1",
 		Mode:          "snapshot",
 		Compress:      "zstd",
-		Enabled:       boolPtr(true),
+		Enabled:       new(true),
 		NotesTemplate: "{{guestname}}",
 		Comment:       "prod cluster",
 		Node:          "pve1",
@@ -61,7 +57,7 @@ func TestCreateBackupJobRequestMarshalFull(t *testing.T) {
 // Enabled=false is NOT omitted (a non-nil *bool is serialized even when false),
 // so the adapter can send "enabled":"0" to disable a job.
 func TestCreateBackupJobRequestMarshalEnabledFalse(t *testing.T) {
-	b, err := json.Marshal(CreateBackupJobRequest{Storage: "s", Schedule: "*", Enabled: boolPtr(false)})
+	b, err := json.Marshal(CreateBackupJobRequest{Storage: "s", Schedule: "*", Enabled: new(false)})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"storage":"s","schedule":"*","enabled":false}`, string(b))
 }
@@ -85,7 +81,7 @@ func TestCreateBackupJobRequestRoundTrip(t *testing.T) {
 		Schedule:      "00 2 * * 1",
 		Mode:          "snapshot",
 		Compress:      "zstd",
-		Enabled:       boolPtr(false),
+		Enabled:       new(false),
 		NotesTemplate: "{{guestname}}",
 		Comment:       "prod",
 		Node:          "pve1",

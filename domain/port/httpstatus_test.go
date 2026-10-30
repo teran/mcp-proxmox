@@ -65,16 +65,16 @@ func TestHTTPStatus(t *testing.T) {
 // chain through any type exposing StatusCode() int (e.g. a 5xx UpstreamError),
 // and reports ok=true only for non-zero statuses.
 func TestHTTPStatusExtractsFromUpstreamStatusCoder(t *testing.T) {
-	err := &upstreamStub{code: 503}
+	err := &upstreamStubError{code: 503}
 	code, ok := HTTPStatus(err)
 	assert.True(t, ok)
 	assert.Equal(t, 503, code)
 }
 
-// upstreamStub mimics a gateway UpstreamError by exposing StatusCode() int.
-type upstreamStub struct {
+// upstreamStubError mimics a gateway UpstreamError by exposing StatusCode() int.
+type upstreamStubError struct {
 	code int
 }
 
-func (u *upstreamStub) Error() string   { return "stub" }
-func (u *upstreamStub) StatusCode() int { return u.code }
+func (u *upstreamStubError) Error() string   { return "stub" }
+func (u *upstreamStubError) StatusCode() int { return u.code }

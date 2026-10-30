@@ -25,11 +25,11 @@ func TestCloneLXCRequestRoundTrip(t *testing.T) {
 		t.Fatalf("round-trip mismatch\n got: %#v\nwant: %#v", got, in)
 	}
 
-	min, err := json.Marshal(CloneLXCRequest{NewID: 201})
+	minimal, err := json.Marshal(CloneLXCRequest{NewID: 201})
 	if err != nil {
 		t.Fatalf("marshal minimal: %v", err)
 	}
-	if string(min) != `{"newid":201}` {
-		t.Fatalf("minimal mismatch: %s", min)
+	if string(minimal) != `{"newid":201}` {
+		t.Fatalf("minimal mismatch: %s", minimal)
 	}
 }

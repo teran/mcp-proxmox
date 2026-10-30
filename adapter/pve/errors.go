@@ -43,6 +43,7 @@ func (e *APIError) Error() string {
 	if len(e.Messages) == 0 {
 		return "pve: api error"
 	}
+
 	return "pve: api error: " + errors.Join(messagesToErrors(e.Messages)...).Error()
 }
 
@@ -51,6 +52,7 @@ func messagesToErrors(m []string) []error {
 	for _, s := range m {
 		out = append(out, errors.New(s))
 	}
+
 	return out
 }
 

@@ -74,8 +74,8 @@ func TestBackupJobToolsSuccess(t *testing.T) {
 // TestBackupJobToolsErrorPropagation verifies IsError is set on the result when
 // the underlying gateway call fails (gate ON).
 func TestBackupJobToolsErrorPropagation(t *testing.T) {
-	gw := &stubPVEGateway{err: port.ErrNotFound}
-	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(gw))
+	gateway := &stubPVEGateway{err: port.ErrNotFound}
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(gateway))
 	_, sess := newTestServer(t, app, true)
 
 	cases := []struct {
@@ -87,10 +87,10 @@ func TestBackupJobToolsErrorPropagation(t *testing.T) {
 		{"pve_backup_job_delete", map[string]any{"id": "backup-100"}},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := callTool(t, sess, tc.name, tc.args)
-			assert.True(t, res.IsError, "tool %s should be flagged IsError on gateway failure", tc.name)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			res := callTool(t, sess, testCase.name, testCase.args)
+			assert.True(t, res.IsError, "tool %s should be flagged IsError on gateway failure", testCase.name)
 		})
 	}
 }

@@ -60,7 +60,9 @@ func (s *PBSService) GetPBSVersion(ctx context.Context) (*model.PBSVersion, erro
 }
 
 // ListBackupFiles lists the files inside a PBS backup snapshot.
-func (s *PBSService) ListBackupFiles(ctx context.Context, store, backupType, backupID, snapshot, path string) ([]model.PBSFile, error) {
+func (s *PBSService) ListBackupFiles(
+	ctx context.Context, store, backupType, backupID, snapshot, path string,
+) ([]model.PBSFile, error) {
 	return s.gw.ListBackupFiles(ctx, store, backupType, backupID, snapshot, path)
 }
 
@@ -75,13 +77,17 @@ func (s *PBSService) GetTaskLog(ctx context.Context, upid string, limit int) ([]
 }
 
 // RestoreFile restores a single file out of a PBS backup snapshot.
-func (s *PBSService) RestoreFile(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error {
+func (s *PBSService) RestoreFile(
+	ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest,
+) error {
 	return s.gw.RestoreFile(ctx, store, backupType, backupID, snapshot, req)
 }
 
 // RestoreVMBackup restores a PBS VM backup snapshot into a PVE datastore and
 // returns the task UPID.
-func (s *PBSService) RestoreVMBackup(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest) (string, error) {
+func (s *PBSService) RestoreVMBackup(
+	ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest,
+) (string, error) {
 	return s.gw.RestoreVMBackup(ctx, store, backupType, backupID, snapshot, req)
 }
 

@@ -31,5 +31,6 @@ func WithToken(ctx context.Context, header string) context.Context {
 // TokenFromContext retrieves the Authorization header value stored by WithToken.
 func TokenFromContext(ctx context.Context) (string, bool) {
 	t, ok := ctx.Value(tokenCtxKey{}).(string)
+
 	return t, ok
 }

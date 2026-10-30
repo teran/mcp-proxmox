@@ -11,75 +11,20 @@ import (
 	"github.com/teran/mcp-proxmox/domain/port"
 )
 
-// TestGateway_LXCLifecycle_Success verifies each LXC lifecycle mutation builds
-// the right method + URL path and encodes its form/query parameters.
-func TestGateway_LXCLifecycle_Success(t *testing.T) {
-	tests := []struct {
-		name   string
-		method string
-		path   string
-		query  string
-		check  func(*reqCapture)
-		call   func(*Gateway) error
-	}{
-		{
-			name:   "StartLXC",
-			method: http.MethodPost,
-			path:   "/api2/json/nodes/pve1/lxc/200/status/start",
-			call: func(g *Gateway) error {
-				_, err := g.StartLXC(context.Background(), "pve1", 200)
-				return err
-			},
-		},
-		{
-			name:   "StopLXC with flags",
-			method: http.MethodPost,
-			path:   "/api2/json/nodes/pve1/lxc/200/status/stop",
-			check: func(rec *reqCapture) {
-				assert.Equal(t, "1", rec.form.Get("skiplock"))
-				assert.Equal(t, "1", rec.form.Get("forceStop"))
-			},
-			call: func(g *Gateway) error {
-				_, err := g.StopLXC(context.Background(), "pve1", 200, true, true)
-				return err
-			},
-		},
-		{
-			name:   "ShutdownLXC",
-			method: http.MethodPost,
-			path:   "/api2/json/nodes/pve1/lxc/200/status/shutdown",
-			check: func(rec *reqCapture) {
-				assert.Equal(t, "1", rec.form.Get("forceStop"))
-				assert.Equal(t, "45", rec.form.Get("timeout"))
-			},
-			call: func(g *Gateway) error {
-				_, err := g.ShutdownLXC(context.Background(), "pve1", 200, true, 45)
-				return err
-			},
-		},
-		{
-			name:   "RebootLXC",
-			method: http.MethodPost,
-			path:   "/api2/json/nodes/pve1/lxc/200/status/reboot",
-			check:  func(rec *reqCapture) { assert.Equal(t, "30", rec.form.Get("timeout")) },
-			call: func(g *Gateway) error {
-				_, err := g.RebootLXC(context.Background(), "pve1", 200, 30)
-				return err
-			},
-		},
-		{
-			name:   "DeleteLXC with query params",
-			method: http.MethodDelete,
-			path:   "/api2/json/nodes/pve1/lxc/200",
-			query:  "destroy-unreferenced-disks=1&force=1&purge=1",
-			call: func(g *Gateway) error {
-				_, err := g.DeleteLXC(context.Background(), "pve1", 200, true, true, true)
-				return err
-			},
-		},
-	}
+// lxcLifecycleCase describes one LXC lifecycle mutation assertion.
+type lxcLifecycleCase struct {
+	name   string
+	method string
+	path   string
+	query  string
+	check  func(*reqCapture)
+	call   func(*Gateway) error
+}
 
-	for _, tt := range tests {
+// runLXCLifecycleCases drives a set of LXC lifecycle mutation assertions.
+func runLXCLifecycleCases(t *testing.T, cases []lxcLifecycleCase) {
+	t.Helper()
+	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := &reqCapture{}
 			srv := mockServer(t, 200, `{"data":"UPID:pve1:lxc:..."}`, rec)
@@ -98,6 +43,84 @@ func TestGateway_LXCLifecycle_Success(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGateway_LXCLifecycle_StartStop_Success exercises StartLXC/StopLXC.
+func TestGateway_LXCLifecycle_StartStop_Success(t *testing.T) {
+	runLXCLifecycleCases(t, []lxcLifecycleCase{
+		{
+			name:   "StartLXC",
+			method: http.MethodPost,
+			path:   "/api2/json/nodes/pve1/lxc/200/status/start",
+			call: func(g *Gateway) error {
+				_, err := g.StartLXC(context.Background(), "pve1", 200)
+
+				return err
+			},
+		},
+		{
+			name:   "StopLXC with flags",
+			method: http.MethodPost,
+			path:   "/api2/json/nodes/pve1/lxc/200/status/stop",
+			check: func(rec *reqCapture) {
+				assert.Equal(t, "1", rec.form.Get("skiplock"))
+				assert.Equal(t, "1", rec.form.Get("forceStop"))
+			},
+			call: func(g *Gateway) error {
+				_, err := g.StopLXC(context.Background(), "pve1", 200, true, true)
+
+				return err
+			},
+		},
+	})
+}
+
+// TestGateway_LXCLifecycle_Shutdown_Success exercises ShutdownLXC.
+func TestGateway_LXCLifecycle_Shutdown_Success(t *testing.T) {
+	runLXCLifecycleCases(t, []lxcLifecycleCase{
+		{
+			name:   "ShutdownLXC",
+			method: http.MethodPost,
+			path:   "/api2/json/nodes/pve1/lxc/200/status/shutdown",
+			check: func(rec *reqCapture) {
+				assert.Equal(t, "1", rec.form.Get("forceStop"))
+				assert.Equal(t, "45", rec.form.Get("timeout"))
+			},
+			call: func(g *Gateway) error {
+				_, err := g.ShutdownLXC(context.Background(), "pve1", 200, true, 45)
+
+				return err
+			},
+		},
+	})
+}
+
+// TestGateway_LXCLifecycle_RebootDelete_Success exercises RebootLXC/DeleteLXC.
+func TestGateway_LXCLifecycle_RebootDelete_Success(t *testing.T) {
+	runLXCLifecycleCases(t, []lxcLifecycleCase{
+		{
+			name:   "RebootLXC",
+			method: http.MethodPost,
+			path:   "/api2/json/nodes/pve1/lxc/200/status/reboot",
+			check:  func(rec *reqCapture) { assert.Equal(t, "30", rec.form.Get("timeout")) },
+			call: func(g *Gateway) error {
+				_, err := g.RebootLXC(context.Background(), "pve1", 200, 30)
+
+				return err
+			},
+		},
+		{
+			name:   "DeleteLXC with query params",
+			method: http.MethodDelete,
+			path:   "/api2/json/nodes/pve1/lxc/200",
+			query:  "destroy-unreferenced-disks=1&force=1&purge=1",
+			call: func(g *Gateway) error {
+				_, err := g.DeleteLXC(context.Background(), "pve1", 200, true, true, true)
+
+				return err
+			},
+		},
+	})
 }
 
 // TestGateway_LXCLifecycle_ErrorNoRetry verifies LXC lifecycle mutations surface

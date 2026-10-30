@@ -22,6 +22,7 @@ func NewLogger(level, format string) *logrus.Logger {
 		// correlating logs across sessions/requests.
 		l.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 	}
+
 	return l
 }
 

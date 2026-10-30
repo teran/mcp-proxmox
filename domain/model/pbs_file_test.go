@@ -22,11 +22,11 @@ func TestPBSFileRoundTrip(t *testing.T) {
 		t.Fatalf("round-trip mismatch\n got: %#v\nwant: %#v", got, in)
 	}
 
-	min, err := json.Marshal(PBSFile{Filename: "f"})
+	minimal, err := json.Marshal(PBSFile{Filename: "f"})
 	if err != nil {
 		t.Fatalf("marshal minimal: %v", err)
 	}
-	if string(min) != `{"filename":"f"}` {
-		t.Fatalf("minimal mismatch: %s", min)
+	if string(minimal) != `{"filename":"f"}` {
+		t.Fatalf("minimal mismatch: %s", minimal)
 	}
 }

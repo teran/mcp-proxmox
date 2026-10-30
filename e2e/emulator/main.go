@@ -27,6 +27,13 @@ const (
 	// emits (adapter/token). PBS uses the PBSAPIToken scheme instead.
 	pveAuthPrefix = "PVEAPIToken="
 	pbsAuthPrefix = "PBSAPIToken="
+
+	// readHeaderTimeout bounds how long the emulator waits for a request header
+	// (gosec G114: bare ListenAndServe has no timeout support).
+	readHeaderTimeout = 5 * time.Second
+
+	// emulatedVMID is the VM ID reported for the single emulated QEMU VM.
+	emulatedVMID = 100
 )
 
 func main() {
@@ -49,7 +56,7 @@ func serve(addr string, h http.Handler) {
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           h,
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadHeaderTimeout: readHeaderTimeout,
 	}
 	log.Printf("emulator listening on %s", addr)
 	if err := srv.ListenAndServe(); err != nil {
@@ -75,7 +82,7 @@ func pveHandler() http.Handler {
 
 	mux.HandleFunc("/api2/json/nodes/{node}/qemu", requireToken(pveAuthPrefix, func(w http.ResponseWriter, _ *http.Request) {
 		writeData(w, []map[string]any{{
-			"vmid": 100, "name": "vm100", "status": "running", "type": "qemu",
+			"vmid": emulatedVMID, "name": "vm100", "status": "running", "type": "qemu",
 		}})
 	}))
 
@@ -107,6 +114,7 @@ func requireToken(prefix string, next http.HandlerFunc) http.HandlerFunc {
 		auth := r.Header.Get("Authorization")
 		if !strings.HasPrefix(auth, prefix) || strings.TrimSpace(strings.TrimPrefix(auth, prefix)) == "" {
 			writeError(w, http.StatusUnauthorized, "missing or invalid API token")
+
 			return
 		}
 		next(w, r)
@@ -128,5 +136,7 @@ func writeError(w http.ResponseWriter, code int, msg string) {
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("emulator: write JSON response: %v", err)
+	}
 }

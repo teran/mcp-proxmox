@@ -9,8 +9,10 @@ import (
 // config fields that Proxmox VE emits as JSON strings (the conformance bug:
 // "memory":"8192"), while still accepting plain JSON numbers. See SPEC.md §9.
 func TestVMConfigDecodeStringNumericFields(t *testing.T) {
-	const stringJSON = `{"vmid":100,"name":"web","memory":"8192","cores":"2","sockets":"1","balloon":"512","template":"0","onboot":"1","ostype":"l26","boot":"order=scsi0"}`
-	const numberJSON = `{"vmid":100,"name":"web","memory":8192,"cores":2,"sockets":1,"balloon":512,"template":0,"onboot":1,"ostype":"l26","boot":"order=scsi0"}`
+	const stringJSON = `{"vmid":100,"name":"web","memory":"8192","cores":"2","sockets":"1","balloon":"512",` +
+		`"template":"0","onboot":"1","ostype":"l26","boot":"order=scsi0"}`
+	const numberJSON = `{"vmid":100,"name":"web","memory":8192,"cores":2,"sockets":1,"balloon":512,` +
+		`"template":0,"onboot":1,"ostype":"l26","boot":"order=scsi0"}`
 
 	var stringDecoded VMConfig
 	if err := json.Unmarshal([]byte(stringJSON), &stringDecoded); err != nil {

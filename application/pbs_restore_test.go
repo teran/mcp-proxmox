@@ -16,24 +16,28 @@ import (
 func TestPBSService_RestoreSuccess(t *testing.T) {
 	t.Run("RestoreFile", func(t *testing.T) {
 		gotReq := model.PBSFileRestoreRequest{}
-		gw := &mockPBSGateway{restoreFile: func(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error {
+		gateway := &mockPBSGateway{restoreFile: func(_ context.Context, _, _, _, _ string, req model.PBSFileRestoreRequest) error {
 			gotReq = req
+
 			return nil
 		}}
 		req := model.PBSFileRestoreRequest{Path: "/a", Target: "/b"}
-		err := (&PBSService{gw: gw}).RestoreFile(context.Background(), "backup", "vm", "100", "snap1", req)
+		err := (&PBSService{gw: gateway}).RestoreFile(context.Background(), "backup", "vm", "100", "snap1", req)
 		require.NoError(t, err)
 		assert.Equal(t, req, gotReq)
 	})
 
 	t.Run("RestoreVMBackup", func(t *testing.T) {
 		gotReq := model.PBSVMRestoreRequest{}
-		gw := &mockPBSGateway{restoreVMBackup: func(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest) (string, error) {
+		gateway := &mockPBSGateway{restoreVMBackup: func(
+			_ context.Context, _, _, _, _ string, req model.PBSVMRestoreRequest,
+		) (string, error) {
 			gotReq = req
+
 			return "UPID:restore", nil
 		}}
 		req := model.PBSVMRestoreRequest{Target: "local", VMID: "next"}
-		upid, err := (&PBSService{gw: gw}).RestoreVMBackup(context.Background(), "backup", "vm", "100", "snap1", req)
+		upid, err := (&PBSService{gw: gateway}).RestoreVMBackup(context.Background(), "backup", "vm", "100", "snap1", req)
 		require.NoError(t, err)
 		assert.Equal(t, "UPID:restore", upid)
 		assert.Equal(t, req, gotReq)
@@ -44,15 +48,15 @@ func TestPBSService_RestoreSuccess(t *testing.T) {
 // unchanged.
 func TestPBSService_RestoreErrorPropagation(t *testing.T) {
 	sentinel := errors.New("pbs boom")
-	gw := &mockPBSGateway{}
-	gw.restoreFile = func(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error {
+	gateway := &mockPBSGateway{}
+	gateway.restoreFile = func(_ context.Context, _, _, _, _ string, _ model.PBSFileRestoreRequest) error {
 		return sentinel
 	}
-	gw.restoreVMBackup = func(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest) (string, error) {
+	gateway.restoreVMBackup = func(_ context.Context, _, _, _, _ string, _ model.PBSVMRestoreRequest) (string, error) {
 		return "", sentinel
 	}
 
-	svc := &PBSService{gw: gw}
+	svc := &PBSService{gw: gateway}
 	cases := []struct {
 		name string
 		call func(*PBSService) error
@@ -62,12 +66,13 @@ func TestPBSService_RestoreErrorPropagation(t *testing.T) {
 		}},
 		{"RestoreVMBackup", func(s *PBSService) error {
 			_, e := s.RestoreVMBackup(context.Background(), "s", "vm", "100", "snap", model.PBSVMRestoreRequest{})
+
 			return e
 		}},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.ErrorIs(t, tc.call(svc), sentinel)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assert.ErrorIs(t, testCase.call(svc), sentinel)
 		})
 	}
 }

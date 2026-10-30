@@ -18,21 +18,21 @@ type captureLogger struct {
 	lines []string
 }
 
-func (c *captureLogger) Tracef(f string, a ...any) { c.lines = append(c.lines, "trace") }
-func (c *captureLogger) Debugf(f string, a ...any) { c.lines = append(c.lines, "debug") }
-func (c *captureLogger) Infof(f string, a ...any)  { c.lines = append(c.lines, "info") }
-func (c *captureLogger) Warnf(f string, a ...any)  { c.lines = append(c.lines, "warn") }
-func (c *captureLogger) Errorf(f string, a ...any) { c.lines = append(c.lines, "error") }
+func (c *captureLogger) Tracef(_ string, _ ...any) { c.lines = append(c.lines, "trace") }
+func (c *captureLogger) Debugf(_ string, _ ...any) { c.lines = append(c.lines, "debug") }
+func (c *captureLogger) Infof(_ string, _ ...any)  { c.lines = append(c.lines, "info") }
+func (c *captureLogger) Warnf(_ string, _ ...any)  { c.lines = append(c.lines, "warn") }
+func (c *captureLogger) Errorf(_ string, _ ...any) { c.lines = append(c.lines, "error") }
 
 func TestToolLoggerFallsBackToPlain(t *testing.T) {
 	c := &captureLogger{}
-	tl := toolLogger{log: c, l: nil} // no logrus logger -> fallback to plain
+	logger := toolLogger{log: c, l: nil} // no logrus logger -> fallback to plain
 
 	ctx := context.Background()
-	tl.Debugf(ctx, "d")
-	tl.Infof(ctx, "i")
-	tl.Warnf(ctx, "w")
-	tl.Errorf(ctx, "e")
+	logger.Debugf(ctx, "d")
+	logger.Infof(ctx, "i")
+	logger.Warnf(ctx, "w")
+	logger.Errorf(ctx, "e")
 
 	assert.Equal(t, []string{"debug", "info", "warn", "error"}, c.lines)
 }
@@ -96,7 +96,7 @@ func TestToolLoggerErrorfStatusWithLogrus(t *testing.T) {
 	ctx := port.WithSessionID(context.Background(), "sess")
 	ctx = port.WithRequestID(ctx, "req")
 
-	tl.ErrorfStatus(ctx, 401, "pve_node_list: %v", errors.New("unauthorized"))
+	tl.ErrorfStatusf(ctx, 401, "pve_node_list: %v", errors.New("unauthorized"))
 
 	out := buf.String()
 	assert.Contains(t, out, `upstream_http_status_code=401`)
@@ -110,7 +110,7 @@ func TestToolLoggerErrorfStatusWithLogrus(t *testing.T) {
 func TestToolLoggerErrorfStatusFallback(t *testing.T) {
 	cl := &captureLogger{}
 	tl := toolLogger{log: cl, l: nil}
-	tl.ErrorfStatus(context.Background(), 403, "pbs_x: %v", errors.New("forbidden"))
+	tl.ErrorfStatusf(context.Background(), 403, "pbs_x: %v", errors.New("forbidden"))
 	assert.Equal(t, []string{"error"}, cl.lines)
 }
 
@@ -119,6 +119,6 @@ func TestToolLoggerErrorfStatusFallback(t *testing.T) {
 func TestToolLoggerErrorfStatusPlainPath(t *testing.T) {
 	cl := &captureLogger{}
 	tl := toolLogger{log: cl, l: nil}
-	tl.ErrorfStatus(context.Background(), 500, "msg %d", 1)
+	tl.ErrorfStatusf(context.Background(), 500, "msg %d", 1)
 	assert.Equal(t, []string{"error"}, cl.lines)
 }

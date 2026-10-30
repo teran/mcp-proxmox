@@ -27,27 +27,27 @@ func (a *appLogger) Infof(format string, args ...any)  { a.l.Infof(format, args.
 func (a *appLogger) Warnf(format string, args ...any)  { a.l.Warnf(format, args...) }
 func (a *appLogger) Errorf(format string, args ...any) { a.l.Errorf(format, args...) }
 
-// TracefContext logs at trace level tagged with the session/request ID from ctx.
-func (a *appLogger) TracefContext(ctx context.Context, format string, args ...any) {
+// TracefContextf logs at trace level tagged with the session/request ID from ctx.
+func (a *appLogger) TracefContextf(ctx context.Context, format string, args ...any) {
 	WithSession(ctx, a.l).Tracef(format, args...)
 }
 
-// DebugfContext logs at debug level tagged with the session/request ID from ctx.
-func (a *appLogger) DebugfContext(ctx context.Context, format string, args ...any) {
+// DebugfContextf logs at debug level tagged with the session/request ID from ctx.
+func (a *appLogger) DebugfContextf(ctx context.Context, format string, args ...any) {
 	WithSession(ctx, a.l).Debugf(format, args...)
 }
 
-// InfofContext logs at info level tagged with the session/request ID from ctx.
-func (a *appLogger) InfofContext(ctx context.Context, format string, args ...any) {
+// InfofContextf logs at info level tagged with the session/request ID from ctx.
+func (a *appLogger) InfofContextf(ctx context.Context, format string, args ...any) {
 	WithSession(ctx, a.l).Infof(format, args...)
 }
 
-// WarnfContext logs at warning level tagged with the session/request ID from ctx.
-func (a *appLogger) WarnfContext(ctx context.Context, format string, args ...any) {
+// WarnfContextf logs at warning level tagged with the session/request ID from ctx.
+func (a *appLogger) WarnfContextf(ctx context.Context, format string, args ...any) {
 	WithSession(ctx, a.l).Warnf(format, args...)
 }
 
-// ErrorfContext logs at error level tagged with the session/request ID from ctx.
-func (a *appLogger) ErrorfContext(ctx context.Context, format string, args ...any) {
+// ErrorfContextf logs at error level tagged with the session/request ID from ctx.
+func (a *appLogger) ErrorfContextf(ctx context.Context, format string, args ...any) {
 	WithSession(ctx, a.l).Errorf(format, args...)
 }

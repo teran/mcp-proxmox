@@ -122,7 +122,9 @@ func (s *PVEService) RebootLXC(ctx context.Context, node string, vmid int, timeo
 }
 
 // DeleteLXC deletes an LXC container on a node.
-func (s *PVEService) DeleteLXC(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks, force bool) (*model.Task, error) {
+func (s *PVEService) DeleteLXC(
+	ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks, force bool,
+) (*model.Task, error) {
 	return s.gw.DeleteLXC(ctx, node, vmid, purge, destroyUnreferencedDisks, force)
 }
 
@@ -132,7 +134,9 @@ func (s *PVEService) CloneLXC(ctx context.Context, node string, vmid int, req mo
 }
 
 // CreateLXCSnapshot creates a snapshot of an LXC container on a node.
-func (s *PVEService) CreateLXCSnapshot(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error) {
+func (s *PVEService) CreateLXCSnapshot(
+	ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest,
+) (*model.Task, error) {
 	return s.gw.CreateLXCSnapshot(ctx, node, vmid, req)
 }
 
@@ -242,7 +246,9 @@ func (s *PVEService) ResumeVM(ctx context.Context, node string, vmid int) (*mode
 }
 
 // DeleteVM deletes a QEMU VM on a node.
-func (s *PVEService) DeleteVM(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks bool) (*model.Task, error) {
+func (s *PVEService) DeleteVM(
+	ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks bool,
+) (*model.Task, error) {
 	return s.gw.DeleteVM(ctx, node, vmid, purge, destroyUnreferencedDisks)
 }
 
@@ -252,7 +258,9 @@ func (s *PVEService) CloneVM(ctx context.Context, node string, vmid int, req mod
 }
 
 // CreateVMSnapshot creates a snapshot of a QEMU VM on a node.
-func (s *PVEService) CreateVMSnapshot(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error) {
+func (s *PVEService) CreateVMSnapshot(
+	ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest,
+) (*model.Task, error) {
 	return s.gw.CreateVMSnapshot(ctx, node, vmid, req)
 }
 

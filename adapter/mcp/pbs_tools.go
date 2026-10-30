@@ -53,7 +53,7 @@ type pbsFileListIn struct {
 	Store      string `json:"store" jsonschema:"PBS datastore name"`
 	BackupType string `json:"backup_type" jsonschema:"Backup type: vm | ct | host"`
 	BackupID   string `json:"backup_id" jsonschema:"Backup ID / group ID (e.g. a VMID)"`
-	Snapshot   string `json:"snapshot" jsonschema:"Backup snapshot identifier (the ISO-8601 timestamp shown in the PBS UI, e.g. 2024-01-01T00:00:00Z); obtain it from the backup listing."`
+	Snapshot   string `json:"snapshot" jsonschema:"Backup snapshot identifier (ISO-8601 timestamp from the backup listing)"`
 	Path       string `json:"path,omitempty" jsonschema:"Directory path within the backup to list (default /)"`
 }
 
@@ -73,7 +73,7 @@ type pbsFileRestoreIn struct {
 	Store      string `json:"store" jsonschema:"PBS datastore name"`
 	BackupType string `json:"backup_type" jsonschema:"Backup type: vm | ct | host"`
 	BackupID   string `json:"backup_id" jsonschema:"Backup ID / group ID (e.g. a VMID)"`
-	Snapshot   string `json:"snapshot" jsonschema:"Backup snapshot identifier (the ISO-8601 timestamp shown in the PBS UI, e.g. 2024-01-01T00:00:00Z); obtain it from the backup listing."`
+	Snapshot   string `json:"snapshot" jsonschema:"Backup snapshot identifier (ISO-8601 timestamp from the backup listing)"`
 	Path       string `json:"path" jsonschema:"Source file path within the backup to restore"`
 	Target     string `json:"target" jsonschema:"Destination path on the PBS filesystem"`
 }
@@ -83,7 +83,7 @@ type pbsVMRestoreIn struct {
 	Store       string `json:"store" jsonschema:"PBS datastore name"`
 	BackupType  string `json:"backup_type" jsonschema:"Backup type: vm | ct | host"`
 	BackupID    string `json:"backup_id" jsonschema:"Backup ID / group ID (e.g. a VMID)"`
-	Snapshot    string `json:"snapshot" jsonschema:"Backup snapshot identifier (the ISO-8601 timestamp shown in the PBS UI, e.g. 2024-01-01T00:00:00Z); obtain it from the backup listing."`
+	Snapshot    string `json:"snapshot" jsonschema:"Backup snapshot identifier (ISO-8601 timestamp from the backup listing)"`
 	Target      string `json:"target" jsonschema:"PVE storage to restore into"`
 	VMID        string `json:"vmid,omitempty" jsonschema:"Target VM ID, or 'next' to let PVE pick the next free ID"`
 	Host        string `json:"host,omitempty" jsonschema:"PVE node hostname/IP to restore to"`
@@ -97,8 +97,19 @@ type pbsVMRestoreIn struct {
 // registerPBSTools registers the Proxmox Backup Server tools. Read-only (query)
 // tools are always registered for an enabled PBS backend. Mutation tools are
 // registered only when enableMutations is true (SPEC.md §2.5).
+// registerPBSTools registers the Proxmox Backup Server tools. Read-only (query)
+// tools are always registered for an enabled PBS backend. Mutation tools are
+// registered only when enableMutations is true (SPEC.md §2.5).
 func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, enableMutations bool) {
-	// --- datastores ---
+	registerPBSQueryTools0(s, app, log)
+	registerPBSQueryTools1(s, app, log)
+	if enableMutations {
+		registerPBSMutationTools0(s, app, log)
+		registerPBSMutationTools1(s, app, log)
+	}
+}
+
+func registerPBSQueryTools0(s *mcpSDK.Server, app *application.App, log toolLogger) {
 	roTool(s, "pbs_datastore_list", "List PBS datastores",
 		"List the PBS datastores.",
 		"No arguments. Returns all configured datastores. Read-only and idempotent.",
@@ -113,7 +124,8 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 		})
 	roTool(s, "pbs_datastore_config_get", "Get PBS datastore configuration",
 		"Get the full configuration of a PBS datastore.",
-		"Provide the datastore name. Returns its configuration (path, retention/keep settings, GC schedule, notification options, etc.). Read-only.",
+		"Provide the datastore name. Returns its configuration (path, retention/keep settings, GC"+
+			"schedule, notification options, etc.). Read-only.",
 		log, func(ctx context.Context, in storeIn) (any, error) {
 			return app.PBS.GetDatastoreConfig(ctx, in.Store)
 		})
@@ -139,14 +151,19 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 		})
 
 	// --- verify & prune (status polling is read-only) ---
+}
+
+func registerPBSQueryTools1(s *mcpSDK.Server, app *application.App, log toolLogger) {
 	roTool(s, "pbs_verify_status", "Get PBS verify job status",
-		"Get the status of a PBS verify job by UPID. The UPID comes from a running/known verify job (PBS has no task-list endpoint in this version).",
+		"Get the status of a PBS verify job by UPID. The UPID comes from a running/known verify job"+
+			"(PBS has no task-list endpoint in this version).",
 		"Provide the datastore name and the verify job's UPID. Returns the job status; use to poll a running verify. Read-only.",
 		log, func(ctx context.Context, in jobIn) (any, error) {
 			return app.PBS.GetVerifyStatus(ctx, in.Store, in.UPID)
 		})
 	roTool(s, "pbs_prune_status", "Get PBS prune job status",
-		"Get the status of a PBS prune job by UPID. The UPID comes from a running/known prune job (PBS has no task-list endpoint in this version).",
+		"Get the status of a PBS prune job by UPID. The UPID comes from a running/known prune job"+
+			"(PBS has no task-list endpoint in this version).",
 		"Provide the datastore name and the prune job's UPID. Returns the job status; use to poll a running prune. Read-only.",
 		log, func(ctx context.Context, in jobIn) (any, error) {
 			return app.PBS.GetPruneStatus(ctx, in.Store, in.UPID)
@@ -163,7 +180,9 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 	// --- restore & task status (read-only) ---
 	roTool(s, "pbs_backup_files_list", "List PBS backup files",
 		"List the files inside a PBS backup snapshot.",
-		"Provide the datastore name, backup type (vm|ct|host), backup ID, and the snapshot identifier (the ISO-8601 timestamp from the backup listing). Optionally set path to list a subdirectory (default /). Read-only and idempotent.",
+		"Provide the datastore name, backup type (vm|ct|host), backup ID, and the snapshot"+
+			"identifier (the ISO-8601 timestamp from the backup listing). Optionally set path to list a"+
+			"subdirectory (default /). Read-only and idempotent.",
 		log, func(ctx context.Context, in pbsFileListIn) (any, error) {
 			return app.PBS.ListBackupFiles(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, in.Path)
 		})
@@ -181,46 +200,55 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 		})
 
 	// --- mutations (gated by EnableMutations) ---
-	if !enableMutations {
-		return
-	}
+}
 
+func registerPBSMutationTools0(s *mcpSDK.Server, app *application.App, log toolLogger) {
 	mutTool(s, "pbs_verify_start", "Start PBS verify",
 		"Start a verify job on a PBS datastore.",
-		"Provide the datastore name. Returns the job UPID to poll with pbs_verify_status. Not idempotent: each call starts a new verify.",
+		"Provide the datastore name. Returns the job UPID to poll with pbs_verify_status. Not"+
+			"idempotent: each call starts a new verify.",
 		log, false, func(ctx context.Context, in storeIn) (any, error) {
 			upid, err := app.PBS.StartVerify(ctx, in.Store)
 			if err != nil {
 				return nil, err
 			}
+
 			return map[string]any{"upid": upid}, nil
 		})
 
 	mutTool(s, "pbs_gc_start", "Start PBS garbage collection",
 		"Start a garbage-collection job on a PBS datastore.",
-		"Provide the datastore name. Returns the job UPID. Destructive: GC removes unreferenced data from the datastore. Not idempotent: each call starts a new GC.",
+		"Provide the datastore name. Returns the job UPID. Destructive: GC removes unreferenced"+
+			"data from the datastore. Not idempotent: each call starts a new GC.",
 		log, false, func(ctx context.Context, in storeIn) (any, error) {
 			upid, err := app.PBS.StartGC(ctx, in.Store)
 			if err != nil {
 				return nil, err
 			}
+
 			return map[string]any{"upid": upid}, nil
 		}, true)
 
 	mutTool(s, "pbs_prune_start", "Start PBS prune",
 		"Start a prune job on a PBS datastore.",
-		"Provide the datastore name. Returns the job UPID to poll with pbs_prune_status. Destructive: prune removes backup snapshots per the datastore's retention policy. Not idempotent: each call starts a new prune.",
+		"Provide the datastore name. Returns the job UPID to poll with pbs_prune_status."+
+			"Destructive: prune removes backup snapshots per the datastore's retention policy. Not"+
+			"idempotent: each call starts a new prune.",
 		log, false, func(ctx context.Context, in storeIn) (any, error) {
 			upid, err := app.PBS.StartPrune(ctx, in.Store)
 			if err != nil {
 				return nil, err
 			}
+
 			return map[string]any{"upid": upid}, nil
 		}, true)
+}
 
+func registerPBSMutationTools1(s *mcpSDK.Server, app *application.App, log toolLogger) {
 	mutTool(s, "pbs_sync_start", "Start PBS sync",
 		"Start a one-off sync job on a PBS datastore.",
-		"Provide the datastore name plus the sync parameters (remote, remote_store, owner, limits, etc.). Returns the job UPID. Not idempotent: each call starts a new sync.",
+		"Provide the datastore name plus the sync parameters (remote, remote_store, owner, limits,"+
+			"etc.). Returns the job UPID. Not idempotent: each call starts a new sync.",
 		log, false, func(ctx context.Context, in syncIn) (any, error) {
 			upid, err := app.PBS.StartSync(ctx, in.Store, model.PBSSyncRequest{
 				Remote:         in.Remote,
@@ -236,12 +264,15 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 			if err != nil {
 				return nil, err
 			}
+
 			return map[string]any{"upid": upid}, nil
 		})
 
 	mutTool(s, "pbs_backup_restore_file", "Restore single file from PBS backup",
 		"Restore a single file out of a PBS backup snapshot to a target path on the PBS filesystem.",
-		"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier, the source path inside the backup and the target path on the PBS filesystem. Destructive: overwrites the target path on the PBS filesystem. Returns no task UPID. Not idempotent.",
+		"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier,"+
+			"the source path inside the backup and the target path on the PBS filesystem. Destructive:"+
+			"overwrites the target path on the PBS filesystem. Returns no task UPID. Not idempotent.",
 		log, false, func(ctx context.Context, in pbsFileRestoreIn) (any, error) {
 			return nil, app.PBS.RestoreFile(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, model.PBSFileRestoreRequest{
 				Path:   in.Path,
@@ -251,7 +282,11 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 
 	mutTool(s, "pbs_backup_vm_restore", "Restore PBS VM backup",
 		"Restore a PBS VM backup snapshot into a PVE datastore.",
-		"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier, the target PVE storage, and optionally a VM ID (or 'next'), host, password, fingerprint, pool, verbose and reload. Destructive: restores/overwrites VM state on the target PVE storage. Returns the task UPID to poll with pbs_task_status. Not idempotent: each call starts a new restore.",
+		"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier,"+
+			"the target PVE storage, and optionally a VM ID (or 'next'), host, password, fingerprint,"+
+			"pool, verbose and reload. Destructive: restores/overwrites VM state on the target PVE"+
+			"storage. Returns the task UPID to poll with pbs_task_status. Not idempotent: each call"+
+			"starts a new restore.",
 		log, false, func(ctx context.Context, in pbsVMRestoreIn) (any, error) {
 			upid, err := app.PBS.RestoreVMBackup(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, model.PBSVMRestoreRequest{
 				Target:      in.Target,
@@ -266,6 +301,7 @@ func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 			if err != nil {
 				return nil, err
 			}
+
 			return map[string]any{"upid": upid}, nil
 		}, true)
 }
