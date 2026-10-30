@@ -2,7 +2,7 @@
 
 **Language:** English (fixed by the user — do not translate).
 **Module:** `github.com/teran/mcp-proxmox`
-**Go:** 1.27.2
+**Go:** 1.27.3
 **Status:** design snapshot (authoritative technical reference; implementation to follow).
 
 This document is the authoritative technical reference for the `mcp-proxmox`
@@ -508,7 +508,7 @@ Proxmox control-plane tool. Its presence satisfies **S14**; its absence is the
 - **Transport & deployment:** **Local (stdio)**, no network listener, no TLS
   inside the server (in any future remote mode TLS termination is the reverse
   proxy's job, §8); config and tokens supplied via environment variables.
-- **Language / runtime:** Go 1.27.2; supply-chain gates `govulncheck`/gosec
+- **Language / runtime:** Go 1.27.3; supply-chain gates `govulncheck`/gosec
   (S13) apply.
 
 **2. Trust boundaries & threat model**
@@ -1110,7 +1110,7 @@ complements, never replaces, them.
 
 ## 10. Open assumptions (to confirm before implementation)
 
-1. **Go version:** `1.27.2` (matches the org's flagship `mcp-regcloud`; satisfies
+1. **Go version:** `1.27.3` (matches the org's flagship `mcp-regcloud`; satisfies
    the go-sdk ≥ 1.24 requirement). Confirm the installed toolchain.
 2. **Module name:** `github.com/teran/mcp-proxmox` — the repo's native namespace
    on **GitHub.com**, recorded in §2.4. If the server ever becomes a

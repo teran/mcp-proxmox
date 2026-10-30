@@ -80,7 +80,7 @@ contradiction, raise it with the architect.
 ## 2. Project rules and conventions
 
 ### Go
-- Go **1.27.2** (matches the org's flagship `mcp-regcloud`; satisfies the go-sdk
+- Go **1.27.3** (matches the org's flagship `mcp-regcloud`; satisfies the go-sdk
   ≥ 1.24 requirement). Module name: `github.com/teran/mcp-proxmox` — the repo's
   native namespace on **GitHub.com**, recorded in SPEC.md §2.4/§10. Do not
   rename the module without a SPEC-recorded decision; revisit the namespace if
