@@ -339,7 +339,7 @@ func (g *Gateway) ListDatastores(ctx context.Context) ([]model.Datastore, error)
 // GetDatastoreStatus returns the status of a single datastore.
 func (g *Gateway) GetDatastoreStatus(ctx context.Context, store string) (*model.DatastoreStatus, error) {
 	var out model.DatastoreStatus
-	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+store+"/status", &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+url.PathEscape(store)+"/status", &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -360,7 +360,7 @@ func (g *Gateway) GetDatastoreConfig(ctx context.Context, store string) (*model.
 // ListBackups returns the backup snapshots in a datastore.
 func (g *Gateway) ListBackups(ctx context.Context, store string) ([]model.Backup, error) {
 	var out []model.Backup
-	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+store+"/snapshots", &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+url.PathEscape(store)+"/snapshots", &out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -393,7 +393,7 @@ func (g *Gateway) GetBackupNotes(ctx context.Context, store, backupID, backupTyp
 	q := url.Values{}
 	q.Set("backup-id", backupID)
 	q.Set("backup-type", backupType)
-	path := "/admin/datastore/" + store + "/group-notes?" + q.Encode()
+	path := "/admin/datastore/" + url.PathEscape(store) + "/group-notes?" + q.Encode()
 
 	// GET /group-notes returns the notes as a plain string, not an object.
 	var notes string
@@ -406,7 +406,7 @@ func (g *Gateway) GetBackupNotes(ctx context.Context, store, backupID, backupTyp
 // GetVerifyStatus returns the status of a verify job by UPID.
 func (g *Gateway) GetVerifyStatus(ctx context.Context, store, upid string) (*model.VerifyStatus, error) {
 	var out model.VerifyStatus
-	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+store+"/verify/"+upid, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+url.PathEscape(store)+"/verify/"+url.PathEscape(upid), &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -415,7 +415,7 @@ func (g *Gateway) GetVerifyStatus(ctx context.Context, store, upid string) (*mod
 // GetPruneStatus returns the status of a prune job by UPID.
 func (g *Gateway) GetPruneStatus(ctx context.Context, store, upid string) (*model.PruneStatus, error) {
 	var out model.PruneStatus
-	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+store+"/prune/"+upid, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+url.PathEscape(store)+"/prune/"+url.PathEscape(upid), &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -431,9 +431,10 @@ func (g *Gateway) GetPBSVersion(ctx context.Context) (*model.PBSVersion, error) 
 }
 
 // backupFilesPath builds the PBS backup file-list path prefix for a store,
-// backup type, backup ID and snapshot.
+// backup type, backup ID and snapshot. Each segment is path-escaped so values
+// containing reserved path characters cannot inject extra segments.
 func backupFilesPath(store, backupType, backupID, snapshot string) string {
-	return "/admin/datastore/" + store + "/backups/" + backupType + "/" + backupID + "/" + snapshot
+	return "/admin/datastore/" + url.PathEscape(store) + "/backups/" + url.PathEscape(backupType) + "/" + url.PathEscape(backupID) + "/" + url.PathEscape(snapshot)
 }
 
 // ListBackupFiles lists the files inside a backup snapshot via
@@ -460,7 +461,7 @@ func (g *Gateway) ListBackupFiles(ctx context.Context, store, backupType, backup
 // GET /admin/tasks/{upid}. Read-only.
 func (g *Gateway) GetTaskStatus(ctx context.Context, upid string) (*model.PBSTask, error) {
 	var out model.PBSTask
-	if err := g.do(ctx, http.MethodGet, "/admin/tasks/"+upid, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, "/admin/tasks/"+url.PathEscape(upid), &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -470,7 +471,7 @@ func (g *Gateway) GetTaskStatus(ctx context.Context, upid string) (*model.PBSTas
 // GET /admin/tasks/{upid}/log. The optional limit caps the number of returned
 // lines. Read-only.
 func (g *Gateway) GetTaskLog(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error) {
-	urlPath := "/admin/tasks/" + upid + "/log"
+	urlPath := "/admin/tasks/" + url.PathEscape(upid) + "/log"
 	if limit > 0 {
 		urlPath += "?limit=" + strconv.Itoa(limit)
 	}
@@ -540,7 +541,7 @@ func (g *Gateway) doMutation(ctx context.Context, method, path string, form url.
 // returns the task UPID.
 func (g *Gateway) StartVerify(ctx context.Context, store string) (string, error) {
 	var upid string
-	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+store+"/verify", nil, &upid); err != nil {
+	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+url.PathEscape(store)+"/verify", nil, &upid); err != nil {
 		return "", err
 	}
 	return upid, nil
@@ -550,7 +551,7 @@ func (g *Gateway) StartVerify(ctx context.Context, store string) (string, error)
 // and returns the task UPID.
 func (g *Gateway) StartGC(ctx context.Context, store string) (string, error) {
 	var upid string
-	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+store+"/gc", nil, &upid); err != nil {
+	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+url.PathEscape(store)+"/gc", nil, &upid); err != nil {
 		return "", err
 	}
 	return upid, nil
@@ -560,7 +561,7 @@ func (g *Gateway) StartGC(ctx context.Context, store string) (string, error) {
 // returns the task UPID.
 func (g *Gateway) StartPrune(ctx context.Context, store string) (string, error) {
 	var upid string
-	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+store+"/prune", nil, &upid); err != nil {
+	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+url.PathEscape(store)+"/prune", nil, &upid); err != nil {
 		return "", err
 	}
 	return upid, nil
@@ -599,7 +600,7 @@ func (g *Gateway) StartSync(ctx context.Context, store string, req model.PBSSync
 	}
 
 	var upid string
-	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+store+"/sync", form, &upid); err != nil {
+	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+url.PathEscape(store)+"/sync", form, &upid); err != nil {
 		return "", err
 	}
 	return upid, nil

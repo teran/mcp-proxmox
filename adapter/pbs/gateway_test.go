@@ -365,5 +365,56 @@ func TestGateway_DoNotImplementedFlag(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrNotImplemented) || err == nil)
 }
 
+// TestGateway_PathSegmentsEscaped verifies that user-supplied path segments
+// interpolated into PBS API URL paths reach the wire url.PathEscape'd end-to-end
+// through the real resty gateway against the httptest mock (S11 path-injection
+// conformance). A segment containing '/' must arrive at the server as a single
+// escaped path element (`%2F`), NOT as extra literal path segments. The
+// assertion target is r.URL.EscapedPath(), i.e. exactly what the server
+// receives.
+func TestGateway_PathSegmentsEscaped(t *testing.T) {
+	t.Run("store", func(t *testing.T) {
+		rec := &reqCapture{}
+		srv := mockServer(t, 200, `{"data":{"store":"x","total":1,"used":1}}`, rec)
+		g, _ := newTestGateway(t, srv)
+
+		_, err := g.GetDatastoreStatus(context.Background(), "st/ore")
+		skipIfStub(t, err)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, rec.count)
+		assert.Equal(t, "/api2/json/admin/datastore/st%2Fore/status", rec.escapedPath,
+			"store segment must be escaped; raw '/' would inject extra path segments")
+	})
+
+	t.Run("store+upid", func(t *testing.T) {
+		rec := &reqCapture{}
+		srv := mockServer(t, 200, `{"data":{"upid":"x","status":"OK"}}`, rec)
+		g, _ := newTestGateway(t, srv)
+
+		_, err := g.GetVerifyStatus(context.Background(), "st/ore", "upid/with/slash")
+		skipIfStub(t, err)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, rec.count)
+		assert.Equal(t, "/api2/json/admin/datastore/st%2Fore/verify/upid%2Fwith%2Fslash", rec.escapedPath,
+			"store and upid segments must be escaped")
+	})
+
+	t.Run("backup files path (store+backupType+backupID+snapshot)", func(t *testing.T) {
+		rec := &reqCapture{}
+		srv := mockServer(t, 200, `{"data":[]}`, rec)
+		g, _ := newTestGateway(t, srv)
+
+		_, err := g.ListBackupFiles(context.Background(), "st/ore", "vm/type", "100/1", "snap/shot", "")
+		skipIfStub(t, err)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, rec.count)
+		assert.Equal(t, "/api2/json/admin/datastore/st%2Fore/backups/vm%2Ftype/100%2F1/snap%2Fshot/files", rec.escapedPath,
+			"store/backupType/backupID/snapshot segments must be escaped")
+	})
+}
+
 // compile-time: Gateway implements port.PBSGateway.
 var _ port.PBSGateway = (*Gateway)(nil)
