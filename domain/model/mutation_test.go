@@ -10,58 +10,60 @@ import (
 // marshals and unmarshals to the JSON the real Proxmox VE / PBS REST APIs
 // expect as form-parameter payloads, and back again without loss. This pins the
 // struct tags in domain/model/mutation.go (SPEC.md §6.x).
-func TestMutationRequestRoundTrip(t *testing.T) {
-	tests := []struct {
-		name string
-		in   any
-	}{
-		{
-			name: "create-vm",
-			in: CreateVMRequest{
-				VMID: 100, Name: "web", Cores: 2, Memory: 1024, Sockets: 1,
-				Ostype: "l26", Net0: "virtio=AA:BB", Scsi0: "local:32", Ide2: "local:iso.iso",
-				Boot: "order=scsi0", Balloon: 512, Description: "prod web", Tags: "web;prod",
-				Agent: 1, OnBoot: 1, CPU: "host", Machine: "q35", VGA: "std",
-			},
+// mutationRoundTripCases holds the mutation request types and their round-trip
+// identity.
+var mutationRoundTripCases = []struct {
+	name string
+	in   any
+}{
+	{
+		name: "create-vm",
+		in: CreateVMRequest{
+			VMID: 100, Name: "web", Cores: 2, Memory: 1024, Sockets: 1,
+			Ostype: "l26", Net0: "virtio=AA:BB", Scsi0: "local:32", Ide2: "local:iso.iso",
+			Boot: "order=scsi0", Balloon: 512, Description: "prod web", Tags: "web;prod",
+			Agent: 1, OnBoot: 1, CPU: "host", Machine: "q35", VGA: "std",
 		},
-		{
-			name: "resize-vm",
-			in:   ResizeVMRequest{Disk: "scsi0", SizeGB: 20},
+	},
+	{
+		name: "resize-vm",
+		in:   ResizeVMRequest{Disk: "scsi0", SizeGB: 20},
+	},
+	{
+		name: "migrate-vm",
+		in:   MigrateVMRequest{Target: "pve2", Online: true, WithLocalDisks: true},
+	},
+	{
+		name: "ha-resource",
+		in:   HAResourceRequest{SID: "vm:100", Type: "vm", Nodes: []string{"pve1", "pve2"}, Comment: "primary"},
+	},
+	{
+		name: "vm-backup",
+		in: VMBackupRequest{
+			VMID: 100, Storage: "backup", Mode: "snapshot",
+			NotesTemplate: "{{guestname}}", Compress: "zstd",
 		},
-		{
-			name: "migrate-vm",
-			in:   MigrateVMRequest{Target: "pve2", Online: true, WithLocalDisks: true},
+	},
+	{
+		name: "pbs-sync",
+		in: PBSSyncRequest{
+			Remote: "remote1", RemoteStore: "backup", Owner: "root@pam",
+			MaxFiles: 3, RemoveVanished: true, RateIn: 1000, RateOut: 2000,
+			SkipLost: true, NotifyUser: "admin@example.com",
 		},
-		{
-			name: "ha-resource",
-			in:   HAResourceRequest{SID: "vm:100", Type: "vm", Nodes: []string{"pve1", "pve2"}, Comment: "primary"},
-		},
-		{
-			name: "vm-backup",
-			in: VMBackupRequest{
-				VMID: 100, Storage: "backup", Mode: "snapshot",
-				NotesTemplate: "{{guestname}}", Compress: "zstd",
-			},
-		},
-		{
-			name: "pbs-sync",
-			in: PBSSyncRequest{
-				Remote: "remote1", RemoteStore: "backup", Owner: "root@pam",
-				MaxFiles: 3, RemoveVanished: true, RateIn: 1000, RateOut: 2000,
-				SkipLost: true, NotifyUser: "admin@example.com",
-			},
-		},
-		{
-			name: "set-vm-config",
-			in:   SetVMConfigRequest{Config: map[string]string{"onboot": "0", "memory": "2048"}},
-		},
-		{
-			name: "set-lxc-config",
-			in:   SetLXCConfigRequest{Config: map[string]string{"onboot": "0", "cores": "2"}},
-		},
-	}
+	},
+	{
+		name: "set-vm-config",
+		in:   SetVMConfigRequest{Config: map[string]string{"onboot": "0", "memory": "2048"}},
+	},
+	{
+		name: "set-lxc-config",
+		in:   SetLXCConfigRequest{Config: map[string]string{"onboot": "0", "cores": "2"}},
+	},
+}
 
-	for _, tt := range tests {
+func TestMutationRequestRoundTrip(t *testing.T) {
+	for _, tt := range mutationRoundTripCases {
 		t.Run(tt.name, func(t *testing.T) {
 			b, err := json.Marshal(tt.in)
 			if err != nil {
@@ -93,8 +95,11 @@ func TestMutationRequestOptionalOmitted(t *testing.T) {
 		{"resize-vm", ResizeVMRequest{Disk: "scsi0", SizeGB: 20}, `{"disk":"scsi0","size_gb":20}`},
 		{"migrate-vm-minimal", MigrateVMRequest{Target: "pve2"}, `{"target":"pve2"}`},
 		{"ha-resource-minimal", HAResourceRequest{SID: "vm:100", Type: "vm"}, `{"sid":"vm:100","type":"vm"}`},
-		{"vm-backup-minimal", VMBackupRequest{VMID: 100, Storage: "local", Mode: "snapshot"},
-			`{"vmid":100,"storage":"local","mode":"snapshot"}`},
+		{
+			"vm-backup-minimal",
+			VMBackupRequest{VMID: 100, Storage: "local", Mode: "snapshot"},
+			`{"vmid":100,"storage":"local","mode":"snapshot"}`,
+		},
 		{"pbs-sync-empty", PBSSyncRequest{}, `{}`},
 		// config carries no omitempty, so an empty map serializes as null and the
 		// adapter never omits the key (the tool handler always supplies a map).

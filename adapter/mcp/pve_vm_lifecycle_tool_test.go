@@ -29,11 +29,11 @@ func TestVMLifecycleToolSuccess(t *testing.T) {
 		{"pve_vm_delete", map[string]any{"node": "pve1", "vmid": 100, "purge": true, "destroy_unreferenced_disks": true}},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := callTool(t, sess, tc.name, tc.args)
-			assert.False(t, res.IsError, "tool %s should succeed", tc.name)
-			assert.NotNil(t, res.StructuredContent, "tool %s should return structured output", tc.name)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			res := callTool(t, sess, testCase.name, testCase.args)
+			assert.False(t, res.IsError, "tool %s should succeed", testCase.name)
+			assert.NotNil(t, res.StructuredContent, "tool %s should return structured output", testCase.name)
 		})
 	}
 }
@@ -41,8 +41,8 @@ func TestVMLifecycleToolSuccess(t *testing.T) {
 // TestVMLifecycleToolErrorPropagation verifies IsError on gateway failure for
 // every VM lifecycle mutation tool (gate ON).
 func TestVMLifecycleToolErrorPropagation(t *testing.T) {
-	gw := &stubPVEGateway{err: port.ErrNotFound}
-	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(gw))
+	gateway := &stubPVEGateway{err: port.ErrNotFound}
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(gateway))
 	_, sess := newTestServer(t, app, true)
 
 	cases := []struct {
@@ -59,10 +59,10 @@ func TestVMLifecycleToolErrorPropagation(t *testing.T) {
 		{"pve_vm_delete", map[string]any{"node": "pve1", "vmid": 100}},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := callTool(t, sess, tc.name, tc.args)
-			assert.True(t, res.IsError, "tool %s should be flagged IsError on gateway failure", tc.name)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			res := callTool(t, sess, testCase.name, testCase.args)
+			assert.True(t, res.IsError, "tool %s should be flagged IsError on gateway failure", testCase.name)
 		})
 	}
 }
@@ -74,8 +74,10 @@ func TestVMLifecycleToolGateOff(t *testing.T) {
 	_, sess := newTestServer(t, app, false)
 	names := toolNames(t, sess)
 
-	for _, n := range []string{"pve_vm_start", "pve_vm_stop", "pve_vm_shutdown", "pve_vm_reboot",
-		"pve_vm_reset", "pve_vm_suspend", "pve_vm_resume", "pve_vm_delete"} {
+	for _, n := range []string{
+		"pve_vm_start", "pve_vm_stop", "pve_vm_shutdown", "pve_vm_reboot",
+		"pve_vm_reset", "pve_vm_suspend", "pve_vm_resume", "pve_vm_delete",
+	} {
 		assert.False(t, names[n], "mutation tool %s must be gated off", n)
 	}
 }

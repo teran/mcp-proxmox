@@ -30,6 +30,13 @@ const apiPrefix = "/api2/json"
 // defaultTimeout is applied when cfg.HTTPClient is nil.
 const defaultTimeout = 30 * time.Second
 
+// defaultBackoff is the linear retry delay used when cfg.RetryBackoff is zero.
+const defaultBackoff = 200 * time.Millisecond
+
+// statusServerError is the first HTTP status that indicates an upstream server
+// error (5xx), which the gateway retries.
+const statusServerError = 500
+
 // Config is the configuration of the Proxmox Backup Server HTTP client.
 // See SPEC.md §4.5.
 type Config struct {
@@ -58,6 +65,7 @@ type Gateway struct {
 func NewGateway(cfg Config) *Gateway {
 	g := &Gateway{cfg: cfg, logger: port.NewCtxLogger(cfg.Logger)}
 	g.client, g.tlsErr = buildClient(cfg)
+
 	return g
 }
 
@@ -69,22 +77,25 @@ func NewGateway(cfg Config) *Gateway {
 // TLS RootCAs are replaced by a pool that includes the custom CA (TLS
 // verification stays on).
 func buildClient(cfg Config) (*resty.Client, error) {
-	rc := resty.New()
+	client := resty.New()
 	if cfg.UserAgent != "" {
-		rc.SetHeader("User-Agent", cfg.UserAgent)
+		client.SetHeader("User-Agent", cfg.UserAgent)
 	}
 	timeout := defaultTimeout
-	tr := http.DefaultTransport.(*http.Transport).Clone()
+	transport := &http.Transport{}
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport = t.Clone()
+	}
 	if cfg.HTTPClient != nil {
 		if cfg.HTTPClient.Timeout != 0 {
 			timeout = cfg.HTTPClient.Timeout
 		}
 		if t, ok := cfg.HTTPClient.Transport.(*http.Transport); ok && t != nil {
-			tr = t.Clone()
+			transport = t.Clone()
 		}
 	}
-	rc.SetTimeout(timeout)
-	rc.SetTransport(tr)
+	client.SetTimeout(timeout)
+	client.SetTransport(transport)
 
 	if cfg.CACertPath != "" {
 		pool, err := systemOrNewCertPool()
@@ -101,27 +112,29 @@ func buildClient(cfg Config) (*resty.Client, error) {
 			return nil, fmt.Errorf("pbs: no valid CA certificates found in %q", cfg.CACertPath)
 		}
 
-		tlsConf := tr.TLSClientConfig
+		tlsConf := transport.TLSClientConfig
 		if tlsConf == nil {
 			tlsConf = &tls.Config{MinVersion: tls.VersionTLS12}
 		}
 		tlsConf = tlsConf.Clone()
 		tlsConf.RootCAs = pool
 		tlsConf.MinVersion = tls.VersionTLS12
-		tr.TLSClientConfig = tlsConf
-		rc.SetTransport(tr)
+		transport.TLSClientConfig = tlsConf
+		client.SetTransport(transport)
 	}
-	return rc, nil
+
+	return client, nil
 }
 
 // systemOrNewCertPool returns the system cert pool, or a fresh empty pool when
 // the system pool is unavailable.
 func systemOrNewCertPool() (*x509.CertPool, error) {
 	pool, err := x509.SystemCertPool()
-	if err != nil || pool == nil {
-		return x509.NewCertPool(), nil
+	if err == nil && pool != nil {
+		return pool, nil
 	}
-	return pool, nil
+
+	return x509.NewCertPool(), nil
 }
 
 // do executes a PBS request, decoding the JSON envelope into out. Reads are
@@ -135,16 +148,17 @@ func (g *Gateway) do(ctx context.Context, method, path string, out any) error {
 	}
 	backoff := g.cfg.RetryBackoff
 	if backoff <= 0 {
-		backoff = 200 * time.Millisecond
+		backoff = defaultBackoff
 	}
 
 	var lastErr error
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		if i > 0 {
 			timer := time.NewTimer(backoff * time.Duration(i))
 			select {
 			case <-ctx.Done():
 				timer.Stop()
+
 				return ctx.Err()
 			case <-timer.C:
 			}
@@ -153,12 +167,13 @@ func (g *Gateway) do(ctx context.Context, method, path string, out any) error {
 		if lastErr == nil {
 			return nil
 		}
-		var upErr *UpstreamError
-		if !errors.As(lastErr, &upErr) {
+		if _, isUpstream := errors.AsType[*UpstreamError](lastErr); !isUpstream {
 			// Sentinel / API / empty-data errors are not retried.
+
 			return lastErr
 		}
 	}
+
 	return lastErr
 }
 
@@ -191,10 +206,10 @@ func (g *Gateway) doOnceReq(ctx context.Context, method, path string, form url.V
 	// sent (SPEC.md §7.4) and is reported in the ErrUnauthorized family.
 	header, err := g.cfg.TokenSource.AuthorizationHeader(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: pbs: token source: %v", port.ErrUnauthorized, err)
+		return fmt.Errorf("%w: pbs: token source: %w", port.ErrUnauthorized, err)
 	}
 
-	u := strings.TrimRight(g.cfg.Endpoint, "/") + apiPrefix + path
+	requestURL := strings.TrimRight(g.cfg.Endpoint, "/") + apiPrefix + path
 
 	req := g.client.R().SetContext(ctx).
 		SetHeader("Authorization", header).
@@ -209,7 +224,7 @@ func (g *Gateway) doOnceReq(ctx context.Context, method, path string, form url.V
 		req.SetFormDataFromValues(form)
 	}
 
-	resp, err := req.Execute(method, u)
+	resp, err := req.Execute(method, requestURL)
 	if err != nil {
 		return &UpstreamError{Op: "transport", Err: err}
 	}
@@ -231,8 +246,10 @@ func (g *Gateway) doOnceReq(ctx context.Context, method, path string, form url.V
 		// is never written to the journal — it could carry secret-adjacent data,
 		// and the requirement is to log no response bodies (SPEC.md §5.4).
 		g.logger.Tracef(ctx, "pbs error response %d", resp.StatusCode())
+
 		return g.mapHTTPError(resp.StatusCode(), body)
 	}
+
 	return g.decode(body, out)
 }
 
@@ -263,14 +280,17 @@ func (g *Gateway) decode(body []byte, out any) error {
 		if !isSlicePtr(out) {
 			// A single-entity getter received no data: surface an explicit
 			// not-found style error rather than a silently-zero struct.
+
 			return &EmptyDataError{Op: "data"}
 		}
 		// Empty data for a list is simply an empty list.
+
 		return nil
 	}
 	if err := json.Unmarshal(env.Data, out); err != nil {
 		return &UpstreamError{Op: "decode", Err: err}
 	}
+
 	return nil
 }
 
@@ -285,11 +305,12 @@ func (g *Gateway) mapHTTPError(status int, body []byte) error {
 	case http.StatusNotFound:
 		return &port.HTTPStatusError{Status: status, Err: port.ErrNotFound}
 	}
-	if status >= 500 {
+	if status >= statusServerError {
 		return &UpstreamError{Op: "http", Status: status, Err: fmt.Errorf("pbs: HTTP status %d", status)}
 	}
 	// Other 4xx: surface the Proxmox error envelope as an APIError.
 	msgs := extractErrorMessages(body)
+
 	return &APIError{Messages: msgs}
 }
 
@@ -303,6 +324,7 @@ func extractErrorMessages(body []byte) []string {
 	if err := json.Unmarshal(body, &env); err != nil {
 		return nil
 	}
+
 	return errorMessages(env.Errors, env.Message)
 }
 
@@ -315,6 +337,7 @@ func errorMessages(errorsMap map[string]string, message string) []string {
 	if message != "" {
 		msgs = append(msgs, message)
 	}
+
 	return msgs
 }
 
@@ -324,6 +347,7 @@ func isSlicePtr(v any) bool {
 		return false
 	}
 	rv := reflect.ValueOf(v)
+
 	return rv.Kind() == reflect.Pointer && rv.Elem().Kind() == reflect.Slice
 }
 
@@ -333,6 +357,7 @@ func (g *Gateway) ListDatastores(ctx context.Context) ([]model.Datastore, error)
 	if err := g.do(ctx, http.MethodGet, "/admin/datastore", &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -342,6 +367,7 @@ func (g *Gateway) GetDatastoreStatus(ctx context.Context, store string) (*model.
 	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+url.PathEscape(store)+"/status", &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
@@ -354,6 +380,7 @@ func (g *Gateway) GetDatastoreConfig(ctx context.Context, store string) (*model.
 	if err := g.do(ctx, http.MethodGet, "/config/datastore/"+url.PathEscape(store), &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
@@ -363,6 +390,7 @@ func (g *Gateway) ListBackups(ctx context.Context, store string) ([]model.Backup
 	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+url.PathEscape(store)+"/snapshots", &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -382,6 +410,7 @@ func (g *Gateway) GetBackup(ctx context.Context, store, backupID string) ([]mode
 			out = append(out, b)
 		}
 	}
+
 	return out, nil
 }
 
@@ -400,15 +429,18 @@ func (g *Gateway) GetBackupNotes(ctx context.Context, store, backupID, backupTyp
 	if err := g.do(ctx, http.MethodGet, path, &notes); err != nil {
 		return nil, err
 	}
+
 	return &model.BackupNotes{Notes: notes}, nil
 }
 
 // GetVerifyStatus returns the status of a verify job by UPID.
 func (g *Gateway) GetVerifyStatus(ctx context.Context, store, upid string) (*model.VerifyStatus, error) {
 	var out model.VerifyStatus
-	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+url.PathEscape(store)+"/verify/"+url.PathEscape(upid), &out); err != nil {
+	path := "/admin/datastore/" + url.PathEscape(store) + "/verify/" + url.PathEscape(upid)
+	if err := g.do(ctx, http.MethodGet, path, &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
@@ -418,6 +450,7 @@ func (g *Gateway) GetPruneStatus(ctx context.Context, store, upid string) (*mode
 	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+url.PathEscape(store)+"/prune/"+url.PathEscape(upid), &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
@@ -427,6 +460,7 @@ func (g *Gateway) GetPBSVersion(ctx context.Context) (*model.PBSVersion, error) 
 	if err := g.do(ctx, http.MethodGet, "/version", &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
@@ -434,26 +468,32 @@ func (g *Gateway) GetPBSVersion(ctx context.Context) (*model.PBSVersion, error) 
 // backup type, backup ID and snapshot. Each segment is path-escaped so values
 // containing reserved path characters cannot inject extra segments.
 func backupFilesPath(store, backupType, backupID, snapshot string) string {
-	return "/admin/datastore/" + url.PathEscape(store) + "/backups/" + url.PathEscape(backupType) + "/" + url.PathEscape(backupID) + "/" + url.PathEscape(snapshot)
+	return "/admin/datastore/" + url.PathEscape(store) +
+		"/backups/" + url.PathEscape(backupType) +
+		"/" + url.PathEscape(backupID) +
+		"/" + url.PathEscape(snapshot)
 }
 
 // ListBackupFiles lists the files inside a backup snapshot via
 // GET /admin/datastore/{store}/backups/{type}/{id}/{snapshot}/files. The
 // optional path filter is passed as the `path` query parameter (default "/").
 // Read-only.
-func (g *Gateway) ListBackupFiles(ctx context.Context, store, backupType, backupID, snapshot, path string) ([]model.PBSFile, error) {
-	q := url.Values{}
+func (g *Gateway) ListBackupFiles(
+	ctx context.Context, store, backupType, backupID, snapshot, path string,
+) ([]model.PBSFile, error) {
+	query := url.Values{}
 	if path != "" {
-		q.Set("path", path)
+		query.Set("path", path)
 	}
 	urlPath := backupFilesPath(store, backupType, backupID, snapshot) + "/files"
-	if len(q) > 0 {
-		urlPath += "?" + q.Encode()
+	if len(query) > 0 {
+		urlPath += "?" + query.Encode()
 	}
 	var out []model.PBSFile
 	if err := g.do(ctx, http.MethodGet, urlPath, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -464,6 +504,7 @@ func (g *Gateway) GetTaskStatus(ctx context.Context, upid string) (*model.PBSTas
 	if err := g.do(ctx, http.MethodGet, "/admin/tasks/"+url.PathEscape(upid), &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
@@ -479,6 +520,7 @@ func (g *Gateway) GetTaskLog(ctx context.Context, upid string, limit int) ([]mod
 	if err := g.do(ctx, http.MethodGet, urlPath, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -486,10 +528,13 @@ func (g *Gateway) GetTaskLog(ctx context.Context, upid string, limit int) ([]mod
 // POST /admin/datastore/{store}/backups/{type}/{id}/{snapshot}/files. The
 // source `path` inside the backup is written to the `target` path on the PBS
 // filesystem; the endpoint returns no task UPID.
-func (g *Gateway) RestoreFile(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error {
+func (g *Gateway) RestoreFile(
+	ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest,
+) error {
 	form := url.Values{}
 	form.Set("path", req.Path)
 	form.Set("target", req.Target)
+
 	return g.doMutation(ctx, http.MethodPost, backupFilesPath(store, backupType, backupID, snapshot)+"/files", form, nil)
 }
 
@@ -498,7 +543,9 @@ func (g *Gateway) RestoreFile(ctx context.Context, store, backupType, backupID, 
 // returns the task UPID. Target is the PVE storage; VMID is either a numeric ID
 // or the string "next". The optional password/fingerprint authenticate to the
 // target PVE node and are sent in the form body — they are never logged.
-func (g *Gateway) RestoreVMBackup(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest) (string, error) {
+func (g *Gateway) RestoreVMBackup(
+	ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest,
+) (string, error) {
 	form := url.Values{}
 	form.Set("target", req.Target)
 	if req.VMID != "" {
@@ -523,9 +570,11 @@ func (g *Gateway) RestoreVMBackup(ctx context.Context, store, backupType, backup
 		form.Set("reload", "1")
 	}
 	var upid string
-	if err := g.doMutation(ctx, http.MethodPost, backupFilesPath(store, backupType, backupID, snapshot)+"/restore", form, &upid); err != nil {
+	restorePath := backupFilesPath(store, backupType, backupID, snapshot) + "/restore"
+	if err := g.doMutation(ctx, http.MethodPost, restorePath, form, &upid); err != nil {
 		return "", err
 	}
+
 	return upid, nil
 }
 
@@ -544,6 +593,7 @@ func (g *Gateway) StartVerify(ctx context.Context, store string) (string, error)
 	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+url.PathEscape(store)+"/verify", nil, &upid); err != nil {
 		return "", err
 	}
+
 	return upid, nil
 }
 
@@ -554,6 +604,7 @@ func (g *Gateway) StartGC(ctx context.Context, store string) (string, error) {
 	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+url.PathEscape(store)+"/gc", nil, &upid); err != nil {
 		return "", err
 	}
+
 	return upid, nil
 }
 
@@ -564,6 +615,7 @@ func (g *Gateway) StartPrune(ctx context.Context, store string) (string, error) 
 	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+url.PathEscape(store)+"/prune", nil, &upid); err != nil {
 		return "", err
 	}
+
 	return upid, nil
 }
 
@@ -603,5 +655,6 @@ func (g *Gateway) StartSync(ctx context.Context, store string, req model.PBSSync
 	if err := g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+url.PathEscape(store)+"/sync", form, &upid); err != nil {
 		return "", err
 	}
+
 	return upid, nil
 }

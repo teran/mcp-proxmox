@@ -31,18 +31,36 @@ func runMethod(t *testing.T, body string, fn func(*Gateway) error) (*reqCapture,
 	srv := mockServer(t, 200, body, rec)
 	g, _ := newTestGateway(t, srv)
 	err := fn(g)
+
 	return rec, err
 }
 
-// TestGateway_AllMethodSuccess exercises every PVE read-only method's happy
-// path, asserting the returned struct fields and the request method/path.
-func TestGateway_AllMethodSuccess(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-		path string
-		call func(*Gateway) error
-	}{
+// surfaceCase describes one happy-path read assertion.
+type surfaceCase struct {
+	name string
+	body string
+	path string
+	call func(*Gateway) error
+}
+
+// runSurfaceCases drives a set of happy-path read assertions against a mock
+// server, checking method/path/auth for each.
+func runSurfaceCases(t *testing.T, cases []surfaceCase) {
+	t.Helper()
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			rec, err := runMethod(t, tt.body, tt.call)
+			require.NoError(t, err)
+			assert.Equal(t, http.MethodGet, rec.method)
+			assert.Equal(t, tt.path, rec.path)
+			assert.Equal(t, "PVEAPIToken=user@pam!tokenid=secret", rec.auth)
+		})
+	}
+}
+
+// TestGateway_NodeCluster_Success exercises the node/cluster read methods.
+func TestGateway_NodeCluster_Success(t *testing.T) {
+	runSurfaceCases(t, []surfaceCase{
 		{
 			name: "ListNodes",
 			body: `{"data":[{"node":"pve1","status":"online","cpu":0.5}]}`,
@@ -54,6 +72,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					assert.Equal(t, "pve1", ns[0].Node)
 					assert.Equal(t, "online", ns[0].Status)
 				}
+
 				return err
 			},
 		},
@@ -67,6 +86,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					assert.Equal(t, "online", ns.Status)
 					assert.Equal(t, int64(1024), ns.Mem)
 				}
+
 				return err
 			},
 		},
@@ -80,9 +100,17 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					require.Len(t, cs, 1)
 					assert.Equal(t, 1, cs[0].Quorum)
 				}
+
 				return err
 			},
 		},
+	})
+}
+
+// TestGateway_ClusterBackup_Success exercises the cluster-resources/backup
+// read methods.
+func TestGateway_ClusterBackup_Success(t *testing.T) {
+	runSurfaceCases(t, []surfaceCase{
 		{
 			name: "GetClusterResources",
 			body: `{"data":[{"id":"qemu/100","type":"qemu","vmid":100,"status":"running"}]}`,
@@ -93,12 +121,14 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					require.Len(t, rs, 1)
 					assert.Equal(t, "qemu/100", rs[0].ID)
 				}
+
 				return err
 			},
 		},
 		{
 			name: "ListBackupJobs",
-			body: `{"data":[{"id":"backup-100","enabled":true,"schedule":"daily","node":"pve1","mode":"snapshot","storage":"local","all":true,"next-run":1700000000}]}`,
+			body: `{"data":[{"id":"backup-100","enabled":true,"schedule":"daily","node":"pve1",` +
+				`"mode":"snapshot","storage":"local","all":true,"next-run":1700000000}]}`,
 			path: "/api2/json/cluster/backup",
 			call: func(g *Gateway) error {
 				jobs, err := g.ListBackupJobs(context.Background())
@@ -109,6 +139,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					assert.Equal(t, "snapshot", jobs[0].Mode)
 					assert.Equal(t, int64(1700000000), jobs[0].NextRun)
 				}
+
 				return err
 			},
 		},
@@ -121,9 +152,16 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 				if assert.NoError(t, err) {
 					assert.Equal(t, "201", id)
 				}
+
 				return err
 			},
 		},
+	})
+}
+
+// TestGateway_VMRead_Success exercises the VM read methods.
+func TestGateway_VMRead_Success(t *testing.T) {
+	runSurfaceCases(t, []surfaceCase{
 		{
 			name: "ListVMs",
 			body: `{"data":[{"vmid":100,"name":"web","status":"running"}]}`,
@@ -134,6 +172,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					require.Len(t, vms, 1)
 					assert.Equal(t, "web", vms[0].Name)
 				}
+
 				return err
 			},
 		},
@@ -147,6 +186,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					assert.Equal(t, 100, cfg.VMID)
 					assert.Equal(t, model.FlexInt(2), cfg.Cores)
 				}
+
 				return err
 			},
 		},
@@ -159,9 +199,16 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 				if assert.NoError(t, err) {
 					assert.Equal(t, "running", st.Status)
 				}
+
 				return err
 			},
 		},
+	})
+}
+
+// TestGateway_LXCRead_Success exercises the LXC read methods.
+func TestGateway_LXCRead_Success(t *testing.T) {
+	runSurfaceCases(t, []surfaceCase{
 		{
 			name: "ListLXCs",
 			body: `{"data":[{"vmid":200,"name":"ct1","status":"running"}]}`,
@@ -172,6 +219,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					require.Len(t, ls, 1)
 					assert.Equal(t, 200, ls[0].VMID)
 				}
+
 				return err
 			},
 		},
@@ -184,6 +232,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 				if assert.NoError(t, err) {
 					assert.Equal(t, "ct1", cfg.Hostname)
 				}
+
 				return err
 			},
 		},
@@ -196,9 +245,16 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 				if assert.NoError(t, err) {
 					assert.Equal(t, "running", st.Status)
 				}
+
 				return err
 			},
 		},
+	})
+}
+
+// TestGateway_StorageNetwork_Success exercises the storage/network read methods.
+func TestGateway_StorageNetwork_Success(t *testing.T) {
+	runSurfaceCases(t, []surfaceCase{
 		{
 			name: "ListStorage",
 			body: `{"data":[{"storage":"local","type":"dir","active":1}]}`,
@@ -209,6 +265,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					require.Len(t, ss, 1)
 					assert.Equal(t, "local", ss[0].Storage)
 				}
+
 				return err
 			},
 		},
@@ -222,6 +279,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					assert.Equal(t, int64(1000), st.Total)
 					assert.Equal(t, int64(400), st.Used)
 				}
+
 				return err
 			},
 		},
@@ -235,9 +293,16 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					require.Len(t, ns, 1)
 					assert.Equal(t, "eth0", ns[0].Iface)
 				}
+
 				return err
 			},
 		},
+	})
+}
+
+// TestGateway_TasksVersion_Success exercises the task/version read methods.
+func TestGateway_TasksVersion_Success(t *testing.T) {
+	runSurfaceCases(t, []surfaceCase{
 		{
 			name: "ListTasks",
 			body: `{"data":[{"upid":"u","type":"qmstart","status":"stopped"}]}`,
@@ -248,6 +313,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					require.Len(t, ts, 1)
 					assert.Equal(t, "qmstart", ts[0].Type)
 				}
+
 				return err
 			},
 		},
@@ -260,6 +326,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 				if assert.NoError(t, err) {
 					assert.Equal(t, "stopped", st.Status)
 				}
+
 				return err
 			},
 		},
@@ -273,6 +340,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					require.Len(t, ls, 1)
 					assert.Equal(t, "TASK OK", ls[0].Text)
 				}
+
 				return err
 			},
 		},
@@ -286,20 +354,11 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					assert.Equal(t, "8.2.2", v.Version)
 					assert.Equal(t, "8.2", v.Release)
 				}
+
 				return err
 			},
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rec, err := runMethod(t, tt.body, tt.call)
-			require.NoError(t, err)
-			assert.Equal(t, http.MethodGet, rec.method)
-			assert.Equal(t, tt.path, rec.path)
-			assert.Equal(t, "PVEAPIToken=user@pam!tokenid=secret", rec.auth)
-		})
-	}
+	})
 }
 
 // TestGateway_ListTasksQueryParams verifies non-zero TaskListOptions serialize
@@ -403,14 +462,46 @@ func TestGateway_EmptyDataForGetters(t *testing.T) {
 		name string
 		call func(*Gateway) error
 	}{
-		{"GetNodeStatus", func(g *Gateway) error { _, e := g.GetNodeStatus(context.Background(), "pve1"); return e }},
-		{"GetVMConfig", func(g *Gateway) error { _, e := g.GetVMConfig(context.Background(), "pve1", 100); return e }},
-		{"GetVMStatus", func(g *Gateway) error { _, e := g.GetVMStatus(context.Background(), "pve1", 100); return e }},
-		{"GetLXCConfig", func(g *Gateway) error { _, e := g.GetLXCConfig(context.Background(), "pve1", 200); return e }},
-		{"GetLXCStatus", func(g *Gateway) error { _, e := g.GetLXCStatus(context.Background(), "pve1", 200); return e }},
-		{"GetStorageStatus", func(g *Gateway) error { _, e := g.GetStorageStatus(context.Background(), "pve1", "local"); return e }},
-		{"GetTaskStatus", func(g *Gateway) error { _, e := g.GetTaskStatus(context.Background(), "pve1", "u"); return e }},
-		{"GetPVEVersion", func(g *Gateway) error { _, e := g.GetPVEVersion(context.Background()); return e }},
+		{"GetNodeStatus", func(g *Gateway) error {
+			_, e := g.GetNodeStatus(context.Background(), "pve1")
+
+			return e
+		}},
+		{"GetVMConfig", func(g *Gateway) error {
+			_, e := g.GetVMConfig(context.Background(), "pve1", 100)
+
+			return e
+		}},
+		{"GetVMStatus", func(g *Gateway) error {
+			_, e := g.GetVMStatus(context.Background(), "pve1", 100)
+
+			return e
+		}},
+		{"GetLXCConfig", func(g *Gateway) error {
+			_, e := g.GetLXCConfig(context.Background(), "pve1", 200)
+
+			return e
+		}},
+		{"GetLXCStatus", func(g *Gateway) error {
+			_, e := g.GetLXCStatus(context.Background(), "pve1", 200)
+
+			return e
+		}},
+		{"GetStorageStatus", func(g *Gateway) error {
+			_, e := g.GetStorageStatus(context.Background(), "pve1", "local")
+
+			return e
+		}},
+		{"GetTaskStatus", func(g *Gateway) error {
+			_, e := g.GetTaskStatus(context.Background(), "pve1", "u")
+
+			return e
+		}},
+		{"GetPVEVersion", func(g *Gateway) error {
+			_, e := g.GetPVEVersion(context.Background())
+
+			return e
+		}},
 	}
 
 	for _, tt := range getters {
@@ -424,29 +515,68 @@ func TestGateway_EmptyDataForGetters(t *testing.T) {
 	}
 }
 
+// emptyDataForListCases lists the getters that must return an empty (non-error)
+// result when the API returns null data.
+var emptyDataForListCases = []struct {
+	name string
+	call func(*Gateway) error
+}{
+	{"ListNodes", func(g *Gateway) error {
+		_, e := g.ListNodes(context.Background())
+
+		return e
+	}},
+	{"GetClusterStatus", func(g *Gateway) error {
+		_, e := g.GetClusterStatus(context.Background())
+
+		return e
+	}},
+	{"GetClusterResources", func(g *Gateway) error {
+		_, e := g.GetClusterResources(context.Background())
+
+		return e
+	}},
+	{"ListBackupJobs", func(g *Gateway) error {
+		_, e := g.ListBackupJobs(context.Background())
+
+		return e
+	}},
+	{"ListVMs", func(g *Gateway) error {
+		_, e := g.ListVMs(context.Background(), "pve1")
+
+		return e
+	}},
+	{"ListLXCs", func(g *Gateway) error {
+		_, e := g.ListLXCs(context.Background(), "pve1")
+
+		return e
+	}},
+	{"ListStorage", func(g *Gateway) error {
+		_, e := g.ListStorage(context.Background())
+
+		return e
+	}},
+	{"ListNetwork", func(g *Gateway) error {
+		_, e := g.ListNetwork(context.Background(), "pve1")
+
+		return e
+	}},
+	{"ListTasks", func(g *Gateway) error {
+		_, e := g.ListTasks(context.Background(), "pve1", port.TaskListOptions{})
+
+		return e
+	}},
+	{"GetTaskLog", func(g *Gateway) error {
+		_, e := g.GetTaskLog(context.Background(), "pve1", "u", 0)
+
+		return e
+	}},
+}
+
 // TestGateway_EmptyDataForLists verifies null data for a list getter yields an
 // empty (non-error) result.
 func TestGateway_EmptyDataForLists(t *testing.T) {
-	lists := []struct {
-		name string
-		call func(*Gateway) error
-	}{
-		{"ListNodes", func(g *Gateway) error { _, e := g.ListNodes(context.Background()); return e }},
-		{"GetClusterStatus", func(g *Gateway) error { _, e := g.GetClusterStatus(context.Background()); return e }},
-		{"GetClusterResources", func(g *Gateway) error { _, e := g.GetClusterResources(context.Background()); return e }},
-		{"ListBackupJobs", func(g *Gateway) error { _, e := g.ListBackupJobs(context.Background()); return e }},
-		{"ListVMs", func(g *Gateway) error { _, e := g.ListVMs(context.Background(), "pve1"); return e }},
-		{"ListLXCs", func(g *Gateway) error { _, e := g.ListLXCs(context.Background(), "pve1"); return e }},
-		{"ListStorage", func(g *Gateway) error { _, e := g.ListStorage(context.Background()); return e }},
-		{"ListNetwork", func(g *Gateway) error { _, e := g.ListNetwork(context.Background(), "pve1"); return e }},
-		{"ListTasks", func(g *Gateway) error {
-			_, e := g.ListTasks(context.Background(), "pve1", port.TaskListOptions{})
-			return e
-		}},
-		{"GetTaskLog", func(g *Gateway) error { _, e := g.GetTaskLog(context.Background(), "pve1", "u", 0); return e }},
-	}
-
-	for _, tt := range lists {
+	for _, tt := range emptyDataForListCases {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := runMethod(t, `{"data":null}`, tt.call)
 			require.NoError(t, err)
@@ -655,14 +785,46 @@ func TestGateway_ListMethodErrorBranches(t *testing.T) {
 		name string
 		call func(*Gateway) error
 	}{
-		{"GetClusterStatus", func(g *Gateway) error { _, e := g.GetClusterStatus(context.Background()); return e }},
-		{"GetClusterResources", func(g *Gateway) error { _, e := g.GetClusterResources(context.Background()); return e }},
-		{"ListBackupJobs", func(g *Gateway) error { _, e := g.ListBackupJobs(context.Background()); return e }},
-		{"GetNextID", func(g *Gateway) error { _, e := g.GetNextID(context.Background()); return e }},
-		{"ListVMs", func(g *Gateway) error { _, e := g.ListVMs(context.Background(), "pve1"); return e }},
-		{"ListLXCs", func(g *Gateway) error { _, e := g.ListLXCs(context.Background(), "pve1"); return e }},
-		{"ListStorage", func(g *Gateway) error { _, e := g.ListStorage(context.Background()); return e }},
-		{"ListNetwork", func(g *Gateway) error { _, e := g.ListNetwork(context.Background(), "pve1"); return e }},
+		{"GetClusterStatus", func(g *Gateway) error {
+			_, e := g.GetClusterStatus(context.Background())
+
+			return e
+		}},
+		{"GetClusterResources", func(g *Gateway) error {
+			_, e := g.GetClusterResources(context.Background())
+
+			return e
+		}},
+		{"ListBackupJobs", func(g *Gateway) error {
+			_, e := g.ListBackupJobs(context.Background())
+
+			return e
+		}},
+		{"GetNextID", func(g *Gateway) error {
+			_, e := g.GetNextID(context.Background())
+
+			return e
+		}},
+		{"ListVMs", func(g *Gateway) error {
+			_, e := g.ListVMs(context.Background(), "pve1")
+
+			return e
+		}},
+		{"ListLXCs", func(g *Gateway) error {
+			_, e := g.ListLXCs(context.Background(), "pve1")
+
+			return e
+		}},
+		{"ListStorage", func(g *Gateway) error {
+			_, e := g.ListStorage(context.Background())
+
+			return e
+		}},
+		{"ListNetwork", func(g *Gateway) error {
+			_, e := g.ListNetwork(context.Background(), "pve1")
+
+			return e
+		}},
 	}
 
 	for _, tt := range calls {
@@ -733,5 +895,6 @@ func writeTestCA(t *testing.T) string {
 	path := filepath.Join(t.TempDir(), "ca.pem")
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	require.NoError(t, os.WriteFile(path, pemBytes, 0o600))
+
 	return path
 }

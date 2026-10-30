@@ -70,6 +70,7 @@ func skipIfStub(t *testing.T, err error) {
 func newTestGateway(t *testing.T, srv *httptest.Server) (*Gateway, *reqCapture) {
 	t.Helper()
 	rec := &reqCapture{}
+
 	return NewGateway(Config{
 		Endpoint:     srv.URL,
 		TokenSource:  token.NewStaticTokenSource("user@pam!tokenid=secret"),
@@ -83,9 +84,10 @@ func newTestGateway(t *testing.T, srv *httptest.Server) (*Gateway, *reqCapture) 
 // newTestGatewayWithUA builds a Gateway pointing at the given httptest server
 // with the given User-Agent value in its Config, plus a static PVE token and
 // fast retry settings.
-func newTestGatewayWithUA(t *testing.T, srv *httptest.Server, ua string) (*Gateway, *reqCapture) {
+func newTestGatewayWithUA(t *testing.T, srv *httptest.Server, userAgent string) (*Gateway, *reqCapture) {
 	t.Helper()
 	rec := &reqCapture{}
+
 	return NewGateway(Config{
 		Endpoint:     srv.URL,
 		TokenSource:  token.NewStaticTokenSource("user@pam!tokenid=secret"),
@@ -93,7 +95,7 @@ func newTestGatewayWithUA(t *testing.T, srv *httptest.Server, ua string) (*Gatew
 		Logger:       noopLogger{},
 		Retries:      1,
 		RetryBackoff: time.Millisecond,
-		UserAgent:    ua,
+		UserAgent:    userAgent,
 	}), rec
 }
 
@@ -122,6 +124,7 @@ func newTraceGatewayLogger(t *testing.T, level logrus.Level) (*logrusAppLogger, 
 	l.SetOutput(&buf)
 	l.SetFormatter(&logrus.TextFormatter{DisableColors: true})
 	l.SetLevel(level)
+
 	return &logrusAppLogger{Logger: l}, &buf
 }
 
@@ -129,6 +132,7 @@ func newTraceGatewayLogger(t *testing.T, level logrus.Level) (*logrusAppLogger, 
 // server with a custom logger, a static PVE token and fast retry settings.
 func newTestGatewayWithLogger(t *testing.T, srv *httptest.Server, logger port.AppLogger) *Gateway {
 	t.Helper()
+
 	return NewGateway(Config{
 		Endpoint:     srv.URL,
 		TokenSource:  token.NewStaticTokenSource("user@pam!tokenid=secret"),
@@ -225,6 +229,7 @@ func mockServer(t *testing.T, status int, body string, rec *reqCapture) *httptes
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
+
 	return srv
 }
 
@@ -274,12 +279,15 @@ func TestGateway_GetVMConfig_Success(t *testing.T) {
 
 // TestGateway_GetVMConfig_StringNumericFields verifies GetVMConfig decodes
 // numeric config fields that Proxmox VE emits as JSON strings (the conformance
-// bug that previously produced
+// issue that previously produced
 // "json: cannot unmarshal string into Go struct field VMConfig.memory of type
 // int"). This mirrors the real failure path.
 func TestGateway_GetVMConfig_StringNumericFields(t *testing.T) {
 	rec := &reqCapture{}
-	srv := mockServer(t, 200, `{"data":{"vmid":100,"name":"web","memory":"8192","cores":"2","sockets":"1","balloon":"512","template":"0","onboot":"1","ostype":"l26"}}`, rec)
+	srv := mockServer(t, 200,
+		`{"data":{"vmid":100,"name":"web","memory":"8192","cores":"2","sockets":"1",`+
+			`"balloon":"512","template":"0","onboot":"1","ostype":"l26"}}`,
+		rec)
 	g, _ := newTestGateway(t, srv)
 
 	cfg, err := g.GetVMConfig(context.Background(), "pve1", 100)
@@ -310,16 +318,16 @@ func TestGateway_HTTPErrorMapping(t *testing.T) {
 		{"404", http.StatusNotFound, port.ErrNotFound},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			rec := &reqCapture{}
-			srv := mockServer(t, tc.status, `{"data":null}`, rec)
+			srv := mockServer(t, testCase.status, `{"data":null}`, rec)
 			g, _ := newTestGateway(t, srv)
 
 			_, err := g.ListNodes(context.Background())
 			skipIfStub(t, err)
 			require.Error(t, err)
-			assert.ErrorIs(t, err, tc.want)
+			assert.ErrorIs(t, err, testCase.want)
 		})
 	}
 }

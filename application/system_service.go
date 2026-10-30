@@ -28,12 +28,12 @@ func (s *SystemService) EnabledBackends() map[string]bool {
 // Ping is the liveness check. It is a pure liveness probe: it returns the
 // enabled backends without touching the network (the actual API reachability is
 // exercised by the backend tools themselves).
-func (s *SystemService) Ping(ctx context.Context) map[string]bool {
+func (s *SystemService) Ping(_ context.Context) map[string]bool {
 	return s.EnabledBackends()
 }
 
 // Status returns the server status: version, transport, and enabled backends.
-func (s *SystemService) Status(ctx context.Context) model.ServerStatus {
+func (s *SystemService) Status(_ context.Context) model.ServerStatus {
 	return model.ServerStatus{
 		Version:   s.Version,
 		Transport: "stdio",

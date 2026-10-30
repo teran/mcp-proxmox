@@ -41,6 +41,7 @@ func New(log port.AppLogger, version string, opts ...Option) *App {
 	// have been applied.
 	a.System.pve = a.PVE
 	a.System.pbs = a.PBS
+
 	return a
 }
 

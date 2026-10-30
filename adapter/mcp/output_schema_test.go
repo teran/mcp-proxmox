@@ -146,7 +146,7 @@ func TestWrapAndValidate(t *testing.T) {
 // a concrete output type advertises a derived outputSchema and that a conforming
 // call passes (a/b/d).
 func TestToolExposesOutputSchema(t *testing.T) {
-	ro := func(ctx context.Context, _ emptyIn) (outStruct, error) {
+	ro := func(_ context.Context, _ emptyIn) (outStruct, error) {
 		return outStruct{Name: "web"}, nil
 	}
 

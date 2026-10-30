@@ -23,6 +23,7 @@ func toolsByName(t *testing.T, sess *mcpSDK.ClientSession) map[string]*mcpSDK.To
 	for _, tl := range res.Tools {
 		out[tl.Name] = tl
 	}
+
 	return out
 }
 
@@ -77,12 +78,12 @@ func TestMutationToolSuccess(t *testing.T) {
 		{"pbs_sync_start", map[string]any{"store": "backup", "remote": "r", "remote_store": "s"}, true},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := callTool(t, sess, tc.name, tc.args)
-			assert.False(t, res.IsError, "tool %s should succeed", tc.name)
-			if tc.wantOutput {
-				assert.NotNil(t, res.StructuredContent, "tool %s should return structured output", tc.name)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			res := callTool(t, sess, testCase.name, testCase.args)
+			assert.False(t, res.IsError, "tool %s should succeed", testCase.name)
+			if testCase.wantOutput {
+				assert.NotNil(t, res.StructuredContent, "tool %s should return structured output", testCase.name)
 			}
 		})
 	}
@@ -116,9 +117,9 @@ func TestMutationToolSuccessOutputValues(t *testing.T) {
 // TestMutationToolErrorPropagation verifies IsError on gateway failure for every
 // mutation tool (gate ON).
 func TestMutationToolErrorPropagation(t *testing.T) {
-	gw := &stubPVEGateway{err: port.ErrNotFound}
+	gateway := &stubPVEGateway{err: port.ErrNotFound}
 	gb := &stubPBSGateway{err: port.ErrNotFound}
-	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(gw), application.WithPBS(gb))
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(gateway), application.WithPBS(gb))
 	_, sess := newTestServer(t, app, true)
 
 	cases := []struct {
@@ -138,10 +139,10 @@ func TestMutationToolErrorPropagation(t *testing.T) {
 		{"pbs_sync_start", map[string]any{"store": "backup", "remote": "r"}},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := callTool(t, sess, tc.name, tc.args)
-			assert.True(t, res.IsError, "tool %s should be flagged IsError on gateway failure", tc.name)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			res := callTool(t, sess, testCase.name, testCase.args)
+			assert.True(t, res.IsError, "tool %s should be flagged IsError on gateway failure", testCase.name)
 		})
 	}
 }
@@ -165,9 +166,16 @@ func TestMutationToolAnnotations(t *testing.T) {
 	// destructive (S12). Truly destructive mutations — deletes, restores,
 	// rollbacks, and pbs_gc_start / pbs_prune_start — are asserted destructive
 	// in mutation_destructive_test.go and are deliberately excluded here.
-	nonDestructive := []string{"pve_vm_resize", "pve_vm_migrate", "pve_ha_add", "pve_vm_set", "pve_lxc_set", "pve_vm_create", "pve_vm_backup", "pbs_verify_start", "pbs_sync_start"}
+	nonDestructive := []string{
+		"pve_vm_resize", "pve_vm_migrate", "pve_ha_add", "pve_vm_set",
+		"pve_lxc_set", "pve_vm_create", "pve_vm_backup", "pbs_verify_start",
+		"pbs_sync_start",
+	}
 	idempotent := []string{"pve_vm_resize", "pve_vm_migrate", "pve_ha_add", "pve_vm_set", "pve_lxc_set"}
-	nonIdempotent := []string{"pve_vm_create", "pve_vm_backup", "pbs_verify_start", "pbs_gc_start", "pbs_prune_start", "pbs_sync_start"}
+	nonIdempotent := []string{
+		"pve_vm_create", "pve_vm_backup", "pbs_verify_start",
+		"pbs_gc_start", "pbs_prune_start", "pbs_sync_start",
+	}
 
 	for _, name := range nonDestructive {
 		tl, ok := tools[name]

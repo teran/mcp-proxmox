@@ -32,9 +32,11 @@ func (h *LogrusHandler) Handle(_ context.Context, rec slog.Record) error {
 	entry := h.log.WithFields(attrsToFields(h.attrs))
 	rec.Attrs(func(a slog.Attr) bool {
 		entry = entry.WithField(a.Key, a.Value.Any())
+
 		return true
 	})
 	entry.Log(slogToLogrus(rec.Level), rec.Message)
+
 	return nil
 }
 
@@ -43,6 +45,7 @@ func (h *LogrusHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	merged := make([]slog.Attr, 0, len(h.attrs)+len(attrs))
 	merged = append(merged, h.attrs...)
 	merged = append(merged, attrs...)
+
 	return &LogrusHandler{log: h.log, level: h.level, attrs: merged}
 }
 
@@ -55,6 +58,7 @@ func (h *LogrusHandler) WithGroup(name string) slog.Handler {
 	for _, a := range h.attrs {
 		prefixed = append(prefixed, slog.Attr{Key: name + "." + a.Key, Value: a.Value})
 	}
+
 	return &LogrusHandler{log: h.log, level: h.level, attrs: prefixed}
 }
 
@@ -86,5 +90,6 @@ func attrsToFields(attrs []slog.Attr) logrus.Fields {
 	for _, a := range attrs {
 		f[a.Key] = a.Value.Any()
 	}
+
 	return f
 }

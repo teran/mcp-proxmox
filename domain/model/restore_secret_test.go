@@ -11,7 +11,7 @@ import (
 // that honors the tag never logs their values. Non-secret fields must NOT carry
 // the tag.
 func TestPBSVMRestoreRequestSecretTags(t *testing.T) {
-	typ := reflect.TypeOf(PBSVMRestoreRequest{})
+	typ := reflect.TypeFor[PBSVMRestoreRequest]()
 
 	for _, field := range []string{"Password", "Fingerprint"} {
 		sf, ok := typ.FieldByName(field)

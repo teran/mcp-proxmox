@@ -18,6 +18,7 @@ func callTool(t *testing.T, sess *mcpSDK.ClientSession, name string, args map[st
 	t.Helper()
 	res, err := sess.CallTool(context.Background(), &mcpSDK.CallToolParams{Name: name, Arguments: args})
 	require.NoError(t, err, "call %s", name)
+
 	return res
 }
 
@@ -116,11 +117,11 @@ func TestPVEToolSuccess(t *testing.T) {
 		{"pve_version", nil},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := callTool(t, sess, tc.name, tc.args)
-			assert.False(t, res.IsError, "tool %s should succeed", tc.name)
-			assert.NotNil(t, res.StructuredContent, "tool %s should return structured output", tc.name)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			res := callTool(t, sess, testCase.name, testCase.args)
+			assert.False(t, res.IsError, "tool %s should succeed", testCase.name)
+			assert.NotNil(t, res.StructuredContent, "tool %s should return structured output", testCase.name)
 		})
 	}
 }
@@ -144,11 +145,11 @@ func TestPBSToolSuccess(t *testing.T) {
 		{"pbs_version", nil},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := callTool(t, sess, tc.name, tc.args)
-			assert.False(t, res.IsError, "tool %s should succeed", tc.name)
-			assert.NotNil(t, res.StructuredContent, "tool %s should return structured output", tc.name)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			res := callTool(t, sess, testCase.name, testCase.args)
+			assert.False(t, res.IsError, "tool %s should succeed", testCase.name)
+			assert.NotNil(t, res.StructuredContent, "tool %s should return structured output", testCase.name)
 		})
 	}
 }
@@ -156,8 +157,8 @@ func TestPBSToolSuccess(t *testing.T) {
 // TestPVEToolErrorPropagation verifies that when the gateway returns an error,
 // the MCP tool result is flagged IsError (SPEC.md §8.1 / helpers.go).
 func TestPVEToolErrorPropagation(t *testing.T) {
-	gw := &stubPVEGateway{err: port.ErrNotFound}
-	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(gw))
+	gateway := &stubPVEGateway{err: port.ErrNotFound}
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(gateway))
 	_, sess := newTestServer(t, app, false)
 
 	cases := []struct {
@@ -185,18 +186,18 @@ func TestPVEToolErrorPropagation(t *testing.T) {
 		{"pve_version", nil},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := callTool(t, sess, tc.name, tc.args)
-			assert.True(t, res.IsError, "tool %s should be flagged IsError on gateway failure", tc.name)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			res := callTool(t, sess, testCase.name, testCase.args)
+			assert.True(t, res.IsError, "tool %s should be flagged IsError on gateway failure", testCase.name)
 		})
 	}
 }
 
 // TestPBSToolErrorPropagation verifies IsError on PBS gateway failure.
 func TestPBSToolErrorPropagation(t *testing.T) {
-	gw := &stubPBSGateway{err: port.ErrNotFound}
-	app := application.New(nopLogger{}, "v1.0.0", application.WithPBS(gw))
+	gateway := &stubPBSGateway{err: port.ErrNotFound}
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPBS(gateway))
 	_, sess := newTestServer(t, app, false)
 
 	cases := []struct {
@@ -213,10 +214,10 @@ func TestPBSToolErrorPropagation(t *testing.T) {
 		{"pbs_version", nil},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := callTool(t, sess, tc.name, tc.args)
-			assert.True(t, res.IsError, "tool %s should be flagged IsError on gateway failure", tc.name)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			res := callTool(t, sess, testCase.name, testCase.args)
+			assert.True(t, res.IsError, "tool %s should be flagged IsError on gateway failure", testCase.name)
 		})
 	}
 }

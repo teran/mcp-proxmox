@@ -29,6 +29,13 @@ const apiPrefix = "/api2/json"
 // defaultTimeout is applied when cfg.HTTPClient is nil.
 const defaultTimeout = 30 * time.Second
 
+// defaultBackoff is the linear retry delay used when cfg.RetryBackoff is zero.
+const defaultBackoff = 200 * time.Millisecond
+
+// statusServerError is the first HTTP status that indicates an upstream server
+// error (5xx), which the gateway retries.
+const statusServerError = 500
+
 // Config is the configuration of the Proxmox VE HTTP client. See SPEC.md §4.5.
 type Config struct {
 	Endpoint     string           // e.g. https://pve.example.com:8006
@@ -56,6 +63,7 @@ type Gateway struct {
 func NewGateway(cfg Config) *Gateway {
 	g := &Gateway{cfg: cfg, logger: port.NewCtxLogger(cfg.Logger)}
 	g.client, g.tlsErr = buildClient(cfg)
+
 	return g
 }
 
@@ -67,22 +75,25 @@ func NewGateway(cfg Config) *Gateway {
 // TLS RootCAs are replaced by a pool that includes the custom CA (TLS
 // verification stays on).
 func buildClient(cfg Config) (*resty.Client, error) {
-	rc := resty.New()
+	client := resty.New()
 	if cfg.UserAgent != "" {
-		rc.SetHeader("User-Agent", cfg.UserAgent)
+		client.SetHeader("User-Agent", cfg.UserAgent)
 	}
 	timeout := defaultTimeout
-	tr := http.DefaultTransport.(*http.Transport).Clone()
+	transport := &http.Transport{}
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport = t.Clone()
+	}
 	if cfg.HTTPClient != nil {
 		if cfg.HTTPClient.Timeout != 0 {
 			timeout = cfg.HTTPClient.Timeout
 		}
 		if t, ok := cfg.HTTPClient.Transport.(*http.Transport); ok && t != nil {
-			tr = t.Clone()
+			transport = t.Clone()
 		}
 	}
-	rc.SetTimeout(timeout)
-	rc.SetTransport(tr)
+	client.SetTimeout(timeout)
+	client.SetTransport(transport)
 
 	if cfg.CACertPath != "" {
 		pool, err := systemOrNewCertPool()
@@ -99,27 +110,29 @@ func buildClient(cfg Config) (*resty.Client, error) {
 			return nil, fmt.Errorf("pve: no valid CA certificates found in %q", cfg.CACertPath)
 		}
 
-		tlsConf := tr.TLSClientConfig
+		tlsConf := transport.TLSClientConfig
 		if tlsConf == nil {
 			tlsConf = &tls.Config{MinVersion: tls.VersionTLS12}
 		}
 		tlsConf = tlsConf.Clone()
 		tlsConf.RootCAs = pool
 		tlsConf.MinVersion = tls.VersionTLS12
-		tr.TLSClientConfig = tlsConf
-		rc.SetTransport(tr)
+		transport.TLSClientConfig = tlsConf
+		client.SetTransport(transport)
 	}
-	return rc, nil
+
+	return client, nil
 }
 
 // systemOrNewCertPool returns the system cert pool, or a fresh empty pool when
 // the system pool is unavailable.
 func systemOrNewCertPool() (*x509.CertPool, error) {
 	pool, err := x509.SystemCertPool()
-	if err != nil || pool == nil {
-		return x509.NewCertPool(), nil
+	if err == nil && pool != nil {
+		return pool, nil
 	}
-	return pool, nil
+
+	return x509.NewCertPool(), nil
 }
 
 // do executes a PVE request, decoding the JSON envelope into out. Query filters
@@ -134,16 +147,17 @@ func (g *Gateway) do(ctx context.Context, method, path string, query url.Values,
 	}
 	backoff := g.cfg.RetryBackoff
 	if backoff <= 0 {
-		backoff = 200 * time.Millisecond
+		backoff = defaultBackoff
 	}
 
 	var lastErr error
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		if i > 0 {
 			timer := time.NewTimer(backoff * time.Duration(i))
 			select {
 			case <-ctx.Done():
 				timer.Stop()
+
 				return ctx.Err()
 			case <-timer.C:
 			}
@@ -152,12 +166,13 @@ func (g *Gateway) do(ctx context.Context, method, path string, query url.Values,
 		if lastErr == nil {
 			return nil
 		}
-		var upErr *UpstreamError
-		if !errors.As(lastErr, &upErr) {
+		if _, isUpstream := errors.AsType[*UpstreamError](lastErr); !isUpstream {
 			// Sentinel / API / empty-data errors are not retried.
+
 			return lastErr
 		}
 	}
+
 	return lastErr
 }
 
@@ -191,12 +206,12 @@ func (g *Gateway) doOnceReq(ctx context.Context, method, path string, query, for
 	// sent (SPEC.md §7.4) and is reported in the ErrUnauthorized family.
 	header, err := g.cfg.TokenSource.AuthorizationHeader(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: pve: token source: %v", port.ErrUnauthorized, err)
+		return fmt.Errorf("%w: pve: token source: %w", port.ErrUnauthorized, err)
 	}
 
-	u := strings.TrimRight(g.cfg.Endpoint, "/") + apiPrefix + path
+	requestURL := strings.TrimRight(g.cfg.Endpoint, "/") + apiPrefix + path
 	if len(query) > 0 {
-		u += "?" + query.Encode()
+		requestURL += "?" + query.Encode()
 	}
 
 	req := g.client.R().SetContext(ctx).
@@ -212,7 +227,7 @@ func (g *Gateway) doOnceReq(ctx context.Context, method, path string, query, for
 		req.SetFormDataFromValues(form)
 	}
 
-	resp, err := req.Execute(method, u)
+	resp, err := req.Execute(method, requestURL)
 	if err != nil {
 		return &UpstreamError{Op: "transport", Err: err}
 	}
@@ -234,8 +249,10 @@ func (g *Gateway) doOnceReq(ctx context.Context, method, path string, query, for
 		// is never written to the journal — it could carry secret-adjacent data,
 		// and the requirement is to log no response bodies (SPEC.md §5.4).
 		g.logger.Tracef(ctx, "pve error response %d", resp.StatusCode())
+
 		return g.mapHTTPError(resp.StatusCode(), body)
 	}
+
 	return g.decode(body, out)
 }
 
@@ -262,14 +279,17 @@ func (g *Gateway) decode(body []byte, out any) error {
 		if !isSlicePtr(out) {
 			// A single-entity getter received no data: surface an explicit
 			// not-found style error rather than a silently-zero struct.
+
 			return &EmptyDataError{Op: "data"}
 		}
 		// Empty data for a list is simply an empty list.
+
 		return nil
 	}
 	if err := json.Unmarshal(env.Data, out); err != nil {
 		return &UpstreamError{Op: "decode", Err: err}
 	}
+
 	return nil
 }
 
@@ -284,11 +304,12 @@ func (g *Gateway) mapHTTPError(status int, body []byte) error {
 	case http.StatusNotFound:
 		return &port.HTTPStatusError{Status: status, Err: port.ErrNotFound}
 	}
-	if status >= 500 {
+	if status >= statusServerError {
 		return &UpstreamError{Op: "http", Status: status, Err: fmt.Errorf("pve: HTTP status %d", status)}
 	}
 	// Other 4xx: surface the Proxmox error envelope as an APIError.
 	msgs := extractErrorMessages(body)
+
 	return &APIError{Messages: msgs}
 }
 
@@ -302,6 +323,7 @@ func extractErrorMessages(body []byte) []string {
 	if err := json.Unmarshal(body, &env); err != nil {
 		return nil
 	}
+
 	return errorMessages(env.Errors, env.Message)
 }
 
@@ -314,6 +336,7 @@ func errorMessages(errorsMap map[string]string, message string) []string {
 	if message != "" {
 		msgs = append(msgs, message)
 	}
+
 	return msgs
 }
 
@@ -323,6 +346,7 @@ func isSlicePtr(v any) bool {
 		return false
 	}
 	rv := reflect.ValueOf(v)
+
 	return rv.Kind() == reflect.Pointer && rv.Elem().Kind() == reflect.Slice
 }
 
@@ -332,6 +356,7 @@ func (g *Gateway) ListNodes(ctx context.Context) ([]model.Node, error) {
 	if err := g.do(ctx, http.MethodGet, "/nodes", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -341,6 +366,7 @@ func (g *Gateway) GetNodeStatus(ctx context.Context, node string) (*model.NodeSt
 	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/status", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
@@ -350,6 +376,7 @@ func (g *Gateway) GetClusterStatus(ctx context.Context) ([]model.ClusterStatus, 
 	if err := g.do(ctx, http.MethodGet, "/cluster/status", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -359,6 +386,7 @@ func (g *Gateway) GetClusterResources(ctx context.Context) ([]model.ClusterResou
 	if err := g.do(ctx, http.MethodGet, "/cluster/resources", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -369,6 +397,7 @@ func (g *Gateway) ListBackupJobs(ctx context.Context) ([]model.BackupJob, error)
 	if err := g.do(ctx, http.MethodGet, "/cluster/backup", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -381,6 +410,7 @@ func (g *Gateway) CreateBackupJob(ctx context.Context, req model.CreateBackupJob
 	if err := g.doMutation(ctx, http.MethodPost, "/cluster/backup", backupJobForm(req), &id); err != nil {
 		return "", err
 	}
+
 	return id, nil
 }
 
@@ -392,6 +422,7 @@ func (g *Gateway) UpdateBackupJob(ctx context.Context, id string, req model.Crea
 	if err := g.doMutation(ctx, http.MethodPut, "/cluster/backup/"+url.PathEscape(id), backupJobForm(req), &out); err != nil {
 		return "", err
 	}
+
 	return out, nil
 }
 
@@ -441,6 +472,7 @@ func backupJobForm(req model.CreateBackupJobRequest) url.Values {
 	if req.Node != "" {
 		form.Set("node", req.Node)
 	}
+
 	return form
 }
 
@@ -450,60 +482,67 @@ func (g *Gateway) GetNextID(ctx context.Context) (string, error) {
 	if err := g.do(ctx, http.MethodGet, "/cluster/nextid", nil, &out); err != nil {
 		return "", err
 	}
+
 	return out, nil
 }
 
 // ListVMs returns the QEMU VMs on a node.
 func (g *Gateway) ListVMs(ctx context.Context, node string) ([]model.VM, error) {
 	var out []model.VM
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/qemu", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, nodePath(node)+"/qemu", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
 // GetVMConfig returns the config of a VM.
 func (g *Gateway) GetVMConfig(ctx context.Context, node string, vmid int) (*model.VMConfig, error) {
 	var out model.VMConfig
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/qemu/"+strconv.Itoa(vmid)+"/config", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, vmPath(node, vmid)+"/config", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
 // GetVMStatus returns the status of a VM.
 func (g *Gateway) GetVMStatus(ctx context.Context, node string, vmid int) (*model.VMStatus, error) {
 	var out model.VMStatus
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/qemu/"+strconv.Itoa(vmid)+"/status/current", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, vmPath(node, vmid)+"/status/current", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
 // ListLXCs returns the LXC containers on a node.
 func (g *Gateway) ListLXCs(ctx context.Context, node string) ([]model.LXC, error) {
 	var out []model.LXC
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/lxc", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, nodePath(node)+"/lxc", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
 // GetLXCConfig returns the config of a container.
 func (g *Gateway) GetLXCConfig(ctx context.Context, node string, vmid int) (*model.LXCConfig, error) {
 	var out model.LXCConfig
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/lxc/"+strconv.Itoa(vmid)+"/config", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, lxcPath(node, vmid)+"/config", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
 // GetLXCStatus returns the status of a container.
 func (g *Gateway) GetLXCStatus(ctx context.Context, node string, vmid int) (*model.LXCStatus, error) {
 	var out model.LXCStatus
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/lxc/"+strconv.Itoa(vmid)+"/status/current", nil, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, lxcPath(node, vmid)+"/status/current", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
@@ -513,15 +552,18 @@ func (g *Gateway) ListStorage(ctx context.Context) ([]model.Storage, error) {
 	if err := g.do(ctx, http.MethodGet, "/storage", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
 // GetStorageStatus returns the status of a storage on a node.
 func (g *Gateway) GetStorageStatus(ctx context.Context, node, storage string) (*model.StorageStatus, error) {
 	var out model.StorageStatus
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/storage/"+url.PathEscape(storage)+"/status", nil, &out); err != nil {
+	path := nodePath(node) + "/storage/" + url.PathEscape(storage) + "/status"
+	if err := g.do(ctx, http.MethodGet, path, nil, &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
@@ -531,59 +573,69 @@ func (g *Gateway) ListNetwork(ctx context.Context, node string) ([]model.Network
 	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/network", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
 // ListTasks returns the tasks on a node, filtered by opts.
 func (g *Gateway) ListTasks(ctx context.Context, node string, opts port.TaskListOptions) ([]model.Task, error) {
 	var out []model.Task
-	var q url.Values
-	if opts.VMD != 0 || opts.TypeFilter != "" || opts.Since != 0 || opts.Until != 0 || opts.Source != "" || opts.Limit != 0 {
-		q = url.Values{}
-		if opts.VMD != 0 {
-			q.Set("vmid", strconv.Itoa(opts.VMD))
-		}
-		if opts.TypeFilter != "" {
-			q.Set("typefilter", opts.TypeFilter)
-		}
-		if opts.Since != 0 {
-			q.Set("since", strconv.FormatInt(opts.Since, 10))
-		}
-		if opts.Until != 0 {
-			q.Set("until", strconv.FormatInt(opts.Until, 10))
-		}
-		if opts.Source != "" {
-			q.Set("source", opts.Source)
-		}
-		if opts.Limit != 0 {
-			q.Set("limit", strconv.Itoa(opts.Limit))
-		}
-	}
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/tasks", q, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, nodePath(node)+"/tasks", buildTaskListQuery(opts), &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
+}
+
+// buildTaskListQuery maps the task-list filters into a URL query string. It
+// returns an empty (non-nil) url.Values when no filter is set, which the gateway
+// renders as no query string at all.
+func buildTaskListQuery(opts port.TaskListOptions) url.Values {
+	query := url.Values{}
+	if opts.VMD != 0 {
+		query.Set("vmid", strconv.Itoa(opts.VMD))
+	}
+	if opts.TypeFilter != "" {
+		query.Set("typefilter", opts.TypeFilter)
+	}
+	if opts.Since != 0 {
+		query.Set("since", strconv.FormatInt(opts.Since, 10))
+	}
+	if opts.Until != 0 {
+		query.Set("until", strconv.FormatInt(opts.Until, 10))
+	}
+	if opts.Source != "" {
+		query.Set("source", opts.Source)
+	}
+	if opts.Limit != 0 {
+		query.Set("limit", strconv.Itoa(opts.Limit))
+	}
+
+	return query
 }
 
 // GetTaskStatus returns the status of a task by UPID.
 func (g *Gateway) GetTaskStatus(ctx context.Context, node, upid string) (*model.TaskStatus, error) {
 	var out model.TaskStatus
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/tasks/"+url.PathEscape(upid)+"/status", nil, &out); err != nil {
+	path := nodePath(node) + "/tasks/" + url.PathEscape(upid) + "/status"
+	if err := g.do(ctx, http.MethodGet, path, nil, &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
 // GetTaskLog returns the log of a task by UPID.
 func (g *Gateway) GetTaskLog(ctx context.Context, node, upid string, limit int) ([]model.TaskLogEntry, error) {
 	var out []model.TaskLogEntry
-	var q url.Values
+	path := nodePath(node) + "/tasks/" + url.PathEscape(upid) + "/log"
 	if limit > 0 {
-		q = url.Values{"limit": []string{strconv.Itoa(limit)}}
+		path += "?limit=" + strconv.Itoa(limit)
 	}
-	if err := g.do(ctx, http.MethodGet, "/nodes/"+url.PathEscape(node)+"/tasks/"+url.PathEscape(upid)+"/log", q, &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, path, nil, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -593,6 +645,7 @@ func (g *Gateway) GetPVEVersion(ctx context.Context) (*model.PVEVersion, error) 
 	if err := g.do(ctx, http.MethodGet, "/version", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
@@ -607,6 +660,18 @@ func (g *Gateway) doMutation(ctx context.Context, method, path string, form url.
 // is the new VMID; an empty/absent VMID is treated as success without a
 // number, so a zero return is possible only when the API returns no data.
 func (g *Gateway) CreateVM(ctx context.Context, node string, req model.CreateVMRequest) (int, error) {
+	form := buildCreateVMForm(req)
+	var vmid int
+	if err := g.doMutation(ctx, http.MethodPost, nodePath(node)+"/qemu", form, &vmid); err != nil {
+		return 0, err
+	}
+
+	return vmid, nil
+}
+
+// buildCreateVMForm maps a CreateVMRequest into the form-encoded mutation body,
+// omitting fields that were left at their zero value so the PVE defaults apply.
+func buildCreateVMForm(req model.CreateVMRequest) url.Values {
 	form := url.Values{}
 	if req.VMID != 0 {
 		form.Set("vmid", strconv.Itoa(req.VMID))
@@ -663,11 +728,7 @@ func (g *Gateway) CreateVM(ctx context.Context, node string, req model.CreateVMR
 		form.Set("vga", req.VGA)
 	}
 
-	var vmid int
-	if err := g.doMutation(ctx, http.MethodPost, "/nodes/"+url.PathEscape(node)+"/qemu", form, &vmid); err != nil {
-		return 0, err
-	}
-	return vmid, nil
+	return form
 }
 
 // ResizeVM resizes a VM disk via PUT /nodes/{node}/qemu/{vmid}/resize. The
@@ -676,6 +737,7 @@ func (g *Gateway) ResizeVM(ctx context.Context, node string, vmid int, req model
 	form := url.Values{}
 	form.Set("disk", req.Disk)
 	form.Set("size", fmt.Sprintf("%+dG", req.SizeGB))
+
 	return g.doMutation(ctx, http.MethodPut, "/nodes/"+url.PathEscape(node)+"/qemu/"+strconv.Itoa(vmid)+"/resize", form, nil)
 }
 
@@ -690,6 +752,7 @@ func (g *Gateway) MigrateVM(ctx context.Context, node string, vmid int, req mode
 	if req.WithLocalDisks {
 		form.Set("with-local-disks", "1")
 	}
+
 	return g.doMutation(ctx, http.MethodPost, "/nodes/"+url.PathEscape(node)+"/qemu/"+strconv.Itoa(vmid)+"/migrate", form, nil)
 }
 
@@ -704,6 +767,7 @@ func (g *Gateway) AddHAResource(ctx context.Context, req model.HAResourceRequest
 	if req.Comment != "" {
 		form.Set("comment", req.Comment)
 	}
+
 	return g.doMutation(ctx, http.MethodPost, "/cluster/ha/resources", form, nil)
 }
 
@@ -726,7 +790,14 @@ func (g *Gateway) StartVMBackup(ctx context.Context, node string, req model.VMBa
 	if err := g.doMutation(ctx, http.MethodPost, "/nodes/"+url.PathEscape(node)+"/vzdump", form, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
+}
+
+// nodePath builds the PVE node path prefix, escaping the node name so a value
+// containing reserved path characters cannot inject extra segments.
+func nodePath(node string) string {
+	return "/nodes/" + url.PathEscape(node)
 }
 
 // vmPath builds the QEMU VM path prefix for a node + vmid. node is path-escaped
@@ -741,6 +812,7 @@ func (g *Gateway) StartVM(ctx context.Context, node string, vmid int) (*model.Ta
 	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/start", nil, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -755,6 +827,7 @@ func (g *Gateway) StopVM(ctx context.Context, node string, vmid int, skiplock bo
 	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/stop", form, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -774,6 +847,7 @@ func (g *Gateway) ShutdownVM(ctx context.Context, node string, vmid int, forceSt
 	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/shutdown", form, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -789,6 +863,7 @@ func (g *Gateway) RebootVM(ctx context.Context, node string, vmid int, timeout i
 	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/reboot", form, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -799,6 +874,7 @@ func (g *Gateway) ResetVM(ctx context.Context, node string, vmid int) (*model.Ta
 	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/reset", nil, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -814,6 +890,7 @@ func (g *Gateway) SuspendVM(ctx context.Context, node string, vmid int, todisk b
 	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/suspend", form, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -824,6 +901,7 @@ func (g *Gateway) ResumeVM(ctx context.Context, node string, vmid int) (*model.T
 	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/status/resume", nil, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -831,20 +909,23 @@ func (g *Gateway) ResumeVM(ctx context.Context, node string, vmid int) (*model.T
 // parameters are carried in the query string (DELETE has no form body). purge
 // removes the VM from any backup jobs and destroy-unreferenced-disks removes
 // disks not referenced by the config.
-func (g *Gateway) DeleteVM(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks bool) (*model.Task, error) {
-	q := url.Values{}
+func (g *Gateway) DeleteVM(
+	ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks bool,
+) (*model.Task, error) {
+	query := url.Values{}
 	if purge {
-		q.Set("purge", "1")
+		query.Set("purge", "1")
 	}
 	if destroyUnreferencedDisks {
-		q.Set("destroy-unreferenced-disks", "1")
+		query.Set("destroy-unreferenced-disks", "1")
 	}
 	var upid string
 	// Mutations are never retried: use the single-attempt doOnce path with the
 	// query string (doMutation sends a form body, which DELETE does not use).
-	if err := g.doOnce(ctx, http.MethodDelete, vmPath(node, vmid), q, &upid); err != nil {
+	if err := g.doOnce(ctx, http.MethodDelete, vmPath(node, vmid), query, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -855,6 +936,7 @@ func (g *Gateway) ListVMSnapshots(ctx context.Context, node string, vmid int) ([
 	if err := g.do(ctx, http.MethodGet, vmPath(node, vmid)+"/snapshot", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -887,12 +969,15 @@ func (g *Gateway) CloneVM(ctx context.Context, node string, vmid int, req model.
 	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/clone", form, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
 // CreateVMSnapshot creates a snapshot of a QEMU VM via
 // POST /nodes/{node}/qemu/{vmid}/snapshot.
-func (g *Gateway) CreateVMSnapshot(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error) {
+func (g *Gateway) CreateVMSnapshot(
+	ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest,
+) (*model.Task, error) {
 	form := url.Values{}
 	form.Set("snapname", req.Snapname)
 	if req.VMState {
@@ -905,6 +990,7 @@ func (g *Gateway) CreateVMSnapshot(ctx context.Context, node string, vmid int, r
 	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/snapshot", form, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -912,9 +998,11 @@ func (g *Gateway) CreateVMSnapshot(ctx context.Context, node string, vmid int, r
 // DELETE /nodes/{node}/qemu/{vmid}/snapshot/{snapname}.
 func (g *Gateway) DeleteVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
 	var upid string
-	if err := g.doMutation(ctx, http.MethodDelete, vmPath(node, vmid)+"/snapshot/"+url.PathEscape(snapname), nil, &upid); err != nil {
+	path := vmPath(node, vmid) + "/snapshot/" + url.PathEscape(snapname)
+	if err := g.doMutation(ctx, http.MethodDelete, path, nil, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -922,9 +1010,11 @@ func (g *Gateway) DeleteVMSnapshot(ctx context.Context, node string, vmid int, s
 // POST /nodes/{node}/qemu/{vmid}/snapshot/{snapname}/rollback.
 func (g *Gateway) RollbackVMSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
 	var upid string
-	if err := g.doMutation(ctx, http.MethodPost, vmPath(node, vmid)+"/snapshot/"+url.PathEscape(snapname)+"/rollback", nil, &upid); err != nil {
+	path := vmPath(node, vmid) + "/snapshot/" + url.PathEscape(snapname) + "/rollback"
+	if err := g.doMutation(ctx, http.MethodPost, path, nil, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -942,6 +1032,7 @@ func (g *Gateway) StartLXC(ctx context.Context, node string, vmid int) (*model.T
 	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/status/start", nil, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -959,6 +1050,7 @@ func (g *Gateway) StopLXC(ctx context.Context, node string, vmid int, skiplock, 
 	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/status/stop", form, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -978,6 +1070,7 @@ func (g *Gateway) ShutdownLXC(ctx context.Context, node string, vmid int, forceS
 	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/status/shutdown", form, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -993,6 +1086,7 @@ func (g *Gateway) RebootLXC(ctx context.Context, node string, vmid int, timeout 
 	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/status/reboot", form, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -1001,23 +1095,26 @@ func (g *Gateway) RebootLXC(ctx context.Context, node string, vmid int, timeout 
 // body). purge removes the container from any backup jobs,
 // destroy-unreferenced-disks removes disks not referenced by the config, and
 // force requests deletion of a running container.
-func (g *Gateway) DeleteLXC(ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks, force bool) (*model.Task, error) {
-	q := url.Values{}
+func (g *Gateway) DeleteLXC(
+	ctx context.Context, node string, vmid int, purge, destroyUnreferencedDisks, force bool,
+) (*model.Task, error) {
+	query := url.Values{}
 	if purge {
-		q.Set("purge", "1")
+		query.Set("purge", "1")
 	}
 	if destroyUnreferencedDisks {
-		q.Set("destroy-unreferenced-disks", "1")
+		query.Set("destroy-unreferenced-disks", "1")
 	}
 	if force {
-		q.Set("force", "1")
+		query.Set("force", "1")
 	}
 	var upid string
 	// Mutations are never retried: use the single-attempt doOnce path with the
 	// query string (doMutation sends a form body, which DELETE does not use).
-	if err := g.doOnce(ctx, http.MethodDelete, lxcPath(node, vmid), q, &upid); err != nil {
+	if err := g.doOnce(ctx, http.MethodDelete, lxcPath(node, vmid), query, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -1028,6 +1125,7 @@ func (g *Gateway) ListLXCSnapshots(ctx context.Context, node string, vmid int) (
 	if err := g.do(ctx, http.MethodGet, lxcPath(node, vmid)+"/snapshot", nil, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -1057,13 +1155,16 @@ func (g *Gateway) CloneLXC(ctx context.Context, node string, vmid int, req model
 	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/clone", form, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
 // CreateLXCSnapshot creates a snapshot of an LXC container via
 // POST /nodes/{node}/lxc/{vmid}/snapshot. LXC snapshots do not capture a VM
 // state, so only snapname and description are sent.
-func (g *Gateway) CreateLXCSnapshot(ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest) (*model.Task, error) {
+func (g *Gateway) CreateLXCSnapshot(
+	ctx context.Context, node string, vmid int, req model.SnapshotCreateRequest,
+) (*model.Task, error) {
 	form := url.Values{}
 	form.Set("snapname", req.Snapname)
 	if req.Description != "" {
@@ -1073,6 +1174,7 @@ func (g *Gateway) CreateLXCSnapshot(ctx context.Context, node string, vmid int, 
 	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/snapshot", form, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -1080,9 +1182,11 @@ func (g *Gateway) CreateLXCSnapshot(ctx context.Context, node string, vmid int, 
 // DELETE /nodes/{node}/lxc/{vmid}/snapshot/{snapname}.
 func (g *Gateway) DeleteLXCSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
 	var upid string
-	if err := g.doMutation(ctx, http.MethodDelete, lxcPath(node, vmid)+"/snapshot/"+url.PathEscape(snapname), nil, &upid); err != nil {
+	path := lxcPath(node, vmid) + "/snapshot/" + url.PathEscape(snapname)
+	if err := g.doMutation(ctx, http.MethodDelete, path, nil, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -1092,9 +1196,11 @@ func (g *Gateway) DeleteLXCSnapshot(ctx context.Context, node string, vmid int, 
 // is left unset so PVE's default applies.
 func (g *Gateway) RollbackLXCSnapshot(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error) {
 	var upid string
-	if err := g.doMutation(ctx, http.MethodPost, lxcPath(node, vmid)+"/snapshot/"+url.PathEscape(snapname)+"/rollback", nil, &upid); err != nil {
+	path := lxcPath(node, vmid) + "/snapshot/" + url.PathEscape(snapname) + "/rollback"
+	if err := g.doMutation(ctx, http.MethodPost, path, nil, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -1128,6 +1234,7 @@ func (g *Gateway) RestoreVM(ctx context.Context, node string, req model.PVEResto
 	if err := g.doMutation(ctx, http.MethodPost, "/nodes/"+url.PathEscape(node)+"/qemu", form, &upid); err != nil {
 		return nil, err
 	}
+
 	return &model.Task{UPID: upid}, nil
 }
 
@@ -1147,5 +1254,6 @@ func valuesFromMap(m map[string]string) url.Values {
 	for k, v := range m {
 		form.Set(k, v)
 	}
+
 	return form
 }

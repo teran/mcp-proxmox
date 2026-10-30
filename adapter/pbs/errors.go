@@ -43,6 +43,7 @@ func (e *APIError) Error() string {
 	if len(e.Messages) == 0 {
 		return "pbs: api error"
 	}
+
 	return "pbs: api error: " + errors.Join(messageErrs(e.Messages)...).Error()
 }
 
@@ -51,6 +52,7 @@ func messageErrs(m []string) []error {
 	for _, s := range m {
 		out = append(out, errors.New(s))
 	}
+
 	return out
 }
 

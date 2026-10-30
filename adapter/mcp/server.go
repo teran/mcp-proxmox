@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log/slog"
+	"maps"
 	"reflect"
 	"strings"
 	"time"
@@ -55,11 +56,13 @@ func NewServer(impl *mcpSDK.Implementation, deps Deps, opts *mcpSDK.ServerOption
 			ctx = withSessionContext(deps)(ctx)
 			start := time.Now()
 			res, err := next(ctx, method, req)
-			logIncomingRequest(deps, ctx, method, req, res, time.Since(start), err)
+			logIncomingRequest(ctx, deps, method, req, res, time.Since(start), err)
+
 			return res, err
 		}
 	})
 	RegisterTools(s, deps.App, toolLogger{log: deps.Logger, l: deps.Log}, deps.EnableMutations)
+
 	return s
 }
 
@@ -75,7 +78,9 @@ func NewServer(impl *mcpSDK.Implementation, deps Deps, opts *mcpSDK.ServerOption
 // line) that carries the tool name, redacted args and the byte-size/duration/
 // outcome metrics, so per-tool payload sizes stay confined to trace. This line
 // is trace-gated: it never appears unless LOG_LEVEL=trace.
-func logIncomingRequest(deps Deps, ctx context.Context, method string, req mcpSDK.Request, res mcpSDK.Result, dur time.Duration, err error) {
+func logIncomingRequest(
+	ctx context.Context, deps Deps, method string, req mcpSDK.Request, res mcpSDK.Result, dur time.Duration, err error,
+) {
 	if deps.Log == nil {
 		return
 	}
@@ -89,48 +94,62 @@ func logIncomingRequest(deps Deps, ctx context.Context, method string, req mcpSD
 		"duration_ms": dur.Milliseconds(),
 		"outcome":     outcome,
 	}
-
-	// tools/call: capture the tool name; the REDACTED args go on the info line
-	// (L08 — sanitizeArgs guarantees no secrets), while byte sizes stay at trace
-	// level.
-	var traceFields logrus.Fields
-	if name, args, ok := toolCallFromRequest(req); ok {
-		fields["tool"] = name
-		if args != nil {
-			fields["args"] = sanitizeArgs(args)
-		}
-		if deps.Log.IsLevelEnabled(logrus.TraceLevel) && args != nil {
-			in, _ := json.Marshal(args)
-			fields["in_bytes"] = len(in)
-		}
-		if deps.Log.IsLevelEnabled(logrus.TraceLevel) && res != nil {
-			if out, err := json.Marshal(res); err == nil {
-				fields["out_bytes"] = len(out)
-			}
-		}
-
-		// Dedicated per-tool trace line, emitted only at trace level. It carries
-		// the tool name, redacted args and metrics. Sensitive arguments are
-		// redacted via sanitizeArgs, so no secret reaches the journal.
-		if deps.Log.IsLevelEnabled(logrus.TraceLevel) {
-			traceFields = logrus.Fields{
-				"tool":        name,
-				"in_bytes":    fields["in_bytes"],
-				"out_bytes":   fields["out_bytes"],
-				"duration_ms": dur.Milliseconds(),
-				"outcome":     outcome,
-			}
-			if args != nil {
-				traceFields["args"] = sanitizeArgs(args)
-			}
-		}
-	}
+	extra, traceFields := applyToolCall(req, res, deps.Log, dur, outcome)
+	maps.Copy(fields, extra)
 
 	e := logging.WithSession(ctx, deps.Log)
 	e.WithFields(fields).Infof("mcp request: %s", method)
 	if traceFields != nil {
 		e.WithFields(traceFields).Tracef("mcp tool trace: %s", method)
 	}
+}
+
+// applyToolCall enriches the request log fields for a tools/call request and
+// returns the optional trace-level fields. For non-tool-call requests (e.g.
+// initialize) it returns (nil, nil). The REDACTED args are placed on the info
+// line (sanitizeArgs guarantees no secrets, S02), while byte-size metrics stay
+// on the trace-only fields.
+func applyToolCall(
+	req mcpSDK.Request, res mcpSDK.Result, log *logrus.Logger, dur time.Duration, outcome string,
+) (logrus.Fields, logrus.Fields) {
+	name, args, ok := toolCallFromRequest(req)
+	if !ok {
+		return nil, nil
+	}
+
+	fields := logrus.Fields{"tool": name}
+	if args != nil {
+		fields["args"] = sanitizeArgs(args)
+	}
+
+	// Byte-size metrics are confined to the trace line (below); only a logrus
+	// logger at trace level populates them.
+	if !log.IsLevelEnabled(logrus.TraceLevel) {
+		return fields, nil
+	}
+	if args != nil {
+		if in, err := json.Marshal(args); err == nil {
+			fields["in_bytes"] = len(in)
+		}
+	}
+	if res != nil {
+		if out, err := json.Marshal(res); err == nil {
+			fields["out_bytes"] = len(out)
+		}
+	}
+
+	traceFields := logrus.Fields{
+		"tool":        name,
+		"in_bytes":    fields["in_bytes"],
+		"out_bytes":   fields["out_bytes"],
+		"duration_ms": dur.Milliseconds(),
+		"outcome":     outcome,
+	}
+	if args != nil {
+		traceFields["args"] = sanitizeArgs(args)
+	}
+
+	return fields, traceFields
 }
 
 // toolCallFromRequest extracts the tool name and its arguments from a tools/call
@@ -149,6 +168,7 @@ func toolCallFromRequest(req mcpSDK.Request) (name string, args any, ok bool) {
 				return p.Name, m, true
 			}
 		}
+
 		return p.Name, nil, true
 	default:
 		return "", nil, false
@@ -163,30 +183,39 @@ func toolCallFromRequest(req mcpSDK.Request) (name string, args any, ok bool) {
 // heuristic list; map inputs are handled by key name. Current tools take only
 // node/vmid/store names, so this is defensive for future mutation tools.
 func sanitizeArgs(args any) string {
-	rv := reflect.ValueOf(args)
-	for rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
-		if rv.IsNil() {
+	val := reflect.ValueOf(args)
+	for val.Kind() == reflect.Pointer || val.Kind() == reflect.Interface {
+		if val.IsNil() {
 			return "{}"
 		}
-		rv = rv.Elem()
+		val = val.Elem()
 	}
-	if rv.IsValid() && rv.Kind() == reflect.Struct {
-		return sanitizeArgsStruct(rv)
+	if val.IsValid() && val.Kind() == reflect.Struct {
+		return sanitizeArgsStruct(val)
 	}
 	m, ok := args.(map[string]any)
 	if !ok {
-		b, _ := json.Marshal(args)
+		b, err := json.Marshal(args)
+		if err != nil {
+			return "{}"
+		}
+
 		return string(b)
 	}
 	clean := make(map[string]any, len(m))
 	for k, v := range m {
 		if isSensitiveKey(k) {
 			clean[k] = "[redacted]"
+
 			continue
 		}
 		clean[k] = v
 	}
-	b, _ := json.Marshal(clean)
+	b, err := json.Marshal(clean)
+	if err != nil {
+		return "{}"
+	}
+
 	return string(b)
 }
 
@@ -196,7 +225,7 @@ func sanitizeArgs(args any) string {
 func sanitizeArgsStruct(v reflect.Value) string {
 	m := make(map[string]any, v.NumField())
 	t := v.Type()
-	for i := 0; i < v.NumField(); i++ {
+	for i := range v.NumField() {
 		sf := t.Field(i)
 		name := sf.Name
 		if jsonTag := sf.Tag.Get("json"); jsonTag != "" {
@@ -204,11 +233,16 @@ func sanitizeArgsStruct(v reflect.Value) string {
 		}
 		if sf.Tag.Get("secret") == "true" || isSensitiveKey(name) {
 			m[name] = "[redacted]"
+
 			continue
 		}
 		m[name] = v.Field(i).Interface()
 	}
-	b, _ := json.Marshal(m)
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "{}"
+	}
+
 	return string(b)
 }
 
@@ -218,8 +252,10 @@ func isSensitiveKey(k string) bool {
 	case "token", "tokens", "password", "pass", "secret", "secret_key", "secretkey",
 		"api_key", "apikey", "auth", "authorization", "cookie", "credential", "credentials",
 		"fingerprint", "host_key", "hostkey":
+
 		return true
 	}
+
 	return false
 }
 
@@ -231,15 +267,20 @@ func withSessionContext(deps Deps) func(context.Context) context.Context {
 		if deps.SessionID != "" {
 			ctx = port.WithSessionID(ctx, deps.SessionID)
 		}
+
 		return ctx
 	}
 }
 
 // newRequestID returns a short random hex string used as a per-request ID.
 func newRequestID() string {
-	b := make([]byte, 8)
+	b := make([]byte, requestIDLen)
 	if _, err := rand.Read(b); err != nil {
 		return "unknown"
 	}
+
 	return hex.EncodeToString(b)
 }
+
+// requestIDLen is the byte length of the random per-request / per-session IDs.
+const requestIDLen = 8

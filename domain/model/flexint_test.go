@@ -33,17 +33,17 @@ func TestFlexIntUnmarshalNumber(t *testing.T) {
 // TestFlexIntUnmarshalNullAndEmpty verifies that JSON null and an empty string
 // both decode to zero.
 func TestFlexIntUnmarshalNullAndEmpty(t *testing.T) {
-	for _, tc := range []struct {
+	for _, tt := range []struct {
 		name string
 		in   string
 	}{
 		{"null", `null`},
 		{"empty-string", `""`},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			var f FlexInt = 42
-			if err := json.Unmarshal([]byte(tc.in), &f); err != nil {
-				t.Fatalf("unmarshal %q: %v", tc.in, err)
+			if err := json.Unmarshal([]byte(tt.in), &f); err != nil {
+				t.Fatalf("unmarshal %q: %v", tt.in, err)
 			}
 			if f != FlexInt(0) {
 				t.Fatalf("got %d, want 0", f)

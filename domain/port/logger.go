@@ -20,11 +20,11 @@ type AppLogger interface {
 // implement it — callers fall back to the plain AppLogger when it is absent.
 type RequestAwareLogger interface {
 	AppLogger
-	TracefContext(ctx context.Context, format string, args ...any)
-	DebugfContext(ctx context.Context, format string, args ...any)
-	InfofContext(ctx context.Context, format string, args ...any)
-	WarnfContext(ctx context.Context, format string, args ...any)
-	ErrorfContext(ctx context.Context, format string, args ...any)
+	TracefContextf(ctx context.Context, format string, args ...any)
+	DebugfContextf(ctx context.Context, format string, args ...any)
+	InfofContextf(ctx context.Context, format string, args ...any)
+	WarnfContextf(ctx context.Context, format string, args ...any)
+	ErrorfContextf(ctx context.Context, format string, args ...any)
 }
 
 // CtxLogger is a context-aware logger used by the application and adapter
@@ -48,6 +48,7 @@ func ToRequestAwareLogger(l AppLogger) RequestAwareLogger {
 	if r, ok := l.(RequestAwareLogger); ok {
 		return r
 	}
+
 	return nil
 }
 
@@ -55,7 +56,8 @@ func ToRequestAwareLogger(l AppLogger) RequestAwareLogger {
 // the underlying logger supports it.
 func (c CtxLogger) Tracef(ctx context.Context, format string, args ...any) {
 	if c.aware != nil {
-		c.aware.TracefContext(ctx, format, args...)
+		c.aware.TracefContextf(ctx, format, args...)
+
 		return
 	}
 	if c.plain != nil {
@@ -67,7 +69,8 @@ func (c CtxLogger) Tracef(ctx context.Context, format string, args ...any) {
 // the underlying logger supports it.
 func (c CtxLogger) Debugf(ctx context.Context, format string, args ...any) {
 	if c.aware != nil {
-		c.aware.DebugfContext(ctx, format, args...)
+		c.aware.DebugfContextf(ctx, format, args...)
+
 		return
 	}
 	if c.plain != nil {
@@ -79,7 +82,8 @@ func (c CtxLogger) Debugf(ctx context.Context, format string, args ...any) {
 // underlying logger supports it.
 func (c CtxLogger) Infof(ctx context.Context, format string, args ...any) {
 	if c.aware != nil {
-		c.aware.InfofContext(ctx, format, args...)
+		c.aware.InfofContextf(ctx, format, args...)
+
 		return
 	}
 	if c.plain != nil {
@@ -91,7 +95,8 @@ func (c CtxLogger) Infof(ctx context.Context, format string, args ...any) {
 // the underlying logger supports it.
 func (c CtxLogger) Warnf(ctx context.Context, format string, args ...any) {
 	if c.aware != nil {
-		c.aware.WarnfContext(ctx, format, args...)
+		c.aware.WarnfContextf(ctx, format, args...)
+
 		return
 	}
 	if c.plain != nil {
@@ -103,7 +108,8 @@ func (c CtxLogger) Warnf(ctx context.Context, format string, args ...any) {
 // the underlying logger supports it.
 func (c CtxLogger) Errorf(ctx context.Context, format string, args ...any) {
 	if c.aware != nil {
-		c.aware.ErrorfContext(ctx, format, args...)
+		c.aware.ErrorfContextf(ctx, format, args...)
+
 		return
 	}
 	if c.plain != nil {

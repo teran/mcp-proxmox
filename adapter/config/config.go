@@ -16,14 +16,14 @@ import (
 // Config is the full server configuration, loaded once at startup by Load().
 type Config struct {
 	// PVE backend.
-	PVEEndpoint   string `envconfig:"PVE_ENDPOINT" desc:"Proxmox VE API endpoint (e.g. https://pve.example.com:8006). Empty disables the PVE backend."`
-	PVEToken      string `envconfig:"PVE_TOKEN" desc:"Proxmox VE API token (user@realm!tokenid=uuid). Empty disables the PVE backend."`
-	PVECACertPath string `envconfig:"PVE_CA_CERT_PATH" desc:"Optional custom CA (PEM) used to verify the PVE TLS endpoint. Empty = system roots."`
+	PVEEndpoint   string `envconfig:"PVE_ENDPOINT" desc:"Proxmox VE API endpoint. Empty = disabled."`
+	PVEToken      string `envconfig:"PVE_TOKEN" desc:"Proxmox VE API token (user@realm!tokenid=uuid). Empty = disabled."`
+	PVECACertPath string `envconfig:"PVE_CA_CERT_PATH" desc:"Optional custom CA (PEM) for PVE TLS. Empty = system roots."`
 
 	// PBS backend.
-	PBSEndpoint   string `envconfig:"PBS_ENDPOINT" desc:"Proxmox Backup Server API endpoint (e.g. https://pbs.example.com:8007). Empty disables the PBS backend."`
-	PBSToken      string `envconfig:"PBS_TOKEN" desc:"Proxmox Backup Server API token (user@pbs!tokenid=uuid). Empty disables the PBS backend."`
-	PBSCACertPath string `envconfig:"PBS_CA_CERT_PATH" desc:"Optional custom CA (PEM) used to verify the PBS TLS endpoint. Empty = system roots."`
+	PBSEndpoint   string `envconfig:"PBS_ENDPOINT" desc:"Proxmox Backup Server API endpoint. Empty = disabled."`
+	PBSToken      string `envconfig:"PBS_TOKEN" desc:"Proxmox Backup Server API token (user@pbs!tokenid=uuid). Empty = disabled."`
+	PBSCACertPath string `envconfig:"PBS_CA_CERT_PATH" desc:"Optional custom CA (PEM) for PBS TLS. Empty = system roots."`
 
 	// Logging.
 	// LogLevel maps to LOG_LEVEL. When set (any non-empty value), logging is
@@ -33,7 +33,7 @@ type Config struct {
 	LogLevel string `envconfig:"LOG_LEVEL" desc:"Log level: trace|debug|info|warn|error. When set, enables logging to LOG_FILENAME."`
 	// LogFileName maps to LOG_FILENAME, the stdio-friendly file sink used when
 	// LOG_LEVEL is set. Default /tmp/mcp-proxmox.log (mode 0600).
-	LogFileName string `envconfig:"LOG_FILENAME" desc:"Path of the log file (default /tmp/mcp-proxmox.log, mode 0600). Only used when LOG_LEVEL is set."`
+	LogFileName string `envconfig:"LOG_FILENAME" desc:"Log file path (default /tmp/mcp-proxmox.log, mode 0600)."`
 	// LogFormat maps to LOG_FORMAT: "text" (default, logrus text with full
 	// timestamps) or "json".
 	LogFormat string `envconfig:"LOG_FORMAT" desc:"Log format: text (default) | json."`
@@ -63,6 +63,7 @@ func Load() (Config, error) {
 	if err := envconfig.Process("", &c); err != nil {
 		return c, err
 	}
+
 	return c, nil
 }
 

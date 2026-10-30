@@ -25,11 +25,11 @@ func TestPVERestoreRequestRoundTrip(t *testing.T) {
 		t.Fatalf("round-trip mismatch\n got: %#v\nwant: %#v", got, in)
 	}
 
-	min, err := json.Marshal(PVERestoreRequest{Archive: "/a.bak"})
+	minimal, err := json.Marshal(PVERestoreRequest{Archive: "/a.bak"})
 	if err != nil {
 		t.Fatalf("marshal minimal: %v", err)
 	}
-	if string(min) != `{"archive":"/a.bak"}` {
-		t.Fatalf("minimal mismatch: %s", min)
+	if string(minimal) != `{"archive":"/a.bak"}` {
+		t.Fatalf("minimal mismatch: %s", minimal)
 	}
 }

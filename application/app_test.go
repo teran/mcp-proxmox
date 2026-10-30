@@ -52,8 +52,8 @@ func TestNewOptionalInjection(t *testing.T) {
 // delegate to the injected gateways.
 func TestAppServicesWired(t *testing.T) {
 	app := New(nopAppLogger{}, "v1.0.0",
-		WithPVE(&mockPVEGateway{getNextID: func(ctx context.Context) (string, error) { return "42", nil }}),
-		WithPBS(&mockPBSGateway{listDatastores: func(ctx context.Context) ([]model.Datastore, error) {
+		WithPVE(&mockPVEGateway{getNextID: func(_ context.Context) (string, error) { return "42", nil }}),
+		WithPBS(&mockPBSGateway{listDatastores: func(_ context.Context) ([]model.Datastore, error) {
 			return []model.Datastore{{Store: "backup"}}, nil
 		}}),
 	)
@@ -62,9 +62,9 @@ func TestAppServicesWired(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "42", id)
 
-	ds, err := app.PBS.ListDatastores(context.Background())
+	datastore, err := app.PBS.ListDatastores(context.Background())
 	require.NoError(t, err)
-	assert.Len(t, ds, 1)
+	assert.Len(t, datastore, 1)
 }
 
 func TestSystemService_EnabledBackends(t *testing.T) {

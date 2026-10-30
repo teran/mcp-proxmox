@@ -31,39 +31,61 @@ func runMethod(t *testing.T, body string, fn func(*Gateway) error) (*reqCapture,
 	srv := mockServer(t, 200, body, rec)
 	g, _ := newTestGateway(t, srv)
 	err := fn(g)
+
 	return rec, err
 }
 
-// TestGateway_AllMethodSuccess exercises every PBS read-only method's happy
-// path, asserting the returned struct fields and the request method/path.
-func TestGateway_AllMethodSuccess(t *testing.T) {
-	tests := []struct {
-		name  string
-		body  string
-		path  string
-		query string
-		call  func(*Gateway) error
-	}{
+// surfaceCase describes one happy-path read assertion.
+type surfaceCase struct {
+	name  string
+	body  string
+	path  string
+	query string
+	call  func(*Gateway) error
+}
+
+// runSurfaceCases drives a set of happy-path read assertions against a mock
+// server, checking method/path/query/auth for each.
+func runSurfaceCases(t *testing.T, cases []surfaceCase) {
+	t.Helper()
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			rec, err := runMethod(t, tt.body, tt.call)
+			require.NoError(t, err)
+			assert.Equal(t, http.MethodGet, rec.method)
+			assert.Equal(t, tt.path, rec.path)
+			assert.Equal(t, tt.query, rec.query)
+			assert.Equal(t, "PVEAPIToken=user@pbs!tokenid=secret", rec.auth)
+		})
+	}
+}
+
+// TestGateway_Datastore_Success exercises the datastore read methods.
+func TestGateway_Datastore_Success(t *testing.T) {
+	runSurfaceCases(t, []surfaceCase{
 		{
 			name: "ListDatastores",
-			body: `{"data":[{"store":"backup","backend-type":"filesystem","mount-status":"mounted","comment":"primary","maintenance":"none"}]}`,
+			body: `{"data":[{"store":"backup","backend-type":"filesystem",` +
+				`"mount-status":"mounted","comment":"primary","maintenance":"none"}]}`,
 			path: "/api2/json/admin/datastore",
 			call: func(g *Gateway) error {
-				ds, err := g.ListDatastores(context.Background())
+				datastore, err := g.ListDatastores(context.Background())
 				if assert.NoError(t, err) {
-					require.Len(t, ds, 1)
-					assert.Equal(t, "backup", ds[0].Store)
-					assert.Equal(t, "filesystem", ds[0].BackendType)
-					assert.Equal(t, "mounted", ds[0].MountStatus)
-					assert.Equal(t, "primary", ds[0].Comment)
-					assert.Equal(t, "none", ds[0].Maintenance)
+					require.Len(t, datastore, 1)
+					assert.Equal(t, "backup", datastore[0].Store)
+					assert.Equal(t, "filesystem", datastore[0].BackendType)
+					assert.Equal(t, "mounted", datastore[0].MountStatus)
+					assert.Equal(t, "primary", datastore[0].Comment)
+					assert.Equal(t, "none", datastore[0].Maintenance)
 				}
+
 				return err
 			},
 		},
 		{
 			name: "GetDatastoreConfig",
-			body: `{"data":{"path":"/backup","keep-daily":7,"verify-new":true,"gc-schedule":"sun","notify-user":"root@pam","tuning":"example"}}`,
+			body: `{"data":{"path":"/backup","keep-daily":7,"verify-new":true,` +
+				`"gc-schedule":"sun","notify-user":"root@pam","tuning":"example"}}`,
 			path: "/api2/json/config/datastore/backup",
 			call: func(g *Gateway) error {
 				cfg, err := g.GetDatastoreConfig(context.Background(), "backup")
@@ -75,6 +97,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					assert.Equal(t, "root@pam", cfg.NotifyUser)
 					assert.Equal(t, "example", cfg.Tuning)
 				}
+
 				return err
 			},
 		},
@@ -89,9 +112,16 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					assert.Equal(t, int64(2000), st.Total)
 					assert.Equal(t, int64(500), st.Used)
 				}
+
 				return err
 			},
 		},
+	})
+}
+
+// TestGateway_Backup_Success exercises the backup read methods.
+func TestGateway_Backup_Success(t *testing.T) {
+	runSurfaceCases(t, []surfaceCase{
 		{
 			name: "ListBackups",
 			body: `{"data":[{"backup-id":"vm/100/2024","backup-time":1704067200,"backup-type":"vm"}]}`,
@@ -103,12 +133,15 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					assert.Equal(t, "vm/100/2024", bs[0].BackupID)
 					assert.Equal(t, "vm", bs[0].BackupType)
 				}
+
 				return err
 			},
 		},
 		{
 			name: "GetBackup",
-			body: `{"data":[{"backup-id":"vm/100/2024","backup-time":1704067200,"backup-type":"vm","owner":"root@pam","size":1024},{"backup-id":"ct/200/2024","backup-time":1704067300,"backup-type":"ct","size":2048}]}`,
+			body: `{"data":[{"backup-id":"vm/100/2024","backup-time":1704067200,` +
+				`"backup-type":"vm","owner":"root@pam","size":1024},{"backup-id":"ct/200/2024",` +
+				`"backup-time":1704067300,"backup-type":"ct","size":2048}]}`,
 			path: "/api2/json/admin/datastore/backup/snapshots",
 			call: func(g *Gateway) error {
 				bs, err := g.GetBackup(context.Background(), "backup", "vm/100/2024")
@@ -117,6 +150,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					assert.Equal(t, "vm/100/2024", bs[0].BackupID)
 					assert.Equal(t, "vm", bs[0].BackupType)
 				}
+
 				return err
 			},
 		},
@@ -130,9 +164,17 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 				if assert.NoError(t, err) {
 					assert.Equal(t, "keep forever", n.Notes)
 				}
+
 				return err
 			},
 		},
+	})
+}
+
+// TestGateway_VerifyPrune_Success exercises the verify/prune status read
+// methods.
+func TestGateway_VerifyPrune_Success(t *testing.T) {
+	runSurfaceCases(t, []surfaceCase{
 		{
 			name: "GetVerifyStatus",
 			body: `{"data":{"upid":"upid1","store":"backup","status":"ok","errors":0}}`,
@@ -142,6 +184,7 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 				if assert.NoError(t, err) {
 					assert.Equal(t, "ok", st.Status)
 				}
+
 				return err
 			},
 		},
@@ -154,9 +197,16 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 				if assert.NoError(t, err) {
 					assert.Equal(t, "running", st.Status)
 				}
+
 				return err
 			},
 		},
+	})
+}
+
+// TestGateway_Version_Success exercises the PBS version read method.
+func TestGateway_Version_Success(t *testing.T) {
+	runSurfaceCases(t, []surfaceCase{
 		{
 			name: "GetPBSVersion",
 			body: `{"data":{"version":"3.2.3","release":"3.2","repoid":"abc"}}`,
@@ -167,21 +217,11 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 					assert.Equal(t, "3.2.3", v.Version)
 					assert.Equal(t, "3.2", v.Release)
 				}
+
 				return err
 			},
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rec, err := runMethod(t, tt.body, tt.call)
-			require.NoError(t, err)
-			assert.Equal(t, http.MethodGet, rec.method)
-			assert.Equal(t, tt.path, rec.path)
-			assert.Equal(t, tt.query, rec.query)
-			assert.Equal(t, "PVEAPIToken=user@pbs!tokenid=secret", rec.auth)
-		})
-	}
+	})
 }
 
 // TestGateway_GetBackupFiltersByBackupID verifies GetBackup lists /snapshots and
@@ -189,7 +229,8 @@ func TestGateway_AllMethodSuccess(t *testing.T) {
 // matches (SPEC: PBS has no single-snapshot GET).
 func TestGateway_GetBackupFiltersByBackupID(t *testing.T) {
 	rec := &reqCapture{}
-	body := `{"data":[{"backup-id":"vm/100/2024","backup-type":"vm"},{"backup-id":"ct/200/2024","backup-type":"ct"},{"backup-id":"vm/100/2024","backup-type":"vm"}]}`
+	body := `{"data":[{"backup-id":"vm/100/2024","backup-type":"vm"},` +
+		`{"backup-id":"ct/200/2024","backup-type":"ct"},{"backup-id":"vm/100/2024","backup-type":"vm"}]}`
 	srv := mockServer(t, 200, body, rec)
 	g, _ := newTestGateway(t, srv)
 
@@ -254,14 +295,31 @@ func TestGateway_EmptyDataForGetters(t *testing.T) {
 		name string
 		call func(*Gateway) error
 	}{
-		{"GetDatastoreStatus", func(g *Gateway) error { _, e := g.GetDatastoreStatus(context.Background(), "backup"); return e }},
-		{"GetBackupNotes", func(g *Gateway) error {
-			_, e := g.GetBackupNotes(context.Background(), "backup", "vm/100/2024", "vm")
+		{"GetDatastoreStatus", func(g *Gateway) error {
+			_, e := g.GetDatastoreStatus(context.Background(), "backup")
+
 			return e
 		}},
-		{"GetVerifyStatus", func(g *Gateway) error { _, e := g.GetVerifyStatus(context.Background(), "backup", "upid1"); return e }},
-		{"GetPruneStatus", func(g *Gateway) error { _, e := g.GetPruneStatus(context.Background(), "backup", "upid1"); return e }},
-		{"GetPBSVersion", func(g *Gateway) error { _, e := g.GetPBSVersion(context.Background()); return e }},
+		{"GetBackupNotes", func(g *Gateway) error {
+			_, e := g.GetBackupNotes(context.Background(), "backup", "vm/100/2024", "vm")
+
+			return e
+		}},
+		{"GetVerifyStatus", func(g *Gateway) error {
+			_, e := g.GetVerifyStatus(context.Background(), "backup", "upid1")
+
+			return e
+		}},
+		{"GetPruneStatus", func(g *Gateway) error {
+			_, e := g.GetPruneStatus(context.Background(), "backup", "upid1")
+
+			return e
+		}},
+		{"GetPBSVersion", func(g *Gateway) error {
+			_, e := g.GetPBSVersion(context.Background())
+
+			return e
+		}},
 	}
 
 	for _, tt := range getters {
@@ -282,9 +340,21 @@ func TestGateway_EmptyDataForLists(t *testing.T) {
 		name string
 		call func(*Gateway) error
 	}{
-		{"ListDatastores", func(g *Gateway) error { _, e := g.ListDatastores(context.Background()); return e }},
-		{"ListBackups", func(g *Gateway) error { _, e := g.ListBackups(context.Background(), "backup"); return e }},
-		{"GetBackup", func(g *Gateway) error { _, e := g.GetBackup(context.Background(), "backup", "vm/100/2024"); return e }},
+		{"ListDatastores", func(g *Gateway) error {
+			_, e := g.ListDatastores(context.Background())
+
+			return e
+		}},
+		{"ListBackups", func(g *Gateway) error {
+			_, e := g.ListBackups(context.Background(), "backup")
+
+			return e
+		}},
+		{"GetBackup", func(g *Gateway) error {
+			_, e := g.GetBackup(context.Background(), "backup", "vm/100/2024")
+
+			return e
+		}},
 	}
 
 	for _, tt := range lists {
@@ -302,14 +372,46 @@ func TestGateway_AllMethodErrorBranches(t *testing.T) {
 		name string
 		call func(*Gateway) error
 	}{
-		{"ListDatastores", func(g *Gateway) error { _, e := g.ListDatastores(context.Background()); return e }},
-		{"GetDatastoreStatus", func(g *Gateway) error { _, e := g.GetDatastoreStatus(context.Background(), "s"); return e }},
-		{"ListBackups", func(g *Gateway) error { _, e := g.ListBackups(context.Background(), "s"); return e }},
-		{"GetBackup", func(g *Gateway) error { _, e := g.GetBackup(context.Background(), "s", "snap"); return e }},
-		{"GetBackupNotes", func(g *Gateway) error { _, e := g.GetBackupNotes(context.Background(), "s", "id", "vm"); return e }},
-		{"GetVerifyStatus", func(g *Gateway) error { _, e := g.GetVerifyStatus(context.Background(), "s", "u"); return e }},
-		{"GetPruneStatus", func(g *Gateway) error { _, e := g.GetPruneStatus(context.Background(), "s", "u"); return e }},
-		{"GetPBSVersion", func(g *Gateway) error { _, e := g.GetPBSVersion(context.Background()); return e }},
+		{"ListDatastores", func(g *Gateway) error {
+			_, e := g.ListDatastores(context.Background())
+
+			return e
+		}},
+		{"GetDatastoreStatus", func(g *Gateway) error {
+			_, e := g.GetDatastoreStatus(context.Background(), "s")
+
+			return e
+		}},
+		{"ListBackups", func(g *Gateway) error {
+			_, e := g.ListBackups(context.Background(), "s")
+
+			return e
+		}},
+		{"GetBackup", func(g *Gateway) error {
+			_, e := g.GetBackup(context.Background(), "s", "snap")
+
+			return e
+		}},
+		{"GetBackupNotes", func(g *Gateway) error {
+			_, e := g.GetBackupNotes(context.Background(), "s", "id", "vm")
+
+			return e
+		}},
+		{"GetVerifyStatus", func(g *Gateway) error {
+			_, e := g.GetVerifyStatus(context.Background(), "s", "u")
+
+			return e
+		}},
+		{"GetPruneStatus", func(g *Gateway) error {
+			_, e := g.GetPruneStatus(context.Background(), "s", "u")
+
+			return e
+		}},
+		{"GetPBSVersion", func(g *Gateway) error {
+			_, e := g.GetPBSVersion(context.Background())
+
+			return e
+		}},
 	}
 
 	for _, tt := range calls {
@@ -402,8 +504,8 @@ func TestErrorMessages(t *testing.T) {
 // TestIsSlicePtr covers the helper branches (previously 0% for PBS).
 func TestIsSlicePtr(t *testing.T) {
 	assert.False(t, isSlicePtr(nil))
-	var ds model.Datastore
-	assert.False(t, isSlicePtr(&ds))
+	var datastore model.Datastore
+	assert.False(t, isSlicePtr(&datastore))
 	dss := []model.Datastore{}
 	assert.True(t, isSlicePtr(&dss))
 }
@@ -564,5 +666,6 @@ func writeTestCA(t *testing.T) string {
 	path := filepath.Join(t.TempDir(), "ca.pem")
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	require.NoError(t, os.WriteFile(path, pemBytes, 0o600))
+
 	return path
 }

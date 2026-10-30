@@ -14,6 +14,7 @@ import (
 // "session_id=" (empty) on every connect/disconnect.
 type sessionConn struct {
 	mcpSDK.Connection
+
 	id string
 }
 
@@ -34,6 +35,7 @@ func (t *sessionTransport) Connect(ctx context.Context) (mcpSDK.Connection, erro
 	if err != nil {
 		return nil, err
 	}
+
 	return &sessionConn{Connection: c, id: t.id}, nil
 }
 
@@ -48,9 +50,10 @@ func NewSessionTransport(inner mcpSDK.Transport, id string) mcpSDK.Transport {
 // NewSessionID returns a short random hex string used as a per-session ID. It
 // reuses the same generator as newRequestID.
 func NewSessionID() string {
-	b := make([]byte, 8)
+	b := make([]byte, requestIDLen)
 	if _, err := rand.Read(b); err != nil {
 		return "unknown"
 	}
+
 	return hex.EncodeToString(b)
 }

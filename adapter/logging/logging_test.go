@@ -18,6 +18,7 @@ import (
 // newSlogRecord returns a fresh slog.Record with the given level and message.
 func newSlogRecord(level slog.Level, msg string) *slog.Record {
 	rec := slog.NewRecord(time.Now(), level, msg, 0)
+
 	return &rec
 }
 
@@ -103,11 +104,12 @@ func TestAppLoggerContextTags(t *testing.T) {
 	l.SetLevel(logrus.DebugLevel)
 
 	app := NewAppLogger(l)
-	aware := app.(port.RequestAwareLogger)
+	aware, ok := app.(port.RequestAwareLogger)
+	require.True(t, ok, "appLogger must implement RequestAwareLogger")
 
 	ctx := port.WithSessionID(context.Background(), "sess-1")
 	ctx = port.WithRequestID(ctx, "req-1")
-	aware.DebugfContext(ctx, "hello %s", "world")
+	aware.DebugfContextf(ctx, "hello %s", "world")
 
 	out := buf.String()
 	assert.Contains(t, out, `"session_id":"sess-1"`)
@@ -126,14 +128,15 @@ func TestAppLoggerContextAllLevels(t *testing.T) {
 	l.SetLevel(logrus.DebugLevel)
 
 	app := NewAppLogger(l)
-	aware := app.(port.RequestAwareLogger)
+	aware, ok := app.(port.RequestAwareLogger)
+	require.True(t, ok, "appLogger must implement RequestAwareLogger")
 	ctx := port.WithSessionID(context.Background(), "sess")
 	ctx = port.WithRequestID(ctx, "req")
 
-	aware.DebugfContext(ctx, "d")
-	aware.InfofContext(ctx, "i")
-	aware.WarnfContext(ctx, "w")
-	aware.ErrorfContext(ctx, "e")
+	aware.DebugfContextf(ctx, "d")
+	aware.InfofContextf(ctx, "i")
+	aware.WarnfContextf(ctx, "w")
+	aware.ErrorfContextf(ctx, "e")
 
 	out := buf.String()
 	assert.Contains(t, out, "level=debug")

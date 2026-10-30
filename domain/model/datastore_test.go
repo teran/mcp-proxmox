@@ -58,7 +58,11 @@ func TestDatastoreConfig_omitempty(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshal: %v", err)
 		}
-		want := `{"path":"/backup","comment":"primary","backend":"filesystem","backing-device":"/dev/sdb","keep-hourly":1,"keep-daily":7,"keep-weekly":4,"keep-monthly":6,"keep-yearly":2,"keep-last":1,"gc-schedule":"sun","verify-new":true,"prune-schedule":"daily","notification-mode":"auto","notify-user":"root@pam","notify":"always","maintenance-mode":"off","counter-reset-schedule":"daily","gc-on-unmount":true,"tuning":"example"}`
+		want := `{"path":"/backup","comment":"primary","backend":"filesystem","backing-device":"/dev/sdb",` +
+			`"keep-hourly":1,"keep-daily":7,"keep-weekly":4,"keep-monthly":6,"keep-yearly":2,"keep-last":1,` +
+			`"gc-schedule":"sun","verify-new":true,"prune-schedule":"daily","notification-mode":"auto",` +
+			`"notify-user":"root@pam","notify":"always","maintenance-mode":"off",` +
+			`"counter-reset-schedule":"daily","gc-on-unmount":true,"tuning":"example"}`
 		if string(b) != want {
 			t.Fatalf("mismatch\n got: %s\nwant: %s", b, want)
 		}

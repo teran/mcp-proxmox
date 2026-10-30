@@ -30,12 +30,12 @@ func TestPBSRestoreToolSuccess(t *testing.T) {
 		}, true},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := callTool(t, sess, tc.name, tc.args)
-			assert.False(t, res.IsError, "tool %s should succeed", tc.name)
-			if tc.wantOutput {
-				assert.NotNil(t, res.StructuredContent, "tool %s should return structured output", tc.name)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			res := callTool(t, sess, testCase.name, testCase.args)
+			assert.False(t, res.IsError, "tool %s should succeed", testCase.name)
+			if testCase.wantOutput {
+				assert.NotNil(t, res.StructuredContent, "tool %s should return structured output", testCase.name)
 			}
 		})
 	}
@@ -43,8 +43,8 @@ func TestPBSRestoreToolSuccess(t *testing.T) {
 
 // TestPBSRestoreToolErrorPropagation verifies IsError on gateway failure.
 func TestPBSRestoreToolErrorPropagation(t *testing.T) {
-	gw := &stubPBSGateway{err: port.ErrNotFound}
-	app := application.New(nopLogger{}, "v1.0.0", application.WithPBS(gw))
+	gateway := &stubPBSGateway{err: port.ErrNotFound}
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPBS(gateway))
 	_, sess := newTestServer(t, app, true)
 
 	cases := []struct {
@@ -61,10 +61,10 @@ func TestPBSRestoreToolErrorPropagation(t *testing.T) {
 		}},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := callTool(t, sess, tc.name, tc.args)
-			assert.True(t, res.IsError, "tool %s should be flagged IsError on gateway failure", tc.name)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			res := callTool(t, sess, testCase.name, testCase.args)
+			assert.True(t, res.IsError, "tool %s should be flagged IsError on gateway failure", testCase.name)
 		})
 	}
 }

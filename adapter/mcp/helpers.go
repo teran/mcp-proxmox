@@ -25,7 +25,12 @@ import (
 // ToolAnnotations hints (read-only, non-destructive, idempotent, closed world)
 // and per-tool natural-language instructions (encoded into the SDK Description,
 // which the go-sdk treats as the model hint).
-func roTool[In, Out any](s *mcpSDK.Server, name, title, desc, instr string, log toolLogger, fn func(context.Context, In) (Out, error)) {
+func roTool[In, Out any](
+	s *mcpSDK.Server,
+	name, title, desc, instr string,
+	log toolLogger,
+	handler func(context.Context, In) (Out, error),
+) {
 	outSchema := outputSchema[Out]()
 	mcpSDK.AddTool(s, &mcpSDK.Tool{
 		Name:         name,
@@ -36,23 +41,25 @@ func roTool[In, Out any](s *mcpSDK.Server, name, title, desc, instr string, log 
 			Title:           title,
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
-			OpenWorldHint:   boolPtr(false),
-			DestructiveHint: boolPtr(false),
+			OpenWorldHint:   new(bool),
+			DestructiveHint: new(bool),
 		},
 	}, func(ctx context.Context, _ *mcpSDK.CallToolRequest, in In) (*mcpSDK.CallToolResult, any, error) {
-		out, err := fn(ctx, in)
+		out, err := handler(ctx, in)
 		if err != nil {
 			if status, ok := port.HTTPStatus(err); ok {
-				log.ErrorfStatus(ctx, status, "%s: %v", name, err)
+				log.ErrorfStatusf(ctx, status, "%s: %v", name, err)
 			} else {
 				log.Errorf(ctx, "%s: %v", name, err)
 			}
+
 			return nil, nil, err
 		}
 		wrapped, err := wrapAndValidate(ctx, name, log, outSchema, out)
 		if err != nil {
 			return nil, nil, err
 		}
+
 		return nil, wrapped, nil
 	})
 }
@@ -65,6 +72,7 @@ func descWithInstructions(desc, instr string) string {
 	if instr == "" {
 		return desc
 	}
+
 	return desc + "\n\nInstructions: " + instr
 }
 
@@ -76,7 +84,14 @@ func descWithInstructions(desc, instr string) string {
 // `destructive` is variadic and defaults to false; pass true only for truly
 // destructive delete operations (S12) so their DestructiveHint is set, while
 // every other mutation stays non-destructive.
-func mutTool[In, Out any](s *mcpSDK.Server, name, title, desc, instr string, log toolLogger, idempotent bool, fn func(context.Context, In) (Out, error), destructive ...bool) {
+func mutTool[In, Out any](
+	s *mcpSDK.Server,
+	name, title, desc, instr string,
+	log toolLogger,
+	idempotent bool,
+	handler func(context.Context, In) (Out, error),
+	destructive ...bool,
+) {
 	destructiveHint := false
 	if len(destructive) > 0 {
 		destructiveHint = destructive[0]
@@ -91,29 +106,28 @@ func mutTool[In, Out any](s *mcpSDK.Server, name, title, desc, instr string, log
 			Title:           title,
 			ReadOnlyHint:    false,
 			IdempotentHint:  idempotent,
-			OpenWorldHint:   boolPtr(false),
-			DestructiveHint: boolPtr(destructiveHint),
+			OpenWorldHint:   new(bool),
+			DestructiveHint: &destructiveHint,
 		},
 	}, func(ctx context.Context, _ *mcpSDK.CallToolRequest, in In) (*mcpSDK.CallToolResult, any, error) {
-		out, err := fn(ctx, in)
+		out, err := handler(ctx, in)
 		if err != nil {
 			if status, ok := port.HTTPStatus(err); ok {
-				log.ErrorfStatus(ctx, status, "%s: %v", name, err)
+				log.ErrorfStatusf(ctx, status, "%s: %v", name, err)
 			} else {
 				log.Errorf(ctx, "%s: %v", name, err)
 			}
+
 			return nil, nil, err
 		}
 		wrapped, err := wrapAndValidate(ctx, name, log, outSchema, out)
 		if err != nil {
 			return nil, nil, err
 		}
+
 		return nil, wrapped, nil
 	})
 }
-
-// boolPtr returns a pointer to b (for the SDK's *bool annotation hints).
-func boolPtr(b bool) *bool { return &b }
 
 // outputSchema derives the JSON Schema describing a tool's structured output
 // (S09/N22). The schema is generated from the typed output type Out using the
@@ -137,6 +151,7 @@ func outputSchema[Out any]() *jsonschema.Schema {
 	if elem.Kind() == reflect.Interface {
 		// Out is `any` (or a nil interface): the runtime shape is unknown, so
 		// advertise a permissive schema that accepts any JSON value.
+
 		return &jsonschema.Schema{}
 	}
 	base, err := jsonschema.ForType(elem, &jsonschema.ForOptions{})
@@ -153,6 +168,7 @@ func outputSchema[Out any]() *jsonschema.Schema {
 		return base
 	default:
 		// scalar (int, string, bool, float, ...)
+
 		return &jsonschema.Schema{
 			Type:       "object",
 			Properties: map[string]*jsonschema.Schema{"value": base},
@@ -184,6 +200,7 @@ func validateOutput(schema *jsonschema.Schema, out any) error {
 	if err := resolved.Validate(&unmarshaled); err != nil {
 		return fmt.Errorf("output does not conform to outputSchema: %w", err)
 	}
+
 	return nil
 }
 
@@ -196,8 +213,10 @@ func wrapAndValidate(ctx context.Context, name string, log toolLogger, schema *j
 	wrapped := wrapOutput(out)
 	if err := validateOutput(schema, wrapped); err != nil {
 		log.Errorf(ctx, "%s: %v", name, err)
+
 		return nil, err
 	}
+
 	return wrapped, nil
 }
 
@@ -228,6 +247,7 @@ func wrapOutput(out any) any {
 		// scalar (int, string, bool, float, ...)
 		wrapped = map[string]any{"value": out}
 	}
+
 	return sanitizeOutput(wrapped)
 }
 
@@ -250,15 +270,18 @@ func sanitizeOutput(v any) any {
 		for i := range t {
 			t[i] = sanitizeOutput(t[i])
 		}
+
 		return t
 	case map[string]any:
 		for k, val := range t {
 			if isSensitiveKey(k) {
 				t[k] = "[redacted]"
+
 				continue
 			}
 			t[k] = sanitizeOutput(val)
 		}
+
 		return t
 	default:
 		return v
@@ -270,14 +293,17 @@ func sanitizeOutput(v any) any {
 // Handles CSI sequences ("\x1b[31m"), two-char sequences ("\x1bM") and bare
 // control bytes; the entire escape sequence is dropped.
 func stripControl(s string) string {
-	if !strings.ContainsAny(s, "\x1b\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1c\x1d\x1e\x1f") {
+	// escByte is the ASCII ESC (0x1b) that begins every escape sequence.
+	const escByte = 0x1b
+	if !strings.ContainsAny(s,
+		"\x1b\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1c\x1d\x1e\x1f") {
 		return s
 	}
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if c == 0x1b {
+		if c == escByte {
 			// ESC [ ... final (CSI): skip '[' plus parameter/intermediate bytes
 			// (0x20..0x3F) until a final byte in 0x40..0x7E.
 			if i+1 < len(s) && s[i+1] == '[' {
@@ -290,17 +316,21 @@ func stripControl(s string) string {
 					}
 				}
 				i-- // the final byte was consumed; the loop increments
+
 				continue
 			}
 			// Two-char sequence: ESC + one byte.
 			i++
+
 			continue
 		}
 		if c < 0x20 && c != '\t' && c != '\n' && c != '\r' {
 			// drop other C0 control characters
+
 			continue
 		}
 		b.WriteByte(c)
 	}
+
 	return b.String()
 }

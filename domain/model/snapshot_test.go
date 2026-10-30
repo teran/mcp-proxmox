@@ -17,7 +17,7 @@ func TestSnapshotRoundTrip(t *testing.T) {
 			name: "snapshot",
 			in: Snapshot{
 				Name: "snap1", Description: "pre-upgrade", Snaptime: 1704067200,
-				VMState: 1, Parent: "current", Type: "snapshot", Ram: 256, Disk: 10,
+				VMState: 1, Parent: "current", Type: "snapshot", RAM: 256, Disk: 10,
 			},
 		},
 		{
@@ -55,9 +55,10 @@ func TestSnapshotExactJSON(t *testing.T) {
 			name: "snapshot-full",
 			in: Snapshot{
 				Name: "snap1", Description: "d", Snaptime: 1704067200,
-				VMState: 1, Parent: "p", Type: "snapshot", Ram: 256, Disk: 10,
+				VMState: 1, Parent: "p", Type: "snapshot", RAM: 256, Disk: 10,
 			},
-			want: `{"name":"snap1","description":"d","snaptime":1704067200,"vmstate":1,"parent":"p","type":"snapshot","ram":256,"disk":10}`,
+			want: `{"name":"snap1","description":"d","snaptime":1704067200,"vmstate":1,"parent":"p",` +
+				`"type":"snapshot","ram":256,"disk":10}`,
 		},
 		{
 			name: "snapshot-create-required",
@@ -103,11 +104,11 @@ func TestCloneVMRequestRoundTrip(t *testing.T) {
 		t.Fatalf("round-trip mismatch\n got: %#v\nwant: %#v", got, in)
 	}
 
-	min, err := json.Marshal(CloneVMRequest{NewID: 101})
+	minimal, err := json.Marshal(CloneVMRequest{NewID: 101})
 	if err != nil {
 		t.Fatalf("marshal minimal: %v", err)
 	}
-	if string(min) != `{"newid":101}` {
-		t.Fatalf("minimal mismatch: %s", min)
+	if string(minimal) != `{"newid":101}` {
+		t.Fatalf("minimal mismatch: %s", minimal)
 	}
 }
