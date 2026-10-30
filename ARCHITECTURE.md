@@ -261,9 +261,10 @@ All via logrus; core sees only `port.AppLogger`/`port.CtxLogger`.
   built at {appTimestamp}) ...`. One `session_id` per MCP session is shared
   between the transport connection and the request context
   (`adapter/mcp/session_transport.go` + `Deps.SessionID`).
-- **Per-request (L8):** debug/trace structured tool-call lines carry tool,
-  source=`STDIO`, duration_ms, outcome, (trace) redacted args + in/out bytes;
-  gateways forward `request_id` as `X-Request-ID` upstream.
+- **Per-request (L8):** an **`info` access log** for every incoming call (no
+  debug/trace gate) carries tool, source=`STDIO`, duration_ms, outcome, and
+  redacted args; byte sizes (in/out bytes) are confined to a **trace** line.
+  Gateways forward `request_id` as `X-Request-ID` upstream.
 - **Secrets never logged:** tokens only as header name at trace, never value;
   `ca_cert_path` content never logged; trace logs method + URL path only.
 

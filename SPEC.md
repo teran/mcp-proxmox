@@ -648,14 +648,17 @@ typically do **not** capture its stderr. To keep the journal inspectable:
 
 ### 5.1c Per-request tool-call logging (L8)
 
-When logging is enabled at **debug/trace**, the server middleware emits a
-structured per-request line for every incoming MCP call with fields: `tool`
-(name, for `tools/call`), `source` (`"STDIO"`), `duration_ms`, `outcome`
-(`ok`/`error`), and (only at trace) `args` — with sensitive keys redacted — plus
-`in_bytes`/`out_bytes`. Every line carries `session_id`/`request_id` from `ctx`.
-For outbound upstream requests, each gateway **forwards the `request_id` as an
-`X-Request-ID` header** and logs method/path/status/duration/in_bytes/out_bytes
-with the same `request_id` (SPEC §5.5).
+When logging is enabled (always in HTTP mode; in stdio only when `LOG_LEVEL` is
+set — L2), the server middleware emits an **access log at `info`** for every
+incoming MCP call — **unconditionally, no `debug`/`trace` gate**. The info line
+carries `tool` (name, for `tools/call`), `source` (`"STDIO"`), `duration_ms`,
+`outcome` (`ok`/`error`), and the **redacted** `args` (`sanitizeArgs` strips
+sensitive keys per S02, so no secret can reach the journal). Byte-size metrics
+(`in_bytes`/`out_bytes`) are confined to a separate **trace**-gated line
+(emitted only at `LOG_LEVEL=trace`). Every line carries `session_id`/`request_id`
+from `ctx`. For outbound upstream requests, each gateway **forwards the
+`request_id` as an `X-Request-ID` header** and logs method/path/status/duration/
+in_bytes/out_bytes with the same `request_id` (SPEC §5.5).
 
 ### 5.2 Context-aware logging (`port.CtxLogger`)
 
