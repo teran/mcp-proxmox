@@ -24,6 +24,23 @@ import (
 	"github.com/teran/mcp-proxmox/domain/port"
 )
 
+// ServerInstructions is the server-level Instructions text advertised in the
+// initialize result (M08/M09). It makes the server self-describing over the MCP
+// protocol: what it is, how the optional backends are enabled, how tools are
+// grouped, and how secrets are handled. It is shared between Deps.Instructions
+// and ServerOptions.Instructions by the composition root (cmd/mcp-proxmox).
+const ServerInstructions = "Local stdio MCP server exposing the Proxmox VE and Proxmox Backup " +
+	"Server (PBS) REST APIs. Both backends are optional and enabled only when " +
+	"their endpoint and API token are configured (via environment variables). " +
+	"Tools are grouped read → write → delete by domain prefix: `pve_` (Proxmox " +
+	"VE), `pbs_` (Proxmox Backup Server), plus system tools `ping`/`status`. " +
+	"Read-only/query tools are always available; mutation tools are registered " +
+	"only when ENABLE_MUTATIONS=true (default off). API tokens are configured " +
+	"once per backend via environment variables, never per-call parameters and " +
+	"never logged; TLS verification is always on. See the guidance resources " +
+	"under mcp-proxmox://guidance/* (overview, tools, security) for detailed " +
+	"usage."
+
 // Deps is the dependencies of the primary MCP adapter.
 type Deps struct {
 	App          *application.App
@@ -62,6 +79,7 @@ func NewServer(impl *mcpSDK.Implementation, deps Deps, opts *mcpSDK.ServerOption
 		}
 	})
 	RegisterTools(s, deps.App, toolLogger{log: deps.Logger, l: deps.Log}, deps.EnableMutations)
+	RegisterGuidanceResources(s)
 
 	return s
 }

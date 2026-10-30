@@ -171,12 +171,12 @@ func main() {
 		Logger:          appLogger,
 		SlogLogger:      slogLogger,
 		Log:             logrusLogger,
-		Instructions:    "MCP server exposing the Proxmox VE and Proxmox Backup Server REST APIs.",
+		Instructions:    mcp.ServerInstructions,
 		SessionID:       sessionID,
 		EnableMutations: enableMutations,
 	}, &mcpSDK.ServerOptions{
 		Logger:       slogLogger,
-		Instructions: "MCP server exposing the Proxmox VE and Proxmox Backup Server REST APIs.",
+		Instructions: mcp.ServerInstructions,
 	})
 
 	logrusLogger.Info("stdio mode")
