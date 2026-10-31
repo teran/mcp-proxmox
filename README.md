@@ -37,14 +37,14 @@ an API token for it.
 
 ## Features
 
-- **Two optional backends + system tools — 46 MCP tools in total:**
-  - **Proxmox VE** (`pve_*`, 31 tools): nodes & cluster (list/status/resources/next-id),
-    QEMU VMs (list/get/status/create/start/stop/reboot/shutdown/migrate/delete), LXC
+- **Two optional backends + system tools — 51 MCP tools in total:**
+  - **Proxmox VE** (`pve_*`, 34 tools): nodes & cluster (list/status/resources/next-id/backup-jobs/HA),
+    QEMU VMs (list/get/status/create/resize/start/stop/reboot/shutdown/migrate/backup/delete), LXC
     containers (list/get/status/create/start/stop/reboot/shutdown/delete), storage
     (list/status), network (list), tasks (list/status/log), and PVE version.
-  - **Proxmox Backup Server** (`pbs_*`, 13 tools): datastores (list/status),
+  - **Proxmox Backup Server** (`pbs_*`, 15 tools): datastores (list/status),
     backups/snapshots (list/get/restore/forget), notes (get/set), verify (start/status),
-    prune (start/status), and PBS version.
+    gc/prune/sync (start; prune status), and PBS version.
   - **System**: `ping`, `status` — always registered; report which backends are enabled.
 - **Backends enabled only when configured:** a backend whose `endpoint` or `token`
   is missing is simply **absent** — its tools are not registered and nothing fails.
