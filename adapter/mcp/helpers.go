@@ -223,9 +223,11 @@ func wrapAndValidate(ctx context.Context, name string, log toolLogger, schema *j
 // wrapOutput ensures the value returned to the MCP client is a JSON object, as
 // required for structuredContent. A top-level slice (a list tool) or scalar
 // (e.g. pve_nextid) is wrapped in a small object; structs and maps pass through.
-// The result is then passed through sanitizeOutput (S2/S9): fields tagged
-// `secret:"true"` are redacted and ANSI/control escape sequences are stripped
-// from string values, so no secret and no raw control bytes can reach output.
+// The result is then passed through sanitizeOutput (S2/S9): secret fields (a
+// `secret:"true"` struct tag or a sensitive key name) are redacted and
+// ANSI/control escape sequences are stripped from string values, so no secret
+// and no raw control bytes can reach output. Redaction is reflect-based, so it
+// applies to typed structs and typed slices too, not just map[string]any.
 func wrapOutput(out any) any {
 	if out == nil {
 		return out
@@ -252,41 +254,217 @@ func wrapOutput(out any) any {
 }
 
 // sanitizeOutput recursively walks the value that will be returned to the MCP
-// client (the wrapper shapes produced by wrapOutput — maps, slices and scalars)
-// and:
-//   - redacts any map key whose name looks sensitive (S2), so a secret can never
-//     reach tool output;
+// client (the wrapper shapes produced by wrapOutput — maps, slices, structs and
+// scalars) and:
+//   - redacts any secret field to "[redacted]" (S2): a struct field tagged
+//     `secret:"true"`, a struct field whose json name looks sensitive, or a map
+//     key whose name looks sensitive, so a secret can never reach tool output;
 //   - strips ANSI/control escape sequences from string values (S9).
 //
-// Typed structs returned by wrapOutput pass through unchanged — they are the
-// domain models with `json`/`omitempty` tags that the SDK validates against the
-// derived outputSchema; none of them carries a secret (API tokens never enter
-// the model or the output path, §5.4). Map-based output is sanitized defensively.
+// Redaction is reflect-based, so typed structs and typed slices are walked as
+// well as map[string]any. The critical invariant (S02) is that a value which
+// contains no secret/sensitive field and no control character is returned
+// unchanged — the original typed value is preserved so `reflect.DeepEqual`
+// holds and the validateOutput/outputSchema validation of typed models is
+// unaffected. Only when there is actually something to redact or strip is a
+// rebuilt (map/[]any) form returned.
 func sanitizeOutput(v any) any {
-	switch t := v.(type) {
-	case string:
-		return stripControl(t)
-	case []any:
-		for i := range t {
-			t[i] = sanitizeOutput(t[i])
+	if v == nil {
+		return v
+	}
+	val := reflect.ValueOf(v)
+	if !val.IsValid() {
+		return v
+	}
+	// Dereference pointers/interfaces first; a nil pointer passes through.
+	for val.Kind() == reflect.Pointer || val.Kind() == reflect.Interface {
+		if val.IsNil() {
+			return v
+		}
+		val = val.Elem()
+	}
+	// Preserve the original typed value when nothing needs redaction/stripping
+	// (S02): only rebuild containers/structs that actually carry a secret or a
+	// control character.
+	if !needsRedaction(val) {
+		return v
+	}
+
+	return sanitizeValue(val)
+}
+
+// needsRedaction reports whether v (or anything reachable from it) requires a
+// transformation by sanitizeValue: a secret field (a `secret:"true"` struct tag
+// or a sensitive json/key name) or a string containing ANSI/control escape
+// sequences. When false, the original typed value is passed through unchanged,
+// preserving `reflect.DeepEqual` and outputSchema validation of typed models.
+func needsRedaction(v reflect.Value) bool {
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return false
+		}
+		v = v.Elem()
+	}
+	switch v.Kind() {
+	case reflect.String:
+		return strings.ContainsAny(v.String(), controlChars)
+	case reflect.Map:
+		iter := v.MapRange()
+		for iter.Next() {
+			if iter.Key().Kind() == reflect.String && isSensitiveKey(iter.Key().String()) {
+				return true
+			}
+			if needsRedaction(iter.Value()) {
+				return true
+			}
 		}
 
-		return t
-	case map[string]any:
-		for k, val := range t {
-			if isSensitiveKey(k) {
-				t[k] = "[redacted]"
+		return false
+	case reflect.Slice, reflect.Array:
+		for i := range v.Len() {
+			if needsRedaction(v.Index(i)) {
+				return true
+			}
+		}
+
+		return false
+	case reflect.Struct:
+		return structNeedsRedaction(v)
+	default:
+		return false
+	}
+}
+
+// structNeedsRedaction reports whether a struct value carries a secret field
+// (a `secret:"true"` tag or a sensitive json name) or a nested value that needs
+// redaction.
+func structNeedsRedaction(v reflect.Value) bool {
+	t := v.Type()
+	for i := range v.NumField() {
+		sf := t.Field(i)
+		if sf.PkgPath != "" {
+			continue // skip unexported fields
+		}
+		if sf.Tag.Get("secret") == "true" || isSensitiveKey(structFieldName(sf)) {
+			return true
+		}
+		if needsRedaction(v.Field(i)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// sanitizeValue builds the redacted/stripped form of a value known to require a
+// transformation (needsRedaction returned true). Structs and maps are rebuilt as
+// map[string]any keyed by json/field names, slices/arrays as []any, and strings
+// are control-stripped; the "[redacted]" marker replaces secret fields. Values
+// that individually need no transformation are preserved as their original typed
+// interface values.
+func sanitizeValue(v reflect.Value) any {
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return v.Interface()
+		}
+		v = v.Elem()
+	}
+	switch v.Kind() {
+	case reflect.String:
+		return stripControl(v.String())
+	case reflect.Map:
+		out := make(map[string]any, v.Len())
+		iter := v.MapRange()
+		for iter.Next() {
+			key := mapKeyString(iter.Key())
+			if isSensitiveKey(key) {
+				out[key] = "[redacted]"
 
 				continue
 			}
-			t[k] = sanitizeOutput(val)
+			out[key] = sanitizeOrPreserve(iter.Value())
 		}
 
-		return t
+		return out
+	case reflect.Slice:
+		out := make([]any, v.Len())
+		for i := range v.Len() {
+			out[i] = sanitizeOrPreserve(v.Index(i))
+		}
+
+		return out
+	case reflect.Array:
+		out := make([]any, v.Len())
+		for i := range v.Len() {
+			out[i] = sanitizeOrPreserve(v.Index(i))
+		}
+
+		return out
+	case reflect.Struct:
+		return sanitizeStruct(v)
 	default:
-		return v
+		return v.Interface()
 	}
 }
+
+// sanitizeStruct rebuilds a struct as a map[string]any, redacting any field
+// tagged secret:"true" or with a sensitive json name, and recursively sanitizing
+// the other fields.
+func sanitizeStruct(v reflect.Value) map[string]any {
+	t := v.Type()
+	out := make(map[string]any, v.NumField())
+	for i := range v.NumField() {
+		sf := t.Field(i)
+		if sf.PkgPath != "" {
+			continue // skip unexported fields
+		}
+		name := structFieldName(sf)
+		if sf.Tag.Get("secret") == "true" || isSensitiveKey(name) {
+			out[name] = "[redacted]"
+
+			continue
+		}
+		out[name] = sanitizeOrPreserve(v.Field(i))
+	}
+
+	return out
+}
+
+// sanitizeOrPreserve returns the sanitized form of a nested value, or its
+// original typed interface value when it needs no transformation.
+func sanitizeOrPreserve(v reflect.Value) any {
+	if needsRedaction(v) {
+		return sanitizeValue(v)
+	}
+
+	return v.Interface()
+}
+
+// structFieldName returns the wire name of a struct field: its json tag name
+// (with `,omitempty` etc. stripped), falling back to the Go field name. A json
+// tag of "-" means the field is not serialized, so its name cannot be sensitive.
+func structFieldName(sf reflect.StructField) string {
+	if tag := sf.Tag.Get("json"); tag != "" && tag != "-" {
+		return strings.Split(tag, ",")[0]
+	}
+
+	return sf.Name
+}
+
+// mapKeyString renders a map key as a string for sensitivity checks and output.
+func mapKeyString(k reflect.Value) string {
+	if k.Kind() == reflect.String {
+		return k.String()
+	}
+
+	return fmt.Sprint(k.Interface())
+}
+
+// controlChars is the set of bytes that must never reach tool output: ESC and
+// the C0 control characters except whitespace (\t \n \r). Shared by
+// stripControl and needsRedaction.
+const controlChars = "\x1b\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f\x10\x11\x12\x13\x14\x15\x16" +
+	"\x17\x18\x19\x1a\x1c\x1d\x1e\x1f"
 
 // stripControl removes ANSI escape sequences and C0 control characters (except
 // whitespace) from a string, so tool output cannot carry raw escape bytes (S9).
@@ -295,8 +473,7 @@ func sanitizeOutput(v any) any {
 func stripControl(s string) string {
 	// escByte is the ASCII ESC (0x1b) that begins every escape sequence.
 	const escByte = 0x1b
-	if !strings.ContainsAny(s,
-		"\x1b\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1c\x1d\x1e\x1f") {
+	if !strings.ContainsAny(s, controlChars) {
 		return s
 	}
 	var b strings.Builder

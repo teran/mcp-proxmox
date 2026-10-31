@@ -2,7 +2,9 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +12,7 @@ import (
 
 	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/teran/mcp-proxmox/domain/model"
 	"github.com/teran/mcp-proxmox/domain/port"
 )
 
@@ -203,4 +206,116 @@ func TestMutTool(t *testing.T) {
 		res := callTool(t, sess, "test_mut_status", map[string]any{})
 		assert.True(t, res.IsError)
 	})
+}
+
+// secretOut is a local output struct used to pin the reflect-based
+// sanitizeOutput behavior: the Token field carries secret:"true" and must be
+// redacted by name tag, while Name and Note (no secret tag, no sensitive json
+// name) must pass through untouched.
+type secretOut struct {
+	Name  string `json:"name"`
+	Token string `json:"token,omitempty" secret:"true"`
+	Note  string `json:"note,omitempty"`
+}
+
+// TestSanitizeOutput_RedactsSecretTaggedStructField pins that a typed struct
+// field tagged secret:"true" (S02) is redacted to "[redacted]" regardless of
+// whether the value is a map. Non-secret sibling fields are preserved.
+func TestSanitizeOutput_RedactsSecretTaggedStructField(t *testing.T) {
+	in := secretOut{Name: "a", Token: "s3cret", Note: "hi"}
+
+	out := sanitizeOutput(in)
+	require.NotNil(t, out)
+
+	b, err := json.Marshal(out)
+	require.NoError(t, err)
+	s := string(b)
+
+	assert.NotContains(t, s, "s3cret", "secret value must never reach output")
+	assert.Contains(t, s, "[redacted]", "redaction marker must be present")
+	assert.Contains(t, s, `"name":"a"`, "non-secret name field preserved")
+	assert.Contains(t, s, `"note":"hi"`, "non-secret note field preserved")
+}
+
+// TestSanitizeOutput_PreservesStructWithoutSecrets is the critical regression
+// guard: a typed struct with no secret:"true" field and no sensitive json key
+// must pass through sanitizeOutput byte-identical, so the existing
+// validateOutput/outputSchema path (which validates typed models) is not
+// disturbed. model.Node carries SSLFingerprint whose json name is
+// "sslfingerprint" — not secret-tagged and not a sensitive key — so it must be
+// treated as a normal field.
+func TestSanitizeOutput_PreservesStructWithoutSecrets(t *testing.T) {
+	in := model.Node{Node: "pve1", Status: "online", SSLFingerprint: "AA:BB"}
+
+	out := sanitizeOutput(in)
+	require.NotNil(t, out)
+
+	assert.True(t, reflect.DeepEqual(in, out),
+		"struct without secrets must pass through unchanged (got %#v)", out)
+}
+
+// TestSanitizeOutput_RedactsNestedSecret pins that a typed slice of structs is
+// walked recursively: a nested secret:"true" field is redacted while
+// non-secret siblings are preserved.
+func TestSanitizeOutput_RedactsNestedSecret(t *testing.T) {
+	in := []secretOut{
+		{Name: "a", Token: "s3cret1", Note: "n1"},
+		{Name: "b", Note: "n2"}, // no token at all
+	}
+
+	out := sanitizeOutput(in)
+	require.NotNil(t, out)
+
+	b, err := json.Marshal(out)
+	require.NoError(t, err)
+	s := string(b)
+
+	assert.NotContains(t, s, "s3cret1", "nested secret value must never reach output")
+	assert.Contains(t, s, "[redacted]", "nested secret must be redacted")
+	assert.Contains(t, s, `"name":"a"`, "nested sibling a preserved")
+	assert.Contains(t, s, `"note":"n1"`, "nested sibling note preserved")
+	assert.Contains(t, s, `"name":"b"`, "secret-free sibling preserved")
+	assert.Contains(t, s, `"note":"n2"`, "secret-free sibling note preserved")
+}
+
+// TestSanitizeOutput_SensitiveMapKeyStillRedacted pins that the existing
+// map[string]any sensitive-key redaction (S2) is preserved by the reflect-based
+// rewrite.
+func TestSanitizeOutput_SensitiveMapKeyStillRedacted(t *testing.T) {
+	out := sanitizeOutput(map[string]any{"node": "pve1", "password": "x"})
+
+	m, ok := out.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "pve1", m["node"], "non-sensitive map value preserved")
+	assert.Equal(t, "[redacted]", m["password"], "sensitive map key redacted")
+	assert.NotContains(t, m, "x", "raw secret must not survive as a top-level value")
+}
+
+// TestSanitizeOutput_StripsControl pins that ANSI/control escape sequences in
+// string values are still stripped (S9) by the reflect-based rewrite.
+func TestSanitizeOutput_StripsControl(t *testing.T) {
+	out := sanitizeOutput(map[string]any{"out": "\x1b[31mred\x1b[0m"})
+
+	m, ok := out.(map[string]any)
+	require.True(t, ok)
+	got, ok := m["out"].(string)
+	require.True(t, ok)
+	assert.NotContains(t, got, "\x1b", "escape bytes must be stripped")
+	assert.Equal(t, "red", got)
+}
+
+// TestSanitizeOutput_TypedSlicePreservedWhenNoSecret pins that a typed slice of
+// structs with no secrets passes through byte-identical (reflect.DeepEqual), so
+// list-tool output of typed models is not disturbed by the rewrite.
+func TestSanitizeOutput_TypedSlicePreservedWhenNoSecret(t *testing.T) {
+	in := []model.Node{
+		{Node: "pve1", Status: "online"},
+		{Node: "pve2", Status: "offline"},
+	}
+
+	out := sanitizeOutput(in)
+	require.NotNil(t, out)
+
+	assert.True(t, reflect.DeepEqual(in, out),
+		"typed slice without secrets must pass through unchanged (got %#v)", out)
 }
