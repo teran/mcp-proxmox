@@ -14,6 +14,7 @@
 [![gosec](https://img.shields.io/badge/gosec-passing-brightgreen)](https://github.com/teran/mcp-proxmox/actions)
 [![govulncheck](https://img.shields.io/badge/govulncheck-passing-brightgreen)](https://github.com/teran/mcp-proxmox/actions)
 [![gremlins mutation](https://img.shields.io/badge/gremlins-%3E%3D80%25-brightgreen)](https://github.com/teran/mcp-proxmox/actions)
+[![goreleaser](https://img.shields.io/badge/goreleaser-v2-blue)](.goreleaser.yml)
 
 An **MCP (Model Context Protocol) server** that exposes the REST APIs of
 **Proxmox VE** and **Proxmox Backup Server (PBS)** as a set of callable tools

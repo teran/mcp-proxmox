@@ -12,35 +12,47 @@ import (
 type emptyIn struct{}
 
 // registerSystemTools registers the system tools: ping and status. They are
-// always registered and report which backends are enabled.
-func registerSystemTools(s *mcpSDK.Server, app *application.App, log toolLogger) {
-	sysTool(s, "ping",
-		"Liveness check",
-		"Liveness check; reports which backends (pve, pbs) are enabled.",
-		"Call this to verify the server is responsive. Returns status \"ok\" and the "+
-			"list of enabled backends (pve, pbs). Read-only; no side effects.",
-		log, func(ctx context.Context, _ emptyIn) (any, error) {
-			backends := app.System.Ping(ctx)
-			log.Debugf(ctx, "ping: backends=%v", backends)
+// always registered and report which backends are enabled. It returns the
+// ToolSurfaces of the registered system tools (SPEC L10/L11); when s is nil it
+// only computes them (the surface-only pass used by RegisteredToolSurface).
+func registerSystemTools(s *mcpSDK.Server, app *application.App, log toolLogger) []ToolSurface {
+	return []ToolSurface{
+		sysTool(s, "ping",
+			"Liveness check",
+			"Liveness check; reports which backends (pve, pbs) are enabled.",
+			"Call this to verify the server is responsive. Returns status \"ok\" and the "+
+				"list of enabled backends (pve, pbs). Read-only; no side effects.",
+			log, func(ctx context.Context, _ emptyIn) (any, error) {
+				backends := app.System.Ping(ctx)
+				log.Debugf(ctx, "ping: backends=%v", backends)
 
-			return map[string]any{"status": "ok", "backends": backends}, nil
-		})
+				return map[string]any{"status": "ok", "backends": backends}, nil
+			}),
 
-	sysTool(s, "status",
-		"Server status",
-		"Server status: version, transport, enabled backends.",
-		"Returns the server version, the active transport, and which backends are enabled. Read-only; no side effects.",
-		log, func(ctx context.Context, _ emptyIn) (any, error) {
-			return app.System.Status(ctx), nil
-		})
+		sysTool(s, "status",
+			"Server status",
+			"Server status: version, transport, enabled backends.",
+			"Returns the server version, the active transport, and which backends are enabled. Read-only; no side effects.",
+			log, func(ctx context.Context, _ emptyIn) (any, error) {
+				return app.System.Status(ctx), nil
+			}),
+	}
 }
 
 // sysTool registers a system (always-on) tool with its M4/N11 annotations
 // (read-only, non-destructive, idempotent, closed world) and per-tool
-// instructions, sharing the same uniform handler shape as roTool.
+// instructions, sharing the same uniform handler shape as roTool. It returns
+// the ToolSurface it just registered (AlwaysPresent=true, SPEC L11); when s is
+// nil it only computes the ToolSurface (the surface-only pass used by
+// RegisteredToolSurface).
 func sysTool[In any, Out any](
 	s *mcpSDK.Server, name, title, desc, instr string, log toolLogger, handler func(context.Context, In) (Out, error),
-) {
+) ToolSurface {
+	if s == nil {
+		// Surface-only pass (RegisteredToolSurface): no SDK server to register
+		// against, so just report the tool without calling AddTool or log.
+		return ToolSurface{Name: name, AlwaysPresent: true}
+	}
 	outSchema := outputSchema[Out]()
 	mcpSDK.AddTool(s, &mcpSDK.Tool{
 		Name:         name,
@@ -68,4 +80,6 @@ func sysTool[In any, Out any](
 
 		return nil, wrapped, nil
 	})
+
+	return ToolSurface{Name: name, AlwaysPresent: true}
 }

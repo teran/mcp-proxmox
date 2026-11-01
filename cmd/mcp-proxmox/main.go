@@ -16,6 +16,7 @@ import (
 	"time"
 
 	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/sirupsen/logrus"
 
 	"github.com/teran/mcp-proxmox/adapter/config"
 	"github.com/teran/mcp-proxmox/adapter/logging"
@@ -59,6 +60,17 @@ const (
 // -version flag (e.g. "mcp-proxmox v1.2.3").
 func versionString() string {
 	return "mcp-proxmox " + version
+}
+
+// logRegisteredTools emits the startup tool-surface log (SPEC L10/L11): one info
+// line per registered tool, tagged with the tool name and the always_present
+// field (true for every tool because registration is static per run — there are
+// no per-caller dynamic tools). It is a no-op on an empty surface, and when
+// logging is disabled the logger discards the lines anyway.
+func logRegisteredTools(log *logrus.Logger, surface []mcp.ToolSurface) {
+	for _, t := range surface {
+		log.WithField("tool", t.Name).WithField("always_present", t.AlwaysPresent).Infof("registered tool")
+	}
 }
 
 // buildApp wires the backends enabled in cfg into a single App.
@@ -159,7 +171,6 @@ func main() {
 	// Mutation gate (SPEC.md §2.5): mutation tools are registered only when
 	// ENABLE_MUTATIONS=true; otherwise only read-only + system tools are
 	// exposed. The value comes from the env-driven config (default false).
-	enableMutations := cfg.EnableMutations
 
 	// One session ID per MCP session (a single process run in stdio mode). It is
 	// shared between the stdio transport connection and the request context so
@@ -173,13 +184,14 @@ func main() {
 		Log:             logrusLogger,
 		Instructions:    mcp.ServerInstructions,
 		SessionID:       sessionID,
-		EnableMutations: enableMutations,
+		EnableMutations: cfg.EnableMutations,
 	}, &mcpSDK.ServerOptions{
 		Logger:       slogLogger,
 		Instructions: mcp.ServerInstructions,
 	})
 
 	logrusLogger.Info("stdio mode")
+	logRegisteredTools(logrusLogger, mcp.RegisteredToolSurface(app, cfg.EnableMutations))
 	// s.Run returns on ctx cancellation (SIGINT/SIGTERM via signal.NotifyContext),
 	// which lets us exit gracefully instead of ignoring Ctrl+C.
 	transport := mcp.NewSessionTransport(&mcpSDK.StdioTransport{}, sessionID)
