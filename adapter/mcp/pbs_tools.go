@@ -96,212 +96,220 @@ type pbsVMRestoreIn struct {
 
 // registerPBSTools registers the Proxmox Backup Server tools. Read-only (query)
 // tools are always registered for an enabled PBS backend. Mutation tools are
-// registered only when enableMutations is true (SPEC.md §2.5).
-// registerPBSTools registers the Proxmox Backup Server tools. Read-only (query)
-// tools are always registered for an enabled PBS backend. Mutation tools are
-// registered only when enableMutations is true (SPEC.md §2.5).
-func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, enableMutations bool) {
-	registerPBSQueryTools0(s, app, log)
-	registerPBSQueryTools1(s, app, log)
+// registered only when enableMutations is true (SPEC.md §2.5). It returns the
+// ToolSurfaces of the registered tools (SPEC L10/L11); when s is nil it only
+// computes them (the surface-only pass used by RegisteredToolSurface).
+func registerPBSTools(s *mcpSDK.Server, app *application.App, log toolLogger, enableMutations bool) []ToolSurface {
+	var surface []ToolSurface
+	surface = append(surface, registerPBSQueryTools0(s, app, log)...)
+	surface = append(surface, registerPBSQueryTools1(s, app, log)...)
 	if enableMutations {
-		registerPBSMutationTools0(s, app, log)
-		registerPBSMutationTools1(s, app, log)
+		surface = append(surface, registerPBSMutationTools0(s, app, log)...)
+		surface = append(surface, registerPBSMutationTools1(s, app, log)...)
+	}
+
+	return surface
+}
+
+func registerPBSQueryTools0(s *mcpSDK.Server, app *application.App, log toolLogger) []ToolSurface {
+	return []ToolSurface{
+		roTool(s, "pbs_datastore_list", "List PBS datastores",
+			"List the PBS datastores.",
+			"No arguments. Returns all configured datastores. Read-only and idempotent.",
+			log, func(ctx context.Context, _ emptyIn) (any, error) {
+				return app.PBS.ListDatastores(ctx)
+			}),
+		roTool(s, "pbs_datastore_status", "Get PBS datastore status",
+			"Get the status of a PBS datastore.",
+			"Provide the datastore name. Returns its status and capacity usage. Read-only.",
+			log, func(ctx context.Context, in storeIn) (any, error) {
+				return app.PBS.GetDatastoreStatus(ctx, in.Store)
+			}),
+		roTool(s, "pbs_datastore_config_get", "Get PBS datastore configuration",
+			"Get the full configuration of a PBS datastore.",
+			"Provide the datastore name. Returns its configuration (path, retention/keep settings, GC"+
+				"schedule, notification options, etc.). Read-only.",
+			log, func(ctx context.Context, in storeIn) (any, error) {
+				return app.PBS.GetDatastoreConfig(ctx, in.Store)
+			}),
+
+		// --- backups / snapshots & notes ---
+		roTool(s, "pbs_backup_list", "List PBS backup snapshots",
+			"List the backup snapshots in a PBS datastore.",
+			"Provide the datastore name. Returns all backup snapshots in it. Read-only and idempotent.",
+			log, func(ctx context.Context, in storeIn) (any, error) {
+				return app.PBS.ListBackups(ctx, in.Store)
+			}),
+		roTool(s, "pbs_backup_get", "Get PBS backup group",
+			"Get all backup snapshots in a PBS datastore for a given backup ID / group ID (e.g. a VMID).",
+			"Provide the datastore name and a backup ID (group ID, e.g. a VMID). Returns the matching snapshots. Read-only.",
+			log, func(ctx context.Context, in backupIn) (any, error) {
+				return app.PBS.GetBackup(ctx, in.Store, in.BackupID)
+			}),
+		roTool(s, "pbs_backup_notes_get", "Get PBS backup group notes",
+			"Get the notes and comment of a PBS backup group (requires backup ID and backup type vm|ct|host).",
+			"Provide the datastore name, backup ID, and backup type (vm, ct, or host). Returns the group's notes. Read-only.",
+			log, func(ctx context.Context, in backupNotesIn) (any, error) {
+				return app.PBS.GetBackupNotes(ctx, in.Store, in.BackupID, in.BackupType)
+			}),
+
+		// --- verify & prune (status polling is read-only) ---
 	}
 }
 
-func registerPBSQueryTools0(s *mcpSDK.Server, app *application.App, log toolLogger) {
-	roTool(s, "pbs_datastore_list", "List PBS datastores",
-		"List the PBS datastores.",
-		"No arguments. Returns all configured datastores. Read-only and idempotent.",
-		log, func(ctx context.Context, _ emptyIn) (any, error) {
-			return app.PBS.ListDatastores(ctx)
-		})
-	roTool(s, "pbs_datastore_status", "Get PBS datastore status",
-		"Get the status of a PBS datastore.",
-		"Provide the datastore name. Returns its status and capacity usage. Read-only.",
-		log, func(ctx context.Context, in storeIn) (any, error) {
-			return app.PBS.GetDatastoreStatus(ctx, in.Store)
-		})
-	roTool(s, "pbs_datastore_config_get", "Get PBS datastore configuration",
-		"Get the full configuration of a PBS datastore.",
-		"Provide the datastore name. Returns its configuration (path, retention/keep settings, GC"+
-			"schedule, notification options, etc.). Read-only.",
-		log, func(ctx context.Context, in storeIn) (any, error) {
-			return app.PBS.GetDatastoreConfig(ctx, in.Store)
-		})
+func registerPBSQueryTools1(s *mcpSDK.Server, app *application.App, log toolLogger) []ToolSurface {
+	return []ToolSurface{
+		roTool(s, "pbs_verify_status", "Get PBS verify job status",
+			"Get the status of a PBS verify job by UPID. The UPID comes from a running/known verify job"+
+				"(PBS has no task-list endpoint in this version).",
+			"Provide the datastore name and the verify job's UPID. Returns the job status; use to poll a running verify. Read-only.",
+			log, func(ctx context.Context, in jobIn) (any, error) {
+				return app.PBS.GetVerifyStatus(ctx, in.Store, in.UPID)
+			}),
+		roTool(s, "pbs_prune_status", "Get PBS prune job status",
+			"Get the status of a PBS prune job by UPID. The UPID comes from a running/known prune job"+
+				"(PBS has no task-list endpoint in this version).",
+			"Provide the datastore name and the prune job's UPID. Returns the job status; use to poll a running prune. Read-only.",
+			log, func(ctx context.Context, in jobIn) (any, error) {
+				return app.PBS.GetPruneStatus(ctx, in.Store, in.UPID)
+			}),
 
-	// --- backups / snapshots & notes ---
-	roTool(s, "pbs_backup_list", "List PBS backup snapshots",
-		"List the backup snapshots in a PBS datastore.",
-		"Provide the datastore name. Returns all backup snapshots in it. Read-only and idempotent.",
-		log, func(ctx context.Context, in storeIn) (any, error) {
-			return app.PBS.ListBackups(ctx, in.Store)
-		})
-	roTool(s, "pbs_backup_get", "Get PBS backup group",
-		"Get all backup snapshots in a PBS datastore for a given backup ID / group ID (e.g. a VMID).",
-		"Provide the datastore name and a backup ID (group ID, e.g. a VMID). Returns the matching snapshots. Read-only.",
-		log, func(ctx context.Context, in backupIn) (any, error) {
-			return app.PBS.GetBackup(ctx, in.Store, in.BackupID)
-		})
-	roTool(s, "pbs_backup_notes_get", "Get PBS backup group notes",
-		"Get the notes and comment of a PBS backup group (requires backup ID and backup type vm|ct|host).",
-		"Provide the datastore name, backup ID, and backup type (vm, ct, or host). Returns the group's notes. Read-only.",
-		log, func(ctx context.Context, in backupNotesIn) (any, error) {
-			return app.PBS.GetBackupNotes(ctx, in.Store, in.BackupID, in.BackupType)
-		})
+		// --- version ---
+		roTool(s, "pbs_version", "Get PBS version",
+			"Get the Proxmox Backup Server version info.",
+			"No arguments. Returns the PBS version. Read-only.",
+			log, func(ctx context.Context, _ emptyIn) (any, error) {
+				return app.PBS.GetPBSVersion(ctx)
+			}),
 
-	// --- verify & prune (status polling is read-only) ---
+		// --- restore & task status (read-only) ---
+		roTool(s, "pbs_backup_files_list", "List PBS backup files",
+			"List the files inside a PBS backup snapshot.",
+			"Provide the datastore name, backup type (vm|ct|host), backup ID, and the snapshot"+
+				"identifier (the ISO-8601 timestamp from the backup listing). Optionally set path to list a"+
+				"subdirectory (default /). Read-only and idempotent.",
+			log, func(ctx context.Context, in pbsFileListIn) (any, error) {
+				return app.PBS.ListBackupFiles(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, in.Path)
+			}),
+		roTool(s, "pbs_task_status", "Get PBS task status",
+			"Get the status of a PBS task by UPID.",
+			"Provide the task UPID (e.g. from a restore or verify job). Returns the task status. Read-only.",
+			log, func(ctx context.Context, in pbsTaskIn) (any, error) {
+				return app.PBS.GetTaskStatus(ctx, in.UPID)
+			}),
+		roTool(s, "pbs_task_log", "Get PBS task log",
+			"Get the log of a PBS task by UPID.",
+			"Provide the task UPID and optionally a limit on the number of log lines. Returns the task log. Read-only.",
+			log, func(ctx context.Context, in pbsTaskLogIn) (any, error) {
+				return app.PBS.GetTaskLog(ctx, in.UPID, in.Limit)
+			}),
+
+		// --- mutations (gated by EnableMutations) ---
+	}
 }
 
-func registerPBSQueryTools1(s *mcpSDK.Server, app *application.App, log toolLogger) {
-	roTool(s, "pbs_verify_status", "Get PBS verify job status",
-		"Get the status of a PBS verify job by UPID. The UPID comes from a running/known verify job"+
-			"(PBS has no task-list endpoint in this version).",
-		"Provide the datastore name and the verify job's UPID. Returns the job status; use to poll a running verify. Read-only.",
-		log, func(ctx context.Context, in jobIn) (any, error) {
-			return app.PBS.GetVerifyStatus(ctx, in.Store, in.UPID)
-		})
-	roTool(s, "pbs_prune_status", "Get PBS prune job status",
-		"Get the status of a PBS prune job by UPID. The UPID comes from a running/known prune job"+
-			"(PBS has no task-list endpoint in this version).",
-		"Provide the datastore name and the prune job's UPID. Returns the job status; use to poll a running prune. Read-only.",
-		log, func(ctx context.Context, in jobIn) (any, error) {
-			return app.PBS.GetPruneStatus(ctx, in.Store, in.UPID)
-		})
+func registerPBSMutationTools0(s *mcpSDK.Server, app *application.App, log toolLogger) []ToolSurface {
+	return []ToolSurface{
+		mutTool(s, "pbs_verify_start", "Start PBS verify",
+			"Start a verify job on a PBS datastore.",
+			"Provide the datastore name. Returns the job UPID to poll with pbs_verify_status. Not"+
+				"idempotent: each call starts a new verify.",
+			log, false, func(ctx context.Context, in storeIn) (any, error) {
+				upid, err := app.PBS.StartVerify(ctx, in.Store)
+				if err != nil {
+					return nil, err
+				}
 
-	// --- version ---
-	roTool(s, "pbs_version", "Get PBS version",
-		"Get the Proxmox Backup Server version info.",
-		"No arguments. Returns the PBS version. Read-only.",
-		log, func(ctx context.Context, _ emptyIn) (any, error) {
-			return app.PBS.GetPBSVersion(ctx)
-		})
+				return map[string]any{"upid": upid}, nil
+			}),
 
-	// --- restore & task status (read-only) ---
-	roTool(s, "pbs_backup_files_list", "List PBS backup files",
-		"List the files inside a PBS backup snapshot.",
-		"Provide the datastore name, backup type (vm|ct|host), backup ID, and the snapshot"+
-			"identifier (the ISO-8601 timestamp from the backup listing). Optionally set path to list a"+
-			"subdirectory (default /). Read-only and idempotent.",
-		log, func(ctx context.Context, in pbsFileListIn) (any, error) {
-			return app.PBS.ListBackupFiles(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, in.Path)
-		})
-	roTool(s, "pbs_task_status", "Get PBS task status",
-		"Get the status of a PBS task by UPID.",
-		"Provide the task UPID (e.g. from a restore or verify job). Returns the task status. Read-only.",
-		log, func(ctx context.Context, in pbsTaskIn) (any, error) {
-			return app.PBS.GetTaskStatus(ctx, in.UPID)
-		})
-	roTool(s, "pbs_task_log", "Get PBS task log",
-		"Get the log of a PBS task by UPID.",
-		"Provide the task UPID and optionally a limit on the number of log lines. Returns the task log. Read-only.",
-		log, func(ctx context.Context, in pbsTaskLogIn) (any, error) {
-			return app.PBS.GetTaskLog(ctx, in.UPID, in.Limit)
-		})
+		mutTool(s, "pbs_gc_start", "Start PBS garbage collection",
+			"Start a garbage-collection job on a PBS datastore.",
+			"Provide the datastore name. Returns the job UPID. Destructive: GC removes unreferenced"+
+				"data from the datastore. Not idempotent: each call starts a new GC.",
+			log, false, func(ctx context.Context, in storeIn) (any, error) {
+				upid, err := app.PBS.StartGC(ctx, in.Store)
+				if err != nil {
+					return nil, err
+				}
 
-	// --- mutations (gated by EnableMutations) ---
+				return map[string]any{"upid": upid}, nil
+			}, true),
+
+		mutTool(s, "pbs_prune_start", "Start PBS prune",
+			"Start a prune job on a PBS datastore.",
+			"Provide the datastore name. Returns the job UPID to poll with pbs_prune_status."+
+				"Destructive: prune removes backup snapshots per the datastore's retention policy. Not"+
+				"idempotent: each call starts a new prune.",
+			log, false, func(ctx context.Context, in storeIn) (any, error) {
+				upid, err := app.PBS.StartPrune(ctx, in.Store)
+				if err != nil {
+					return nil, err
+				}
+
+				return map[string]any{"upid": upid}, nil
+			}, true),
+	}
 }
 
-func registerPBSMutationTools0(s *mcpSDK.Server, app *application.App, log toolLogger) {
-	mutTool(s, "pbs_verify_start", "Start PBS verify",
-		"Start a verify job on a PBS datastore.",
-		"Provide the datastore name. Returns the job UPID to poll with pbs_verify_status. Not"+
-			"idempotent: each call starts a new verify.",
-		log, false, func(ctx context.Context, in storeIn) (any, error) {
-			upid, err := app.PBS.StartVerify(ctx, in.Store)
-			if err != nil {
-				return nil, err
-			}
+func registerPBSMutationTools1(s *mcpSDK.Server, app *application.App, log toolLogger) []ToolSurface {
+	return []ToolSurface{
+		mutTool(s, "pbs_sync_start", "Start PBS sync",
+			"Start a one-off sync job on a PBS datastore.",
+			"Provide the datastore name plus the sync parameters (remote, remote_store, owner, limits,"+
+				"etc.). Returns the job UPID. Not idempotent: each call starts a new sync.",
+			log, false, func(ctx context.Context, in syncIn) (any, error) {
+				upid, err := app.PBS.StartSync(ctx, in.Store, model.PBSSyncRequest{
+					Remote:         in.Remote,
+					RemoteStore:    in.RemoteStore,
+					Owner:          in.Owner,
+					MaxFiles:       in.MaxFiles,
+					RemoveVanished: in.RemoveVanished,
+					RateIn:         in.RateIn,
+					RateOut:        in.RateOut,
+					SkipLost:       in.SkipLost,
+					NotifyUser:     in.NotifyUser,
+				})
+				if err != nil {
+					return nil, err
+				}
 
-			return map[string]any{"upid": upid}, nil
-		})
+				return map[string]any{"upid": upid}, nil
+			}),
+		mutTool(s, "pbs_backup_restore_file", "Restore single file from PBS backup",
+			"Restore a single file out of a PBS backup snapshot to a target path on the PBS filesystem.",
+			"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier,"+
+				"the source path inside the backup and the target path on the PBS filesystem. Destructive:"+
+				"overwrites the target path on the PBS filesystem. Returns no task UPID. Not idempotent.",
+			log, false, func(ctx context.Context, in pbsFileRestoreIn) (any, error) {
+				return nil, app.PBS.RestoreFile(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, model.PBSFileRestoreRequest{
+					Path:   in.Path,
+					Target: in.Target,
+				})
+			}, true),
+		mutTool(s, "pbs_backup_vm_restore", "Restore PBS VM backup",
+			"Restore a PBS VM backup snapshot into a PVE datastore.",
+			"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier,"+
+				"the target PVE storage, and optionally a VM ID (or 'next'), host, password, fingerprint,"+
+				"pool, verbose and reload. Destructive: restores/overwrites VM state on the target PVE"+
+				"storage. Returns the task UPID to poll with pbs_task_status. Not idempotent: each call"+
+				"starts a new restore.",
+			log, false, func(ctx context.Context, in pbsVMRestoreIn) (any, error) {
+				upid, err := app.PBS.RestoreVMBackup(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, model.PBSVMRestoreRequest{
+					Target:      in.Target,
+					VMID:        in.VMID,
+					Host:        in.Host,
+					Password:    in.Password,
+					Fingerprint: in.Fingerprint,
+					Pool:        in.Pool,
+					Verbose:     in.Verbose,
+					Reload:      in.Reload,
+				})
+				if err != nil {
+					return nil, err
+				}
 
-	mutTool(s, "pbs_gc_start", "Start PBS garbage collection",
-		"Start a garbage-collection job on a PBS datastore.",
-		"Provide the datastore name. Returns the job UPID. Destructive: GC removes unreferenced"+
-			"data from the datastore. Not idempotent: each call starts a new GC.",
-		log, false, func(ctx context.Context, in storeIn) (any, error) {
-			upid, err := app.PBS.StartGC(ctx, in.Store)
-			if err != nil {
-				return nil, err
-			}
-
-			return map[string]any{"upid": upid}, nil
-		}, true)
-
-	mutTool(s, "pbs_prune_start", "Start PBS prune",
-		"Start a prune job on a PBS datastore.",
-		"Provide the datastore name. Returns the job UPID to poll with pbs_prune_status."+
-			"Destructive: prune removes backup snapshots per the datastore's retention policy. Not"+
-			"idempotent: each call starts a new prune.",
-		log, false, func(ctx context.Context, in storeIn) (any, error) {
-			upid, err := app.PBS.StartPrune(ctx, in.Store)
-			if err != nil {
-				return nil, err
-			}
-
-			return map[string]any{"upid": upid}, nil
-		}, true)
-}
-
-func registerPBSMutationTools1(s *mcpSDK.Server, app *application.App, log toolLogger) {
-	mutTool(s, "pbs_sync_start", "Start PBS sync",
-		"Start a one-off sync job on a PBS datastore.",
-		"Provide the datastore name plus the sync parameters (remote, remote_store, owner, limits,"+
-			"etc.). Returns the job UPID. Not idempotent: each call starts a new sync.",
-		log, false, func(ctx context.Context, in syncIn) (any, error) {
-			upid, err := app.PBS.StartSync(ctx, in.Store, model.PBSSyncRequest{
-				Remote:         in.Remote,
-				RemoteStore:    in.RemoteStore,
-				Owner:          in.Owner,
-				MaxFiles:       in.MaxFiles,
-				RemoveVanished: in.RemoveVanished,
-				RateIn:         in.RateIn,
-				RateOut:        in.RateOut,
-				SkipLost:       in.SkipLost,
-				NotifyUser:     in.NotifyUser,
-			})
-			if err != nil {
-				return nil, err
-			}
-
-			return map[string]any{"upid": upid}, nil
-		})
-
-	mutTool(s, "pbs_backup_restore_file", "Restore single file from PBS backup",
-		"Restore a single file out of a PBS backup snapshot to a target path on the PBS filesystem.",
-		"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier,"+
-			"the source path inside the backup and the target path on the PBS filesystem. Destructive:"+
-			"overwrites the target path on the PBS filesystem. Returns no task UPID. Not idempotent.",
-		log, false, func(ctx context.Context, in pbsFileRestoreIn) (any, error) {
-			return nil, app.PBS.RestoreFile(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, model.PBSFileRestoreRequest{
-				Path:   in.Path,
-				Target: in.Target,
-			})
-		}, true)
-
-	mutTool(s, "pbs_backup_vm_restore", "Restore PBS VM backup",
-		"Restore a PBS VM backup snapshot into a PVE datastore.",
-		"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier,"+
-			"the target PVE storage, and optionally a VM ID (or 'next'), host, password, fingerprint,"+
-			"pool, verbose and reload. Destructive: restores/overwrites VM state on the target PVE"+
-			"storage. Returns the task UPID to poll with pbs_task_status. Not idempotent: each call"+
-			"starts a new restore.",
-		log, false, func(ctx context.Context, in pbsVMRestoreIn) (any, error) {
-			upid, err := app.PBS.RestoreVMBackup(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, model.PBSVMRestoreRequest{
-				Target:      in.Target,
-				VMID:        in.VMID,
-				Host:        in.Host,
-				Password:    in.Password,
-				Fingerprint: in.Fingerprint,
-				Pool:        in.Pool,
-				Verbose:     in.Verbose,
-				Reload:      in.Reload,
-			})
-			if err != nil {
-				return nil, err
-			}
-
-			return map[string]any{"upid": upid}, nil
-		}, true)
+				return map[string]any{"upid": upid}, nil
+			}, true),
+	}
 }

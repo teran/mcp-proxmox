@@ -40,7 +40,7 @@ mcp-proxmox/
 ├── go.mod / go.sum              # module github.com/teran/mcp-proxmox, go 1.27.3
 ├── .golangci.yml, .go-arch-lint.yml, gremlins.toml,
 ├── Dockerfile, .goreleaser.yml, .dockerignore, .gitignore,
-├── .gitlab-ci.yml, .forgejo/workflows/ci.yml
+├── .github/workflows/ci.yml, .github/workflows/release.yml
 ├── SPEC.md (authoritative), AGENTS.md, README.md, ARCHITECTURE.md (this file)
 └── LICENSE
 ```

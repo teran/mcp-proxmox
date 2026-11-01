@@ -13,17 +13,22 @@ import (
 // Mutation tools are registered only when enableMutations is true (from the
 // ENABLE_MUTATIONS env var, SPEC.md §2.5); read-only tools are always
 // registered for an enabled backend.
+//
+// Each register* function returns the ToolSurfaces of the tools it registered;
+// RegisterTools discards them because registration itself is the effect. The
+// same functions, called with a nil server, back RegisteredToolSurface so the
+// auditable startup log matches tools/list (SPEC L10/L11).
 func RegisterTools(s *mcpSDK.Server, app *application.App, log toolLogger, enableMutations bool) {
 	// --- Proxmox VE (only when the PVE backend is enabled) ---
 	if app.PVE != nil {
-		registerPVETools(s, app, log, enableMutations)
+		_ = registerPVETools(s, app, log, enableMutations)
 	}
 
 	// --- Proxmox Backup Server (only when the PBS backend is enabled) ---
 	if app.PBS != nil {
-		registerPBSTools(s, app, log, enableMutations)
+		_ = registerPBSTools(s, app, log, enableMutations)
 	}
 
 	// --- system (CORE, always) ---
-	registerSystemTools(s, app, log)
+	_ = registerSystemTools(s, app, log)
 }

@@ -25,12 +25,23 @@ import (
 // ToolAnnotations hints (read-only, non-destructive, idempotent, closed world)
 // and per-tool natural-language instructions (encoded into the SDK Description,
 // which the go-sdk treats as the model hint).
+//
+// roTool returns the ToolSurface it just registered (AlwaysPresent=true,
+// SPEC L11) so the registering function can both register and report the tool
+// from a single source. When s is nil it only computes the ToolSurface without
+// touching the SDK server or log — the surface-only pass used by
+// RegisteredToolSurface (SPEC L10/L11).
 func roTool[In, Out any](
 	s *mcpSDK.Server,
 	name, title, desc, instr string,
 	log toolLogger,
 	handler func(context.Context, In) (Out, error),
-) {
+) ToolSurface {
+	if s == nil {
+		// Surface-only pass (RegisteredToolSurface): no SDK server to register
+		// against, so just report the tool without calling AddTool or log.
+		return ToolSurface{Name: name, AlwaysPresent: true}
+	}
 	outSchema := outputSchema[Out]()
 	mcpSDK.AddTool(s, &mcpSDK.Tool{
 		Name:         name,
@@ -62,6 +73,8 @@ func roTool[In, Out any](
 
 		return nil, wrapped, nil
 	})
+
+	return ToolSurface{Name: name, AlwaysPresent: true}
 }
 
 // descWithInstructions appends natural-language per-tool instructions to the
@@ -84,6 +97,10 @@ func descWithInstructions(desc, instr string) string {
 // `destructive` is variadic and defaults to false; pass true only for truly
 // destructive delete operations (S12) so their DestructiveHint is set, while
 // every other mutation stays non-destructive.
+//
+// mutTool returns the ToolSurface it just registered (AlwaysPresent=true,
+// SPEC L11); when s is nil it only computes the ToolSurface (the surface-only
+// pass used by RegisteredToolSurface), mirroring roTool.
 func mutTool[In, Out any](
 	s *mcpSDK.Server,
 	name, title, desc, instr string,
@@ -91,10 +108,15 @@ func mutTool[In, Out any](
 	idempotent bool,
 	handler func(context.Context, In) (Out, error),
 	destructive ...bool,
-) {
+) ToolSurface {
 	destructiveHint := false
 	if len(destructive) > 0 {
 		destructiveHint = destructive[0]
+	}
+	if s == nil {
+		// Surface-only pass (RegisteredToolSurface): no SDK server to register
+		// against, so just report the tool without calling AddTool or log.
+		return ToolSurface{Name: name, AlwaysPresent: true}
 	}
 	outSchema := outputSchema[Out]()
 	mcpSDK.AddTool(s, &mcpSDK.Tool{
@@ -127,6 +149,8 @@ func mutTool[In, Out any](
 
 		return nil, wrapped, nil
 	})
+
+	return ToolSurface{Name: name, AlwaysPresent: true}
 }
 
 // outputSchema derives the JSON Schema describing a tool's structured output
