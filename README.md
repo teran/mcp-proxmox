@@ -38,14 +38,17 @@ an API token for it.
 
 ## Features
 
-- **Two optional backends + system tools — 51 MCP tools in total:**
-  - **Proxmox VE** (`pve_*`, 34 tools): nodes & cluster (list/status/resources/next-id/backup-jobs/HA),
-    QEMU VMs (list/get/status/create/resize/start/stop/reboot/shutdown/migrate/backup/delete), LXC
-    containers (list/get/status/create/start/stop/reboot/shutdown/delete), storage
+- **Two optional backends + system tools — 73 MCP tools in total with
+  `ENABLE_MUTATIONS=true`** (35 read-only tools with mutations disabled, the default):
+  - **Proxmox VE** (`pve_*`, 53 tools): nodes, cluster & HA (list/status/resources/next-id/backup-jobs/HA-add),
+    backup jobs (create/update/delete), QEMU VMs
+    (list/get/status/snapshot-list/create/resize/migrate/backup/start/stop/shutdown/reboot/reset/suspend/resume/
+    delete/clone/snapshot-create/delete/rollback/restore/set), LXC
+    containers (list/get/status/snapshot-list/start/stop/shutdown/reboot/delete/clone/snapshot-*/set), storage
     (list/status), network (list), tasks (list/status/log), and PVE version.
-  - **Proxmox Backup Server** (`pbs_*`, 15 tools): datastores (list/status),
-    backups/snapshots (list/get/restore/forget), notes (get/set), verify (start/status),
-    gc/prune/sync (start; prune status), and PBS version.
+  - **Proxmox Backup Server** (`pbs_*`, 18 tools): datastores (list/status/config),
+    backups/snapshots & files (list/get/notes/files), restore (file, VM), verify/prune/task
+    status, verify/gc/prune/sync start, and PBS version.
   - **System**: `ping`, `status` — always registered; report which backends are enabled.
 - **Backends enabled only when configured:** a backend whose `endpoint` or `token`
   is missing is simply **absent** — its tools are not registered and nothing fails.
@@ -133,7 +136,7 @@ disabled and its tools are not registered.
 | `LOG_LEVEL` | Log level (`trace`, `debug`, `info`, `warn`, `error`). **When set, logging is enabled**; when unset, logging is **disabled** (no logs are emitted anywhere). |
 | `LOG_FILENAME` | Path of the log file used when `LOG_LEVEL` is set (default `/tmp/mcp-proxmox.log`, mode `0600`). |
 | `LOG_FORMAT` | Log format: `text` (default) or `json`. |
-| `ENABLE_MUTATIONS` | Register mutation tools (default `false`). When `true`, mutation tools (`pve_vm_create`, `pve_vm_resize`, `pve_vm_migrate`, `pve_ha_add`, `pve_vm_backup`, `pbs_verify_start`, `pbs_gc_start`, `pbs_prune_start`, `pbs_sync_start`) are registered for enabled backends; when `false`, only read-only query tools are exposed. |
+| `ENABLE_MUTATIONS` | Register mutation tools (default `false`). When `true`, **all** mutation tools are registered for enabled backends: PVE — create/resize/migrate/HA-add/backup/backup-jobs/start/stop/shutdown/reboot/reset/suspend/resume/delete/clone/snapshot/restore/set; PBS — verify/gc/prune/sync start, file & VM restore. When `false`, only read-only query tools are exposed. |
 
 These are the **only** environment variables the server reads. Proxmox API
 tokens are long-lived, privilege-scoped credentials configured once per backend
@@ -214,17 +217,18 @@ client as a subprocess (see the client configuration below).
 
 | Prefix | Domain | Example tools |
 |---|---|---|
-| `pve_` | Proxmox VE | `pve_node_list`, `pve_vm_start`, `pve_lxc_create`, `pve_storage_list`, `pve_network_list`, `pve_task_status`, `pve_version` |
-| `pbs_` | Proxmox Backup Server | `pbs_datastore_list`, `pbs_backup_list`, `pbs_backup_restore`, `pbs_backup_notes_get`, `pbs_verify_start`, `pbs_prune_status` |
+| `pve_` | Proxmox VE | `pve_node_list`, `pve_vm_start`, `pve_vm_clone`, `pve_storage_list`, `pve_network_list`, `pve_task_status`, `pve_version` |
+| `pbs_` | Proxmox Backup Server | `pbs_datastore_list`, `pbs_backup_list`, `pbs_backup_vm_restore`, `pbs_backup_notes_get`, `pbs_verify_start`, `pbs_prune_status` |
 | — | System | `ping`, `status` |
 
 > **Enablement recap:** all `pve_*` tools are registered only when the PVE backend
 > is configured; all `pbs_*` tools only when PBS is configured. `ping`/`status`
 > are always registered and report which backends are active.
 
-> **Restore/forget semantics (PBS):** `pbs_backup_restore` restores a snapshot and
-> returns the resulting task UPID; `pbs_backup_forget` removes a snapshot from the
-> datastore catalog. Both are mutations and are **never retried**.
+> **Restore semantics (PBS):** `pbs_backup_restore_file` restores a single file out
+> of a backup snapshot to a target path on the PBS filesystem; `pbs_backup_vm_restore`
+> restores a full VM backup snapshot into a PVE datastore and returns the task UPID.
+> Both are mutations and are **never retried**.
 
 > **Read vs write:** `query` tools (reads/`GET`) are idempotent and retried;
 > `mutation` tools (writes/`POST`/`PUT`/`DELETE`) are **never retried** to avoid
@@ -234,7 +238,8 @@ client as a subprocess (see the client configuration below).
 
 ## Complete tool registry
 
-**46 tools**, grouped by domain. `query` = read (idempotent, retried);
+**73 tools** with `ENABLE_MUTATIONS=true`, grouped by domain (35 read-only tools
+with mutations disabled, the default). `query` = read (idempotent, retried);
 `mutation` = write (never retried). This mirrors
 [`SPEC.md`](./SPEC.md#6-tool-registry-complete) §6.
 
@@ -257,36 +262,59 @@ client as a subprocess (see the client configuration below).
 | `pve_backup_job_list` | query | list vzdump backup jobs (schedules) |
 | `pve_ha_add` | mutation | register a new HA resource |
 
-### Proxmox VE — QEMU VMs (12)
+### Proxmox VE — backup jobs (3)
+
+| Tool | Type | Description |
+|---|---|---|
+| `pve_backup_job_create` | mutation | create a vzdump backup job (schedule) |
+| `pve_backup_job_update` | mutation | update a vzdump backup job |
+| `pve_backup_job_delete` | mutation | delete a vzdump backup job |
+
+### Proxmox VE — QEMU VMs (22)
 
 | Tool | Type | Description |
 |---|---|---|
 | `pve_vm_list` | query | list VMs on a node |
 | `pve_vm_get` | query | VM config |
 | `pve_vm_status` | query | VM status |
+| `pve_vm_snapshot_list` | query | list VM snapshots |
 | `pve_vm_create` | mutation | create a VM |
 | `pve_vm_resize` | mutation | resize a VM disk |
-| `pve_vm_start` | mutation | start a VM |
-| `pve_vm_stop` | mutation | stop a VM |
-| `pve_vm_reboot` | mutation | reboot a VM |
-| `pve_vm_shutdown` | mutation | shut down a VM |
 | `pve_vm_migrate` | mutation | migrate a VM |
 | `pve_vm_backup` | mutation | back up a VM (vzdump, returns task UPID) |
+| `pve_vm_start` | mutation | start a VM |
+| `pve_vm_stop` | mutation | stop a VM |
+| `pve_vm_shutdown` | mutation | gracefully shut down a VM |
+| `pve_vm_reboot` | mutation | reboot a VM |
+| `pve_vm_reset` | mutation | reset a VM (no graceful shutdown) |
+| `pve_vm_suspend` | mutation | suspend a VM (optionally to disk) |
+| `pve_vm_resume` | mutation | resume a suspended VM |
 | `pve_vm_delete` | mutation | delete a VM |
+| `pve_vm_clone` | mutation | clone a VM |
+| `pve_vm_snapshot_create` | mutation | create a VM snapshot |
+| `pve_vm_snapshot_delete` | mutation | delete a VM snapshot |
+| `pve_vm_snapshot_rollback` | mutation | roll a VM back to a snapshot |
+| `pve_vm_restore` | mutation | restore a VM from a backup archive (qmrestore) |
+| `pve_vm_set` | mutation | set VM config options (`qm set`) |
 
-### Proxmox VE — LXC containers (9)
+### Proxmox VE — LXC containers (14)
 
 | Tool | Type | Description |
 |---|---|---|
 | `pve_lxc_list` | query | list containers on a node |
 | `pve_lxc_get` | query | container config |
 | `pve_lxc_status` | query | container status |
-| `pve_lxc_create` | mutation | create a container |
+| `pve_lxc_snapshot_list` | query | list container snapshots |
 | `pve_lxc_start` | mutation | start a container |
 | `pve_lxc_stop` | mutation | stop a container |
+| `pve_lxc_shutdown` | mutation | gracefully shut down a container |
 | `pve_lxc_reboot` | mutation | reboot a container |
-| `pve_lxc_shutdown` | mutation | shut down a container |
 | `pve_lxc_delete` | mutation | delete a container |
+| `pve_lxc_clone` | mutation | clone a container |
+| `pve_lxc_snapshot_create` | mutation | create a container snapshot |
+| `pve_lxc_snapshot_delete` | mutation | delete a container snapshot |
+| `pve_lxc_snapshot_rollback` | mutation | roll a container back to a snapshot |
+| `pve_lxc_set` | mutation | set container config options (`pct set`) |
 
 ### Proxmox VE — storage & network (3)
 
@@ -305,38 +333,43 @@ client as a subprocess (see the client configuration below).
 | `pve_task_log` | query | task log by UPID |
 | `pve_version` | query | PVE version info |
 
-### PBS — datastores (2)
+### PBS — datastores (3)
 
 | Tool | Type | Description |
 |---|---|---|
 | `pbs_datastore_list` | query | list datastores |
 | `pbs_datastore_status` | query | datastore status (usage, size, free) |
+| `pbs_datastore_config_get` | query | datastore configuration (path, retention, GC schedule) |
 
-### PBS — backups/snapshots & notes (6)
+### PBS — backups/snapshots & files (6)
 
 | Tool | Type | Description |
 |---|---|---|
 | `pbs_backup_list` | query | list snapshots in a datastore |
-| `pbs_backup_get` | query | get a single snapshot |
-| `pbs_backup_restore` | mutation | restore a snapshot (returns task UPID) |
-| `pbs_backup_forget` | mutation | forget (remove from catalog) a snapshot |
-| `pbs_backup_notes_get` | query | get a snapshot's notes |
-| `pbs_backup_notes_set` | mutation | set a snapshot's notes |
+| `pbs_backup_get` | query | get a backup group's snapshots |
+| `pbs_backup_notes_get` | query | get a backup group's notes |
+| `pbs_backup_files_list` | query | list files inside a backup snapshot |
+| `pbs_backup_restore_file` | mutation | restore a single file from a backup snapshot |
+| `pbs_backup_vm_restore` | mutation | restore a VM backup snapshot into PVE (returns task UPID) |
 
-### PBS — verify, GC, prune, sync & version (7)
+### PBS — verify, GC, prune, sync, tasks & version (9)
 
 | Tool | Type | Description |
 |---|---|---|
-| `pbs_verify_start` | mutation | start a verify job on a datastore |
 | `pbs_verify_status` | query | poll verify-job status |
+| `pbs_prune_status` | query | poll prune-job status |
+| `pbs_task_status` | query | task status by UPID |
+| `pbs_task_log` | query | task log by UPID |
+| `pbs_version` | query | PBS version info |
+| `pbs_verify_start` | mutation | start a verify job on a datastore |
 | `pbs_gc_start` | mutation | start a garbage-collection job on a datastore |
 | `pbs_prune_start` | mutation | start a prune job on a datastore |
-| `pbs_prune_status` | query | poll prune-job status |
 | `pbs_sync_start` | mutation | start a one-off sync job on a datastore |
-| `pbs_version` | query | PBS version info |
 
-**Total: 51 tools** (system 2, PVE 34, PBS 15). Mutation tools are registered
-only when `ENABLE_MUTATIONS=true`. For the authoritative registry, see
+**Total: 73 tools** with `ENABLE_MUTATIONS=true` (system 2, PVE 53, PBS 18).
+Mutation tools are registered **only** when `ENABLE_MUTATIONS=true`; with the
+default (mutations disabled) **35 read-only tools** are registered (system 2,
+PVE 21, PBS 12). For the authoritative registry, see
 [`SPEC.md`](./SPEC.md#6-tool-registry-complete) §6.
 
 ---
