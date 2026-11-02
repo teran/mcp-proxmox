@@ -4,9 +4,8 @@ version: 2
 
 project_name: mcp-proxmox
 
-before:
-  hooks:
-    - go mod tidy
+snapshot:
+  name_template: "{{ .Version }}-SNAPSHOT-{{ .ShortCommit }}"
 
 builds:
   - id: mcp-proxmox
