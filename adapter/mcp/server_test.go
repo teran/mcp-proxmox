@@ -141,6 +141,102 @@ func TestLogIncomingRequestAtInfoLevel(t *testing.T) {
 	})
 }
 
+// newInfoLogger returns a buffer and a logrus logger configured at InfoLevel
+// writing JSON to it, for capturing access-log info lines in tests.
+func newInfoLogger() (*bytes.Buffer, *logrus.Logger) {
+	var buf bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&buf)
+	l.SetFormatter(&logrus.JSONFormatter{})
+	l.SetLevel(logrus.InfoLevel)
+
+	return &buf, l
+}
+
+// TestLogIncomingRequestAlwaysPresent verifies L11: the per-request access-log
+// info line for a tool call carries an always_present field reflecting whether
+// the called tool is always part of the tool surface. Because every tool here is
+// registered statically (the ENABLE_MUTATIONS gate is a startup-time config, not
+// a per-caller dependency), every registered tool reports always_present=true.
+// The value is derived per tool from the same RegisteredToolSurface used by the
+// startup surface log (L10), so it cannot drift from what a client actually
+// sees. The pre-existing access-log fields (tool, source, duration_ms, outcome,
+// redacted args) must remain intact on the same line.
+func TestLogIncomingRequestAlwaysPresentStaticTool(t *testing.T) {
+	buf, l := newInfoLogger()
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(&stubPVEGateway{}))
+	_, sess := newTestServerWithLogger(t, app, l)
+
+	callTool(t, sess, "pve_vm_list", map[string]any{"node": "pve1"})
+
+	line := infoLineContaining(buf.String(), `"tool":"pve_vm_list"`)
+	assert.NotEmpty(t, line, "expected an info access line for the tool call")
+
+	// L11: a statically registered tool is always present.
+	assert.Contains(t, line, `"always_present":true`)
+	// The pre-existing access-log fields are preserved on the same info line.
+	assert.Contains(t, line, `"tool":"pve_vm_list"`)
+	assert.Contains(t, line, `"source":"STDIO"`)
+	assert.Contains(t, line, `"duration_ms":`)
+	assert.Contains(t, line, `"outcome":"ok"`)
+	assert.Contains(t, line, `"args"`)
+}
+
+// TestLogIncomingRequestAlwaysPresentOnError verifies that a failed tool call
+// (IsError result) still logs always_present=true and outcome=error on the
+// access-log info line.
+func TestLogIncomingRequestAlwaysPresentOnError(t *testing.T) {
+	buf, l := newInfoLogger()
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(&stubPVEGateway{err: errors.New("boom")}))
+	_, sess := newTestServerWithLogger(t, app, l)
+
+	// Call directly: the tool errors, so the require.NoError in callTool
+	// would trip. The access log must still be emitted.
+	_, _ = sess.CallTool(context.Background(), &mcpSDK.CallToolParams{
+		Name: "pve_vm_list", Arguments: map[string]any{"node": "pve1"},
+	})
+
+	line := infoLineContaining(buf.String(), `"tool":"pve_vm_list"`)
+	assert.NotEmpty(t, line, "expected an info access line even on an error")
+	assert.Contains(t, line, `"always_present":true`)
+	assert.Contains(t, line, `"outcome":"error"`)
+}
+
+// TestLogIncomingRequestAlwaysPresentDerivedPerTool verifies the direct
+// logIncomingRequest path derives always_present=true for a tool that is part
+// of a non-empty surface.
+func TestLogIncomingRequestAlwaysPresentDerivedPerTool(t *testing.T) {
+	buf, l := newInfoLogger()
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(&stubPVEGateway{}))
+	deps := Deps{App: app, Log: l}
+	ctx := port.WithSessionID(context.Background(), "sess")
+	ctx = port.WithRequestID(ctx, "req")
+
+	req := &mcpSDK.ServerRequest[*mcpSDK.CallToolParams]{
+		Params: &mcpSDK.CallToolParams{Name: "pve_node_list", Arguments: map[string]any{"node": "pve1"}},
+	}
+	logIncomingRequest(ctx, deps, "tools/call", req, nil, 5*time.Millisecond, nil)
+
+	out := buf.String()
+	assert.Contains(t, out, `"always_present":true`)
+	assert.Contains(t, out, `"tool":"pve_node_list"`)
+	assert.Contains(t, out, `"outcome":"ok"`)
+}
+
+// TestLogIncomingRequestAlwaysPresentUnknownTool verifies that with no App
+// (empty surface) an unregistered tool reports always_present=false.
+func TestLogIncomingRequestAlwaysPresentUnknownTool(t *testing.T) {
+	buf, l := newInfoLogger()
+	deps := Deps{Log: l}
+	ctx := port.WithSessionID(context.Background(), "sess")
+	req := &mcpSDK.ServerRequest[*mcpSDK.CallToolParams]{
+		Params: &mcpSDK.CallToolParams{Name: "pve_node_list", Arguments: map[string]any{"node": "pve1"}},
+	}
+	logIncomingRequest(ctx, deps, "tools/call", req, nil, time.Millisecond, nil)
+
+	assert.Contains(t, buf.String(), `"always_present":false`)
+}
+
 // newTestServerWithLogger builds an mcpSDK.Server wired through the real
 // application.App and RegisterTools path with an injected logrus logger (so
 // per-tool trace lines can be captured), returning the server plus a connected
@@ -180,6 +276,21 @@ func traceLineContaining(out, sub string) string {
 			continue
 		}
 		if strings.Contains(line, `"level":"trace"`) && strings.Contains(line, sub) {
+			return line
+		}
+	}
+
+	return ""
+}
+
+// infoLineContaining returns the first captured logrus line (JSON) whose level
+// is info and which contains the given substring, or "" if none matches.
+func infoLineContaining(out, sub string) string {
+	for line := range strings.SplitSeq(out, "\n") {
+		if line == "" {
+			continue
+		}
+		if strings.Contains(line, `"level":"info"`) && strings.Contains(line, sub) {
 			return line
 		}
 	}
