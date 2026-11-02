@@ -96,6 +96,18 @@ func TestEnableMutations(t *testing.T) {
 	}
 }
 
+// TestLoadEnvconfigError verifies Load surfaces an error from envconfig when an
+// environment variable cannot be parsed into its target field. ENABLE_MUTATIONS
+// is a bool, so a non-boolean value must make Process fail and Load return that
+// error (rather than silently succeeding with a partial config).
+func TestLoadEnvconfigError(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("ENABLE_MUTATIONS", "not-a-bool")
+
+	_, err := Load()
+	require.Error(t, err, "Load must propagate an envconfig parse error")
+}
+
 func TestLoggingDefaults(t *testing.T) {
 	clearEnv(t)
 	c, err := Load()

@@ -10,6 +10,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -296,6 +297,58 @@ func infoLineContaining(out, sub string) string {
 	}
 
 	return ""
+}
+
+// TestAlwaysPresentUnknownTool verifies alwaysPresent reports false for a tool
+// that is not part of the registered surface (the loop falls through without a
+// match).
+func TestAlwaysPresentUnknownTool(t *testing.T) {
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(&stubPVEGateway{}))
+	assert.False(t, alwaysPresent(Deps{App: app}, "no_such_tool"))
+}
+
+// TestToolCallFromRequestRaw verifies toolCallFromRequest decodes a
+// CallToolParamsRaw (the wire form) into a name plus an unmarshalled argument
+// map, and falls back to a nil-args success for raw requests with no arguments.
+func TestToolCallFromRequestRaw(t *testing.T) {
+	t.Run("decodes arguments", func(t *testing.T) {
+		req := &mcpSDK.ServerRequest[*mcpSDK.CallToolParamsRaw]{
+			Params: &mcpSDK.CallToolParamsRaw{Name: "pve_vm_list", Arguments: []byte(`{"node":"pve1"}`)},
+		}
+		name, args, ok := toolCallFromRequest(req)
+		require.True(t, ok)
+		assert.Equal(t, "pve_vm_list", name)
+		m, ok := args.(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "pve1", m["node"])
+	})
+
+	t.Run("no arguments still succeeds", func(t *testing.T) {
+		req := &mcpSDK.ServerRequest[*mcpSDK.CallToolParamsRaw]{
+			Params: &mcpSDK.CallToolParamsRaw{Name: "ping"},
+		}
+		name, args, ok := toolCallFromRequest(req)
+		require.True(t, ok)
+		assert.Equal(t, "ping", name)
+		assert.Nil(t, args)
+	})
+
+	t.Run("non-tool request not ok", func(t *testing.T) {
+		_, _, ok := toolCallFromRequest(&mcpSDK.ServerRequest[*mcpSDK.InitializeParams]{
+			Params: &mcpSDK.InitializeParams{},
+		})
+		assert.False(t, ok)
+	})
+}
+
+// TestSanitizeArgsNilAndPointer verifies sanitizeArgs handles a typed nil
+// pointer (returns "{}") and a non-nil pointer (dereferences then sanitizes).
+func TestSanitizeArgsNilAndPointer(t *testing.T) {
+	var p *map[string]any
+	assert.Equal(t, "{}", sanitizeArgs(p))
+
+	m := map[string]any{"node": "pve1"}
+	assert.Contains(t, sanitizeArgs(&m), `"node":"pve1"`)
 }
 
 // TestPerToolTraceLine verifies that, at LOG_LEVEL=trace, a real tool call
