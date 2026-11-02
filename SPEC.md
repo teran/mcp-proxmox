@@ -3,13 +3,14 @@
 **Language:** English (fixed by the user — do not translate).
 **Module:** `github.com/teran/mcp-proxmox`
 **Go:** 1.27.3
-**Status:** design snapshot (authoritative technical reference; implementation to follow).
+**Status:** implemented — this document is the authoritative technical reference
+and is kept in sync with the implementation.
 
 This document is the authoritative technical reference for the `mcp-proxmox`
 project: the source of truth for the intended architecture, tool registry, run
-modes, authentication model, and quality requirements. It is written *before*
-the implementation so the design decisions are fixed up front; `README.md`,
-`AGENTS.md`, and CI configuration will be derived from it.
+modes, authentication model, and quality requirements. The server is
+**implemented**; `README.md`, `AGENTS.md`, and the CI configuration document the
+operational reality and are kept in sync with this SPEC.
 
 ---
 
@@ -127,8 +128,8 @@ mcp-proxmox/
 ├── .github/workflows/release.yml # GitHub Actions release (goreleaser on tags)
 ├── LICENSE                      # Apache-2.0, © 2026 Igor Shishkin
 ├── SPEC.md                      # this document
-├── AGENTS.md                    # derived later
-└── README.md                    # user-facing documentation (derived later)
+├── AGENTS.md                    # agent-facing developer/ops guide (present)
+└── README.md                    # user-facing documentation (present)
 ```
 
 ### 2.4 Architectural decisions and rationale
@@ -139,6 +140,18 @@ go-sdk, the low-level `net/http`, logrus, or any Proxmox client. This is a custo
 and is enforced by `.go-arch-lint.yml` (`go-arch-lint check`), not
 by a hidden `internal/` directory. Dependencies point inward only through the
 `domain/port` interfaces.
+
+**Outer layer name: `adapter/`, not `infrastructure/`.** The outermost
+implementation layer is deliberately named **`adapter/`** — the canonical Clean
+Architecture term for *interface adapters* (HTTP clients/gateways, presenters,
+controllers) — rather than the MCP-server skill's literal `infrastructure/`
+label. This is a **recorded, deliberate decision**: the skill's
+`infrastructure/` is understood to mean the same "outer ring of
+implementations" layer, but we follow the standard Clean Architecture
+vocabulary already used across the org's fleet (`mcp-regcloud`,
+`mcp-entertainment`). `go-arch-lint` (`.go-arch-lint.yml`) and `depguard`
+(`.golangci.yml`) are configured to this exact `adapter/` layout, so the
+boundary is enforced structurally, not just by convention.
 
 **Module namespace — decision.** The repository is hosted on **GitHub.com**
 (`github.com/teran/mcp-proxmox`), so the Go module path
@@ -232,6 +245,13 @@ The tool surface is delivered **phased** and **gated**:
   planned.
 - **Default:** mutations are off (read-only + system vertical slice) until
   `ENABLE_MUTATIONS=true` is set.
+
+**L11 `always_present` nuance.** All registered tools are **static per process
+run**: the tool surface is fixed at startup — the `ENABLE_MUTATIONS` gate is a
+**startup-time config**, not a per-request/caller dependency. Consequently every
+registered tool is `always_present=true` (there are no conditionally-present or
+caller-dependent tools), and the per-call access log (§5.1c) need not repeat
+that fact for each tool.
 
 ---
 
@@ -427,6 +447,16 @@ image exists for operator convenience only, is never released, and does not turn
 the server into a Remote/Hybrid one. If a remote HTTP mode is ever implemented
 (§4.1), the image becomes a first-class release artifact and R1/R3/R4/N14 apply
 in full.
+
+**Observability N/A (Local).** The O-series criteria (O01–O04 — the internal
+observability endpoint on `:8081` exposing **Prometheus** metrics, **pprof**,
+and liveness/readiness **probes**) are **NOT applicable**: this is a **Local
+(stdio-only)** server with **no HTTP transport and no network listener**, so
+there is no `:8081`-style internal endpoint on which to expose
+Prometheus/pprof/probes. The O-series rationale (O01/O04/N32) applies to
+**Remote/Hybrid** servers only; for a Local stdio server these criteria are N/A.
+Process observability is instead covered by the stdio file log sink
+(§5.1b/§5.1c) and upstream request logging.
 
 ### 4.7 Data and state model (X1–X5)
 
