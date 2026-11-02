@@ -88,9 +88,10 @@ func NewServer(impl *mcpSDK.Implementation, deps Deps, opts *mcpSDK.ServerOption
 // level (SPEC.md L8 — unconditionally when logging is enabled, NOT gated behind
 // debug). For a tool call it carries the tool name and the REDACTED args
 // (sanitizeArgs redacts secrets per S02, so no raw secret can reach the
-// journal), plus source ("STDIO"), duration and outcome, tagged with
-// session_id/request_id from ctx. Byte-size metrics (in_bytes/out_bytes) are
-// confined to the trace line below. A nil logger is a silent no-op.
+// journal), the tool's always_present flag (L11), plus source ("STDIO"),
+// duration and outcome, tagged with session_id/request_id from ctx. Byte-size
+// metrics (in_bytes/out_bytes) are confined to the trace line below. A nil
+// logger is a silent no-op.
 //
 // At trace level it additionally emits a DEDICATED trace line (below the info
 // line) that carries the tool name, redacted args and the byte-size/duration/
@@ -105,6 +106,13 @@ func logIncomingRequest(
 	outcome := "ok"
 	if err != nil {
 		outcome = "error"
+	} else if res != nil {
+		// The go-sdk surfaces tool-handler errors as a *CallToolResult with
+		// IsError=true and a nil Go error (SPEC L8): a failed tool call must
+		// still be logged as outcome=error.
+		if ctr, ok := res.(*mcpSDK.CallToolResult); ok && ctr.IsError {
+			outcome = "error"
+		}
 	}
 
 	fields := logrus.Fields{
@@ -112,7 +120,7 @@ func logIncomingRequest(
 		"duration_ms": dur.Milliseconds(),
 		"outcome":     outcome,
 	}
-	extra, traceFields := applyToolCall(req, res, deps.Log, dur, outcome)
+	extra, traceFields := applyToolCall(req, res, deps, dur, outcome)
 	maps.Copy(fields, extra)
 
 	e := logging.WithSession(ctx, deps.Log)
@@ -125,24 +133,25 @@ func logIncomingRequest(
 // applyToolCall enriches the request log fields for a tools/call request and
 // returns the optional trace-level fields. For non-tool-call requests (e.g.
 // initialize) it returns (nil, nil). The REDACTED args are placed on the info
-// line (sanitizeArgs guarantees no secrets, S02), while byte-size metrics stay
-// on the trace-only fields.
+// line (sanitizeArgs guarantees no secrets, S02), along with the tool's
+// always_present flag (L11, derived per tool from the surface), while byte-size
+// metrics stay on the trace-only fields.
 func applyToolCall(
-	req mcpSDK.Request, res mcpSDK.Result, log *logrus.Logger, dur time.Duration, outcome string,
+	req mcpSDK.Request, res mcpSDK.Result, deps Deps, dur time.Duration, outcome string,
 ) (logrus.Fields, logrus.Fields) {
 	name, args, ok := toolCallFromRequest(req)
 	if !ok {
 		return nil, nil
 	}
 
-	fields := logrus.Fields{"tool": name}
+	fields := logrus.Fields{"tool": name, "always_present": alwaysPresent(deps, name)}
 	if args != nil {
 		fields["args"] = sanitizeArgs(args)
 	}
 
 	// Byte-size metrics are confined to the trace line (below); only a logrus
 	// logger at trace level populates them.
-	if !log.IsLevelEnabled(logrus.TraceLevel) {
+	if !deps.Log.IsLevelEnabled(logrus.TraceLevel) {
 		return fields, nil
 	}
 	if args != nil {
@@ -168,6 +177,26 @@ func applyToolCall(
 	}
 
 	return fields, traceFields
+}
+
+// alwaysPresent reports whether the named tool is registered as always present
+// (SPEC L11), looked up per tool from the derived surface. Reusing
+// RegisteredToolSurface means the value is derived from the exact same
+// registration logic as the startup surface log and tools/list, so it cannot
+// drift — today every registered tool is static and returns true, but the
+// mechanism stays correct if dynamic per-caller tools ever appear. A nil App or
+// an unknown tool name reports false (the tool is not present at all).
+func alwaysPresent(deps Deps, name string) bool {
+	if deps.App == nil {
+		return false
+	}
+	for _, t := range RegisteredToolSurface(deps.App, deps.EnableMutations) {
+		if t.Name == name {
+			return t.AlwaysPresent
+		}
+	}
+
+	return false
 }
 
 // toolCallFromRequest extracts the tool name and its arguments from a tools/call
