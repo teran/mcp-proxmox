@@ -156,3 +156,149 @@ func TestLogRegisteredTools_Empty(t *testing.T) {
 	assert.NotPanics(t, func() { logRegisteredTools(l, nil) })
 	assert.Empty(t, strings.TrimSpace(buf.String()), "no tools -> no log lines")
 }
+
+// ---------------------------------------------------------------------------
+// FEATURE 3: -mode http|stdio flag (M06). @developer owns the implementation;
+// @qa defines the contract via validateMode and, when a testable run(...) is
+// extracted, the run-level exit-code/stderr behaviors.
+// ---------------------------------------------------------------------------
+
+// TestValidateMode pins the launch-mode gate. The server is a Local stdio-only
+// server, so only "stdio" is accepted; "http" must be explicitly rejected as
+// not-implemented and any other value rejected as invalid.
+func TestValidateMode(t *testing.T) {
+	tests := []struct {
+		name       string
+		mode       string
+		wantErr    bool
+		wantSubstr []string // substrings that must appear in a non-nil error
+	}{
+		{
+			name:    "stdio accepted",
+			mode:    "stdio",
+			wantErr: false,
+		},
+		{
+			name:       "http rejected as not implemented",
+			mode:       "http",
+			wantErr:    true,
+			wantSubstr: []string{"http", "not implemented"},
+		},
+		{
+			name:       "empty string is invalid",
+			mode:       "",
+			wantErr:    true,
+			wantSubstr: []string{"invalid", "stdio", "http"},
+		},
+		{
+			name:       "uppercase HTTP is invalid (case-sensitive)",
+			mode:       "HTTP",
+			wantErr:    true,
+			wantSubstr: []string{"invalid", "stdio", "http"},
+		},
+		{
+			name:       "arbitrary value is invalid",
+			mode:       "foo",
+			wantErr:    true,
+			wantSubstr: []string{"invalid", "stdio", "http"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateMode(tt.mode)
+			if !tt.wantErr {
+				require.NoError(t, err, "mode %q must be accepted", tt.mode)
+
+				return
+			}
+			require.Error(t, err, "mode %q must be rejected", tt.mode)
+			for _, s := range tt.wantSubstr {
+				assert.Contains(t, strings.ToLower(err.Error()), s,
+					"error for mode %q must mention %q", tt.mode, s)
+			}
+		})
+	}
+}
+
+// runFixture runs a mode-validation-focused invocation of run and returns the
+// buffers so tests can assert the exit code, stdout and stderr independently.
+func runFixture(args ...string) (code int, stdout, stderr string) {
+	var out, errb bytes.Buffer
+	code = run(args, &out, &errb)
+
+	return code, out.String(), errb.String()
+}
+
+// TestRunHTTPModeRejected asserts that requesting HTTP mode makes run exit
+// non-zero and print a clear "not implemented" error to stderr. This is the
+// M06 criterion: launch mode is selectable via flag but, as a Local stdio-only
+// server, HTTP must be rejected, not silently ignored.
+func TestRunHTTPModeRejected(t *testing.T) {
+	code, stdout, stderr := runFixture("mcp-proxmox", "-mode", "http")
+
+	assert.NotZero(t, code, "HTTP mode must produce a non-zero exit code")
+	lower := strings.ToLower(stderr)
+	assert.Contains(t, lower, "http", "stderr must mention the http mode")
+	assert.Contains(t, lower, "not implemented", "stderr must state http is not implemented")
+	assert.Empty(t, stdout, "rejected mode must not write to stdout")
+}
+
+// TestRunInvalidMode asserts that any invalid mode value is rejected with a
+// non-zero exit and an "invalid mode ... stdio ... http" message on stderr.
+func TestRunInvalidMode(t *testing.T) {
+	tests := []struct {
+		name string
+		val  string
+	}{
+		{name: "empty string", val: ""},
+		{name: "uppercase HTTP", val: "HTTP"},
+		{name: "arbitrary value", val: "foo"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := []string{"mcp-proxmox", "-mode", tt.val}
+			code, stdout, stderr := runFixture(args...)
+
+			assert.NotZero(t, code, "invalid mode %q must exit non-zero", tt.val)
+			lower := strings.ToLower(stderr)
+			assert.Contains(t, lower, "invalid", "stderr must call the mode invalid")
+			assert.Contains(t, lower, "stdio", "stderr must mention the allowed stdio mode")
+			assert.Contains(t, lower, "http", "stderr must mention the allowed http mode")
+			assert.Empty(t, stdout, "rejected mode must not write to stdout")
+		})
+	}
+}
+
+// TestRunMissingModeValue asserts that a -mode flag with no value is rejected
+// (flag package reports a usage/parse error) rather than being silently
+// accepted as an empty-but-valid mode.
+func TestRunMissingModeValue(t *testing.T) {
+	code, _, stderr := runFixture("mcp-proxmox", "-mode")
+
+	assert.NotZero(t, code, "a -mode flag with no value must not succeed")
+	assert.NotEmpty(t, strings.TrimSpace(stderr), "a parse error must be reported to stderr")
+}
+
+// TestRunVersion asserts -version still prints the version and exits 0,
+// regardless of the new -mode wiring (the version path short-circuits before
+// any mode validation or server startup).
+func TestRunVersion(t *testing.T) {
+	code, stdout, stderr := runFixture("mcp-proxmox", "-version")
+
+	assert.Zero(t, code, "-version must exit 0")
+	assert.Contains(t, stdout, versionString(), "-version must print the version line")
+	assert.Empty(t, stderr, "-version must not write to stderr")
+}
+
+// TestRunStdioProceedsWithoutModeError guards that the default/no -mode (and
+// explicit -mode stdio) path does NOT hit the mode gate: it must not produce a
+// "not implemented" or "invalid mode" rejection. Because the stdio path starts
+// the real server loop and would block, this test is scoped to the observable
+// mode-gate surface only — the full stdio acceptance is pinned at the unit
+// level by TestValidateMode("stdio") returning nil.
+func TestRunStdioProceedsWithoutModeError(t *testing.T) {
+	require.NoError(t, validateMode("stdio"),
+		"validateMode must accept stdio so run() never rejects the default mode")
+}
