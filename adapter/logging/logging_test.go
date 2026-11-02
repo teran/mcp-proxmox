@@ -149,6 +149,34 @@ func TestAppLoggerContextAllLevels(t *testing.T) {
 
 // TestWithSessionTags verifies WithSession adds session_id/request_id fields
 // only when present in the context.
+// TestAppLoggerTracef verifies the trace-level AppLogger methods (Tracef and
+// TracefContextf) write at trace level, including the session/request tags on
+// the ctx-aware variant. These are the only AppLogger methods not covered by
+// TestAppLoggerLevels / TestAppLoggerContextAllLevels (which start at debug).
+func TestAppLoggerTracef(t *testing.T) {
+	var buf bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&buf)
+	l.SetFormatter(&logrus.JSONFormatter{})
+	l.SetLevel(logrus.TraceLevel)
+
+	app := NewAppLogger(l)
+	aware, ok := app.(port.RequestAwareLogger)
+	require.True(t, ok, "appLogger must implement RequestAwareLogger")
+
+	app.Tracef("plain trace")
+	ctx := port.WithSessionID(context.Background(), "sess-t")
+	ctx = port.WithRequestID(ctx, "req-t")
+	aware.TracefContextf(ctx, "ctx trace")
+
+	out := buf.String()
+	assert.Contains(t, out, `"level":"trace"`)
+	assert.Contains(t, out, `"msg":"plain trace"`)
+	assert.Contains(t, out, `"msg":"ctx trace"`)
+	assert.Contains(t, out, `"session_id":"sess-t"`)
+	assert.Contains(t, out, `"request_id":"req-t"`)
+}
+
 func TestWithSessionTags(t *testing.T) {
 	var buf bytes.Buffer
 	l := logrus.New()

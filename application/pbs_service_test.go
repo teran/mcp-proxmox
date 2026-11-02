@@ -30,6 +30,16 @@ func TestPBSService_ReadDatastores(t *testing.T) {
 		assert.Equal(t, int64(1000), got.Total)
 	})
 
+	t.Run("GetDatastoreConfig", func(t *testing.T) {
+		gateway := &mockPBSGateway{getDatastoreConfig: func(_ context.Context, store string) (*model.DatastoreConfig, error) {
+			return &model.DatastoreConfig{Path: "/" + store, Backend: "filesystem"}, nil
+		}}
+		got, err := (&PBSService{gw: gateway}).GetDatastoreConfig(context.Background(), "backup")
+		require.NoError(t, err)
+		assert.Equal(t, "/backup", got.Path)
+		assert.Equal(t, "filesystem", got.Backend)
+	})
+
 	t.Run("ListBackups", func(t *testing.T) {
 		gateway := &mockPBSGateway{listBackups: func(_ context.Context, _ string) ([]model.Backup, error) {
 			return []model.Backup{{BackupID: "vm/100/..."}}, nil
@@ -151,6 +161,11 @@ var pbsErrorPropagationCases = []struct {
 
 		return e
 	}},
+	{"GetDatastoreConfig", func(s *PBSService) error {
+		_, e := s.GetDatastoreConfig(context.Background(), "s")
+
+		return e
+	}},
 	{"ListBackups", func(s *PBSService) error {
 		_, e := s.ListBackups(context.Background(), "s")
 
@@ -208,6 +223,7 @@ func newFailingPBSGateway(sentinel error) *mockPBSGateway {
 	gateway := &mockPBSGateway{}
 	gateway.listDatastores = func(_ context.Context) ([]model.Datastore, error) { return nil, sentinel }
 	gateway.getDatastoreStats = func(_ context.Context, _ string) (*model.DatastoreStatus, error) { return nil, sentinel }
+	gateway.getDatastoreConfig = func(_ context.Context, _ string) (*model.DatastoreConfig, error) { return nil, sentinel }
 	gateway.listBackups = func(_ context.Context, _ string) ([]model.Backup, error) { return nil, sentinel }
 	gateway.getBackup = func(_ context.Context, _, _ string) ([]model.Backup, error) { return nil, sentinel }
 	gateway.getBackupNotes = func(_ context.Context, _, _, _ string) (*model.BackupNotes, error) {

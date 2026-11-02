@@ -110,6 +110,47 @@ type mutTestInput struct {
 	Fail  bool   `json:"fail,omitempty"`
 }
 
+// TestRoTool verifies the roTool helper's handler shape: success wraps output,
+// a plain error is logged and returned (IsError), and an error carrying an HTTP
+// status is logged via ErrorfStatusf. The roTool error branches are not covered
+// by the tool-level tests, so they are pinned here directly.
+func TestRoTool(t *testing.T) {
+	t.Run("success wraps output", func(t *testing.T) {
+		s := mcpSDK.NewServer(&mcpSDK.Implementation{Name: "t", Version: "v"}, nil)
+		roTool(s, "test_ro", "RO", "a read-only tool", "", toolLogger{log: nopLogger{}},
+			func(_ context.Context, _ mutTestInput) (any, error) { return "ok", nil })
+		sess := connectTestServer(t, s)
+
+		res := callTool(t, sess, "test_ro", map[string]any{})
+		assert.False(t, res.IsError)
+		sc, ok := res.StructuredContent.(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "ok", sc["value"])
+	})
+
+	t.Run("plain error flags IsError", func(t *testing.T) {
+		s := mcpSDK.NewServer(&mcpSDK.Implementation{Name: "t", Version: "v"}, nil)
+		roTool(s, "test_ro_err", "RO", "d", "", toolLogger{log: nopLogger{}},
+			func(_ context.Context, _ mutTestInput) (any, error) { return nil, errors.New("boom") })
+		sess := connectTestServer(t, s)
+
+		res := callTool(t, sess, "test_ro_err", map[string]any{})
+		assert.True(t, res.IsError)
+	})
+
+	t.Run("status error uses ErrorfStatus", func(t *testing.T) {
+		s := mcpSDK.NewServer(&mcpSDK.Implementation{Name: "t", Version: "v"}, nil)
+		roTool(s, "test_ro_status", "RO", "d", "", toolLogger{log: nopLogger{}},
+			func(_ context.Context, _ mutTestInput) (any, error) {
+				return nil, &port.HTTPStatusError{Status: 503, Err: errors.New("upstream")}
+			})
+		sess := connectTestServer(t, s)
+
+		res := callTool(t, sess, "test_ro_status", map[string]any{})
+		assert.True(t, res.IsError)
+	})
+}
+
 // mutTestHandler is the default handler exercised by TestMutTool's success and
 // plain-error paths.
 func mutTestHandler(_ context.Context, i mutTestInput) (any, error) {
@@ -318,4 +359,81 @@ func TestSanitizeOutput_TypedSlicePreservedWhenNoSecret(t *testing.T) {
 
 	assert.True(t, reflect.DeepEqual(in, out),
 		"typed slice without secrets must pass through unchanged (got %#v)", out)
+}
+
+// TestSanitizeOutput_NilPointer passes through a typed nil pointer unchanged:
+// sanitizeOutput must not panic and must return the nil pointer as-is.
+func TestSanitizeOutput_NilPointer(t *testing.T) {
+	var p *string
+	assert.Nil(t, sanitizeOutput(p))
+}
+
+// privateFieldOut carries an unexported field (skipped by redaction) alongside a
+// secret-tagged field, so the unexported-field skip branches in
+// structNeedsRedaction and sanitizeStruct are exercised.
+type privateFieldOut struct {
+	hidden string // unexported: must be skipped
+	Token  string `json:"token,omitempty" secret:"true"`
+	Note   string `json:"note,omitempty"`
+}
+
+// TestSanitizeOutput_SkipsUnexportedFields verifies unexported struct fields
+// are ignored by redaction while secret-tagged fields are still redacted.
+func TestSanitizeOutput_SkipsUnexportedFields(t *testing.T) {
+	out := sanitizeOutput(privateFieldOut{hidden: "x", Token: "secret1", Note: "ok"})
+
+	b, err := json.Marshal(out)
+	require.NoError(t, err)
+	s := string(b)
+
+	assert.NotContains(t, s, "secret1", "secret value must never reach output")
+	assert.Contains(t, s, "[redacted]", "secret field must be redacted")
+	assert.Contains(t, s, `"note":"ok"`, "exported non-secret field preserved")
+	assert.NotContains(t, s, "hidden", "unexported field must be skipped")
+}
+
+// TestSanitizeOutput_RedactsControlCharField verifies a non-secret struct field
+// carrying ANSI/control bytes is still rewritten (control stripped) by the
+// redaction walk, exercising the nested needsRedaction branch.
+func TestSanitizeOutput_RedactsControlCharField(t *testing.T) {
+	out := sanitizeOutput(struct {
+		Note string `json:"note,omitempty"`
+	}{Note: "a\x1b[31mb"})
+
+	b, err := json.Marshal(out)
+	require.NoError(t, err)
+	assert.NotContains(t, string(b), "\x1b", "control bytes must be stripped")
+	assert.Contains(t, string(b), `"note":"ab"`)
+}
+
+// TestSanitizeOutput_RedactsNilPointerSibling verifies a nil pointer field
+// nested inside a struct that otherwise needs redaction is handled (needsRedaction
+// returns false for a nil pointer) without panicking.
+func TestSanitizeOutput_RedactsNilPointerSibling(t *testing.T) {
+	type withNilPtr struct {
+		Ptr   *int
+		Token string `json:"token,omitempty" secret:"true"`
+	}
+	out := sanitizeOutput(withNilPtr{Ptr: nil, Token: "secret2"})
+
+	b, err := json.Marshal(out)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), "[redacted]")
+}
+
+// TestSanitizeOutput_NonStringMapKey verifies a map with a non-string key is
+// rendered via its string form (fmt.Sprint) while its sensitive/control value
+// is still sanitized.
+func TestSanitizeOutput_NonStringMapKey(t *testing.T) {
+	out := sanitizeOutput(map[int]string{1: "a\x1b[31mb"})
+
+	m, ok := out.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "ab", m["1"], "non-string key rendered as string, control stripped")
+}
+
+// TestStripControlTwoCharSequence verifies a two-character ESC sequence (ESC
+// followed by a single non-'[' byte) is dropped entirely.
+func TestStripControlTwoCharSequence(t *testing.T) {
+	assert.Equal(t, "ab", stripControl("a\x1bMb"))
 }

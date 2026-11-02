@@ -30,6 +30,28 @@ func TestFlexIntUnmarshalNumber(t *testing.T) {
 	}
 }
 
+// TestFlexIntUnmarshalInvalid verifies that a non-numeric value (after
+// trimming optional quotes) returns an error rather than silently decoding to
+// zero.
+func TestFlexIntUnmarshalInvalid(t *testing.T) {
+	var f FlexInt
+	if err := json.Unmarshal([]byte(`"not-a-number"`), &f); err == nil {
+		t.Fatal("expected an error for a non-numeric FlexInt value")
+	}
+}
+
+// TestFlexIntMarshalNumber verifies FlexInt serializes back as a plain JSON
+// number.
+func TestFlexIntMarshalNumber(t *testing.T) {
+	b, err := json.Marshal(FlexInt(42))
+	if err != nil {
+		t.Fatalf("marshal FlexInt: %v", err)
+	}
+	if string(b) != "42" {
+		t.Fatalf("got %s, want 42", b)
+	}
+}
+
 // TestFlexIntUnmarshalNullAndEmpty verifies that JSON null and an empty string
 // both decode to zero.
 func TestFlexIntUnmarshalNullAndEmpty(t *testing.T) {
