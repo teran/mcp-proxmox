@@ -51,7 +51,7 @@ func sysTool[In any, Out any](
 	if s == nil {
 		// Surface-only pass (RegisteredToolSurface): no SDK server to register
 		// against, so just report the tool without calling AddTool or log.
-		return ToolSurface{Name: name, AlwaysPresent: true}
+		return ToolSurface{Name: name, Title: title, AlwaysPresent: true}
 	}
 	outSchema := outputSchema[Out]()
 	mcpSDK.AddTool(s, &mcpSDK.Tool{
@@ -81,5 +81,5 @@ func sysTool[In any, Out any](
 		return nil, wrapped, nil
 	})
 
-	return ToolSurface{Name: name, AlwaysPresent: true}
+	return ToolSurface{Name: name, Title: title, AlwaysPresent: true}
 }

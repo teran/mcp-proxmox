@@ -17,6 +17,7 @@ import (
 //
 //	type ToolSurface struct {
 //	    Name          string
+//	    Title         string
 //	    AlwaysPresent bool
 //	}
 //	func RegisteredToolSurface(app *application.App, enableMutations bool) []ToolSurface
@@ -94,6 +95,8 @@ func assertSurfaceComposition(t *testing.T, surface []ToolSurface, pve, pbs, ena
 	names := make(map[string]bool, len(surface))
 	for _, ts := range surface {
 		names[ts.Name] = true
+		require.NotEmpty(t, ts.Title,
+			"L10/L05GO: every surface entry must carry a title; %s had none", ts.Name)
 		require.True(t, ts.AlwaysPresent,
 			"L11: every surface entry must be AlwaysPresent; %s was not", ts.Name)
 	}
@@ -174,5 +177,24 @@ func TestRegisteredToolSurface_Order(t *testing.T) {
 		assert.True(t, prev < ts.Name,
 			"surface must be sorted by name (tools/list order); %q after %q", ts.Name, prev)
 		prev = ts.Name
+	}
+}
+
+// TestToolSurface_EveryEntryHasTitle is the focused L10/L05GO conformance check
+// over the full surface (both backends, mutations on): every entry must carry a
+// non-empty Name and human-readable Title, and report AlwaysPresent == true, so
+// the startup tool-surface log can emit a meaningful `title` for every tool.
+func TestToolSurface_EveryEntryHasTitle(t *testing.T) {
+	app := application.New(nopLogger{}, "v1.0.0",
+		application.WithPVE(&stubPVEGateway{}), application.WithPBS(&stubPBSGateway{}))
+	surface := RegisteredToolSurface(app, true)
+
+	require.NotEmpty(t, surface, "full surface must not be empty")
+	for _, ts := range surface {
+		assert.NotEmpty(t, ts.Name, "every surface entry must carry a name")
+		assert.NotEmpty(t, ts.Title,
+			"L10/L05GO: every surface entry must carry a title; %s had none", ts.Name)
+		assert.True(t, ts.AlwaysPresent,
+			"L11: every surface entry must be AlwaysPresent; %s was not", ts.Name)
 	}
 }

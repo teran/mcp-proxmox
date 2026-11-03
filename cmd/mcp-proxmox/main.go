@@ -85,14 +85,15 @@ func validateMode(mode string) error {
 	}
 }
 
-// logRegisteredTools emits the startup tool-surface log (SPEC L10/L11): one info
-// line per registered tool, tagged with the tool name and the always_present
-// field (true for every tool because registration is static per run — there are
-// no per-caller dynamic tools). It is a no-op on an empty surface, and when
-// logging is disabled the logger discards the lines anyway.
+// logRegisteredTools emits the startup tool-surface log (SPEC L10/L11/L05GO):
+// one info line per registered tool, tagged with the tool name, its
+// human-readable title, and the always_present field (true for every tool
+// because registration is static per run — there are no per-caller dynamic
+// tools). It is a no-op on an empty surface, and when logging is disabled the
+// logger discards the lines anyway.
 func logRegisteredTools(log *logrus.Logger, surface []mcp.ToolSurface) {
 	for _, t := range surface {
-		log.WithField("tool", t.Name).WithField("always_present", t.AlwaysPresent).Infof("registered tool")
+		log.WithField("tool", t.Name).WithField("title", t.Title).WithField("always_present", t.AlwaysPresent).Infof("registered tool")
 	}
 }
 

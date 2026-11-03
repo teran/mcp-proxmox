@@ -8,11 +8,13 @@ import (
 )
 
 // ToolSurface describes one registered tool for the startup tool-surface log
-// (SPEC L10/L11). AlwaysPresent is true for every tool because registration is
+// (SPEC L10/L11/L05GO): it records the tool's name, human-readable title, and
+// AlwaysPresent. AlwaysPresent is true for every tool because registration is
 // static per run (no per-caller dynamic tools); the field is present so the
 // auditable surface log documents it.
 type ToolSurface struct {
 	Name          string
+	Title         string
 	AlwaysPresent bool
 }
 

@@ -104,8 +104,8 @@ func TestBuildAppBothBackendsKeepsBoth(t *testing.T) {
 
 // TestLogRegisteredTools pins the L10 startup tool-surface log emitted after the
 // server is created in main(): for every tool it must emit an info line
-// carrying the `tool` name and the `always_present` field (L11), one line per
-// tool, with always_present=true.
+// carrying the `tool` name, the L10 `title` field and the `always_present`
+// field (L11), one line per tool, with always_present=true.
 //
 // CONTRACT SEAM: main() itself is not directly unit-testable (it calls
 // config.Load() and runs the stdio server loop), so the log loop is factored
@@ -124,9 +124,9 @@ func TestLogRegisteredTools(t *testing.T) {
 	l.SetLevel(logrus.InfoLevel)
 
 	surface := []mcp.ToolSurface{
-		{Name: "ping", AlwaysPresent: true},
-		{Name: "pve_node_list", AlwaysPresent: true},
-		{Name: "pve_vm_create", AlwaysPresent: true},
+		{Name: "ping", Title: "Liveness check", AlwaysPresent: true},
+		{Name: "pve_node_list", Title: "List PVE nodes", AlwaysPresent: true},
+		{Name: "pve_vm_create", Title: "Create a VM", AlwaysPresent: true},
 	}
 	logRegisteredTools(l, surface)
 
@@ -139,6 +139,8 @@ func TestLogRegisteredTools(t *testing.T) {
 	for i, line := range lines {
 		assert.Contains(t, line, `"msg":"registered tool"`, "line %d must be a registered-tool line", i)
 		assert.Contains(t, line, `"tool":"`+surface[i].Name+`"`, "line %d must carry the tool name", i)
+		assert.Contains(t, line, `"title":"`+surface[i].Title+`"`,
+			"L10: line %d (%s) must carry the tool title %q", i, surface[i].Name, surface[i].Title)
 		assert.Contains(t, line, `"always_present":true`,
 			"L11: line %d (%s) must carry always_present=true", i, surface[i].Name)
 	}
