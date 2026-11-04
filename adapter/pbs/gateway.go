@@ -266,6 +266,13 @@ func (g *Gateway) doOnceReq(ctx context.Context, method, path string, form url.V
 // single-entity getters to EmptyDataError and an error envelope to APIError.
 func (g *Gateway) decode(body []byte, out any) error {
 	if len(body) == 0 {
+		if out == nil {
+			// A mutation/delete that returns no body is a success (SPEC.md §7.5).
+			// e.g. DELETE /nodes/{node}/tasks/{upid} stops a task and may reply
+			// with an empty 2xx body.
+			return nil
+		}
+
 		return &UpstreamError{Op: "decode", Err: errors.New("pbs: empty response body")}
 	}
 
@@ -555,6 +562,13 @@ func pbsTaskLogPath(upid string) string {
 	return "/nodes/" + pbsTaskNode + "/tasks/" + encodeUPIDSegment(upid) + "/log"
 }
 
+// pbsTaskStopPath builds DELETE /nodes/{node}/tasks/{upid} for a UPID. The UPID
+// is encoded as a single path segment exactly like the task status/log paths so
+// ':' and '@' are escaped and a '/' cannot inject extra path segments (S11).
+func pbsTaskStopPath(upid string) string {
+	return "/nodes/" + pbsTaskNode + "/tasks/" + encodeUPIDSegment(upid)
+}
+
 // encodeUPIDSegment percent-encodes a UPID so it is safe as a single path
 // segment. It escapes ':' (→%3A), '@' (→%40) and '/' (→%2F, so a UPID cannot
 // inject extra path segments), but deliberately leaves '!' literal. The live PBS
@@ -714,4 +728,13 @@ func (g *Gateway) StartSync(ctx context.Context, store string, req model.PBSSync
 	}
 
 	return upid, nil
+}
+
+// StopTask stops (cancels) a running PBS task by UPID via
+// DELETE /nodes/{node}/tasks/{upid}, where node is the local PBS node (always
+// "localhost" — see pbsTaskNode). It is a destructive mutation: it is never
+// retried (doMutation) and the request carries no body. PBS may reply with an
+// empty 2xx body; that is treated as success by decode when out is nil.
+func (g *Gateway) StopTask(ctx context.Context, upid string) error {
+	return g.doMutation(ctx, http.MethodDelete, pbsTaskStopPath(upid), nil, nil)
 }

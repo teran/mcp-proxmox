@@ -63,6 +63,10 @@ type PBSGateway interface {
 	StartGC(ctx context.Context, store string) (string, error)
 	StartPrune(ctx context.Context, store string) (string, error)
 	StartSync(ctx context.Context, store string, req model.PBSSyncRequest) (string, error)
+	// StopTask stops (cancels) a running PBS task by UPID
+	// (DELETE /nodes/localhost/tasks/{upid}). It is a destructive mutation
+	// (gated by EnableMutations), never retried, and returns no task UPID.
+	StopTask(ctx context.Context, upid string) error
 
 	// Version.
 	GetPBSVersion(ctx context.Context) (*model.PBSVersion, error)

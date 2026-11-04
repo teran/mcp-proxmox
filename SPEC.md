@@ -607,7 +607,7 @@ unsafe ops (`*_delete`, restore/rollback, prune, forget, gc, backup) require
 |---|---|---|---|
 | **Per-operation authz on destructive ops** (`pve_vm_delete`, `pve_lxc_delete`, snapshot delete, restore/rollback, HA) | Compromised/malicious model host issues a delete/alter call against the **wrong** resource — spoofed `vmid`/`node`/`snapshot` | Irreversible VM/CT deletion, snapshot loss, bad restore, HA misconfiguration; control-plane **availability/integrity loss** | **MUST (new):** destructive tools carry `destructiveHint=true` and require HITL (S12); mutations registered only under `ENABLE_MUTATIONS` (§2.5); per-tool `instructions` state the resource identity and require confirming the target before a destructive call |
 | **Command/path-injection via `vmid`/`node`/`snapshot`/`upid`/`store` interpolated into URL path segments** | Attacker-controlled value embedded in the URL path reaches a different or malformed upstream endpoint | SSRF-adjacent path confusion, hitting unintended PVE/PBS endpoints, malformed requests (S11 hardening) | **MUST (hardens S08/S11):** every path-segment value strictly validated against the upstream schema and **URL-path-escaped with `url.PathEscape`** before interpolation; no raw concatenation; reject non-conforming values at `inputSchema` (S8) |
-| **Non-idempotent mutations double-execution** (`pve_vm_create`, `pve_vm_backup`, `pbs_verify_start`, `pbs_gc_start`, `pbs_prune_start`, `pbs_sync_start`) | A client/transport retry or a model retry re-issues a mutation → duplicate create, parallel backup, double prune/GC | Duplicate resources, wasted I/O, corrupted prune/verify window | **MUST (cross-ref X02, §4.7):** mutations are **never retried** (§7.5); rely on upstream idempotency where present (`pve_nextid` search-before-create, HA key); set `idempotentHint` only when the upstream op is truly idempotent |
+| **Non-idempotent mutations double-execution** (`pve_vm_create`, `pve_vm_backup`, `pbs_verify_start`, `pbs_gc_start`, `pbs_prune_start`, `pbs_sync_start`, `pbs_task_stop`) | A client/transport retry or a model retry re-issues a mutation → duplicate create, parallel backup, double prune/GC | Duplicate resources, wasted I/O, corrupted prune/verify window | **MUST (cross-ref X02, §4.7):** mutations are **never retried** (§7.5); rely on upstream idempotency where present (`pve_nextid` search-before-create, HA key); set `idempotentHint` only when the upstream op is truly idempotent |
 | **Token confidentiality across output/log** | API token leaks through tool output or log lines (S02/L05) | Full credential compromise of the PVE/PBS estate | **MUST (hardens S02/L05):** `sanitizeOutput`/`sanitizeArgs` redact token-like keys; tokens never enter domain models, tool output, or log lines — only the header *name* at trace; `gitleaks` scans history (S05) |
 | **TLS / CA handling** | Disabling verification or trusting a forged CA (S01) | MITM of the control-plane API, token theft in transit | **MUST (hardens S01):** TLS verification **always on**, no `insecure_skip_verify`; custom CA only via operator `ca_cert_path` building the client `RootCAs`; never a tool argument (S04) |
 | **Upstream response integrity** | Forged/tampered upstream JSON reaching the model (S07/S9) | Model acts on false VM/snapshot/task state, e.g. believing a prune finished | **MUST (hardens S7/S9):** upstream treated as untrusted; every output validated against per-tool `outputSchema` and passed through `sanitizeOutput`; failures returned as `IsError` |
@@ -748,7 +748,7 @@ the same sensitive-key policy.
 
 ## 6. Tool registry (complete)
 
-With both backends enabled and `ENABLE_MUTATIONS=true` (SPEC §2.5), **73 tools**
+With both backends enabled and `ENABLE_MUTATIONS=true` (SPEC §2.5), **74 tools**
 are registered. Naming uses the domain prefixes `pve_` and `pbs_`; system tools
 (`ping`, `status`) have no prefix. `query` = read (idempotent, retried);
 `mutation` = write (never retried). Read-only query tools are always registered
@@ -915,21 +915,22 @@ with destructive mutations (delete / restore / rollback / GC / prune) carrying
 | 63 | `pbs_backup_restore_file` | mutation | `POST /admin/datastore/{store}/backup/{backup-type}/{backup-id}/{snapshot}/restore` (single file) |
 | 64 | `pbs_backup_vm_restore` | mutation | `POST /admin/datastore/{store}/backup/{backup-type}/{backup-id}/{snapshot}/restore` (VM) |
 
-### 6.10 PBS — verify, GC, prune, sync, tasks & version (9)
+### 6.10 PBS — verify, GC, prune, sync, tasks & version (10)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 65 | `pbs_verify_status` | query | `GET /admin/datastore/{store}/verify/{upid}` |
-| 66 | `pbs_prune_status` | query | `GET /admin/datastore/{store}/prune/{upid}` |
-| 67 | `pbs_task_status` | query | `GET /admin/tasks/{upid}/status` |
-| 68 | `pbs_task_log` | query | `GET /admin/tasks/{upid}/log` |
+| 65 | `pbs_verify_status` | query | `GET /nodes/localhost/tasks/{upid}/status` |
+| 66 | `pbs_prune_status` | query | `GET /nodes/localhost/tasks/{upid}/status` |
+| 67 | `pbs_task_status` | query | `GET /nodes/localhost/tasks/{upid}/status` |
+| 68 | `pbs_task_log` | query | `GET /nodes/localhost/tasks/{upid}/log` |
 | 69 | `pbs_version` | query | `GET /version` |
 | 70 | `pbs_verify_start` | mutation | `POST /admin/datastore/{store}/verify` |
 | 71 | `pbs_gc_start` | mutation | `POST /admin/datastore/{store}/gc` |
 | 72 | `pbs_prune_start` | mutation | `POST /admin/datastore/{store}/prune` |
 | 73 | `pbs_sync_start` | mutation | `POST /admin/datastore/{store}/sync` |
+| 74 | `pbs_task_stop` | mutation | `DELETE /nodes/localhost/tasks/{upid}` |
 
-**Total: 73 tools** with `ENABLE_MUTATIONS=true` (system 2, PVE 53, PBS 18).
+**Total: 74 tools** with `ENABLE_MUTATIONS=true` (system 2, PVE 53, PBS 19).
 With `ENABLE_MUTATIONS` unset (default `false`), only the read-only surface is
 registered: **35 tools** (system 2, PVE 21, PBS 12).
 
@@ -1195,7 +1196,7 @@ complements, never replaces, them.
    `Deps.EnableMutations` in `adapter/mcp`, honored during tool registration).
    The milestone default surface is read-only + system (`ping`/`status`).
 6. **Exact tool list:** the tool registry in §6 is the agreed, implemented
-   surface (73 tools with mutations enabled, 35 read-only by default); it may be
+   surface (74 tools with mutations enabled, 35 read-only by default); it may be
    trimmed/extended in later features (e.g. more PVE config options).
 7. **API-token only** (no ticket/CSRF flow) — matches the stated requirement.
 8. **Tokens from config, not per-call** — confirmed in §2.4; revisit only if a

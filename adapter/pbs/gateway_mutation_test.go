@@ -84,6 +84,65 @@ func TestGateway_StartSync_Success(t *testing.T) {
 	assert.Equal(t, "admin@example.com", rec.form.Get("notify-user"))
 }
 
+// TestGateway_StopTask_Success verifies DELETE /nodes/localhost/tasks/{upid}
+// stops a task. The UPID is encoded as a single path segment (':'→%3A, '@'→%40,
+// '!' literal) and an empty 2xx body is treated as success.
+func TestGateway_StopTask_Success(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, 200, "", rec)
+	g, _ := newTestGateway(t, srv)
+
+	err := g.StopTask(context.Background(), "UPID:pbs01:00000500:verify:tier1:teran@homelab!mcp:")
+	require.NoError(t, err, "empty 2xx body on a DELETE must be a success")
+
+	assert.Equal(t, http.MethodDelete, rec.method)
+	assert.Equal(t,
+		"/api2/json/nodes/localhost/tasks/UPID%3Apbs01%3A00000500%3Averify%3Atier1%3Ateran%40homelab!mcp%3A",
+		rec.escapedPath,
+		"upid segment must escape ':' and '@' but leave '!' literal")
+	assert.Equal(t,
+		"/api2/json/nodes/localhost/tasks/UPID:pbs01:00000500:verify:tier1:teran@homelab!mcp:",
+		rec.path)
+	assert.Equal(t, "PVEAPIToken=user@pbs!tokenid=secret", rec.auth)
+	assert.Equal(t, 1, rec.count, "mutations must not be retried")
+}
+
+// TestGateway_StopTask_EmptyJSONBody verifies DELETE succeeds even when PBS
+// replies with a 2xx containing an empty JSON body rather than no body at all.
+func TestGateway_StopTask_EmptyJSONBody(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, 200, `{}`, rec)
+	g, _ := newTestGateway(t, srv)
+
+	err := g.StopTask(context.Background(), "upid1")
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodDelete, rec.method)
+	assert.Equal(t, "/api2/json/nodes/localhost/tasks/upid1", rec.path)
+}
+
+// TestGateway_StopTask_ErrorMapping verifies DELETE failures map through the
+// error family and are never retried.
+func TestGateway_StopTask_ErrorMapping(t *testing.T) {
+	t.Run("unauthorized", func(t *testing.T) {
+		rec := &reqCapture{}
+		srv := mockServer(t, http.StatusUnauthorized, `{"data":null}`, rec)
+		g, _ := newTestGateway(t, srv)
+		err := g.StopTask(context.Background(), "upid1")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, port.ErrUnauthorized)
+		assert.Equal(t, 1, rec.count)
+	})
+
+	t.Run("upstream error no retry", func(t *testing.T) {
+		rec := &reqCapture{}
+		srv := mockServer(t, http.StatusInternalServerError, `{"data":null}`, rec)
+		g, _ := newTestGateway(t, srv)
+		err := g.StopTask(context.Background(), "upid1")
+		require.Error(t, err)
+		assert.Equal(t, 1, rec.count, "mutations must not be retried")
+	})
+}
+
 // TestGateway_PBSMutationErrorMapping verifies mutation failures map through the
 // same error family as reads and are never retried.
 func TestGateway_PBSMutationErrorMapping(t *testing.T) {

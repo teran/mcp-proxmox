@@ -76,6 +76,7 @@ func TestMutationToolSuccess(t *testing.T) {
 		{"pbs_gc_start", map[string]any{"store": "backup"}, true},
 		{"pbs_prune_start", map[string]any{"store": "backup"}, true},
 		{"pbs_sync_start", map[string]any{"store": "backup", "remote": "r", "remote_store": "s"}, true},
+		{"pbs_task_stop", map[string]any{"upid": "UPID:pbs:task:..."}, false},
 	}
 
 	for _, testCase := range cases {
@@ -137,6 +138,7 @@ func TestMutationToolErrorPropagation(t *testing.T) {
 		{"pbs_gc_start", map[string]any{"store": "backup"}},
 		{"pbs_prune_start", map[string]any{"store": "backup"}},
 		{"pbs_sync_start", map[string]any{"store": "backup", "remote": "r"}},
+		{"pbs_task_stop", map[string]any{"upid": "UPID:pbs:task:..."}},
 	}
 
 	for _, testCase := range cases {

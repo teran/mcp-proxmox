@@ -66,7 +66,15 @@ func roTool[In, Out any](
 
 			return nil, nil, err
 		}
-		wrapped, err := wrapAndValidate(ctx, name, log, outSchema, out)
+		// A successful tool with no output (out == nil) still needs a non-nil
+		// value so the SDK can emit structuredContent when an outputSchema is
+		// declared; otherwise the client rejects the call ("has an output schema
+		// but did not return structured content"). Use an empty object.
+		var outForSchema any = out
+		if isNil(outForSchema) {
+			outForSchema = map[string]any{}
+		}
+		wrapped, err := wrapAndValidate(ctx, name, log, outSchema, outForSchema)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -142,7 +150,15 @@ func mutTool[In, Out any](
 
 			return nil, nil, err
 		}
-		wrapped, err := wrapAndValidate(ctx, name, log, outSchema, out)
+		// A successful tool with no output (out == nil) still needs a non-nil
+		// value so the SDK can emit structuredContent when an outputSchema is
+		// declared; otherwise the client rejects the call ("has an output schema
+		// but did not return structured content"). Use an empty object.
+		var outForSchema any = out
+		if isNil(outForSchema) {
+			outForSchema = map[string]any{}
+		}
+		wrapped, err := wrapAndValidate(ctx, name, log, outSchema, outForSchema)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -248,6 +264,20 @@ func wrapAndValidate(ctx context.Context, name string, log toolLogger, schema *j
 	}
 
 	return wrapped, nil
+}
+
+// isNil reports whether v is a nil interface, pointer, map, slice or func.
+func isNil(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan:
+		return rv.IsNil()
+	default:
+		return false
+	}
 }
 
 // wrapOutput ensures the value returned to the MCP client is a JSON object, as
