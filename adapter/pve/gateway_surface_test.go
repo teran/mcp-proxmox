@@ -276,13 +276,16 @@ func TestGateway_StorageNetwork_Success(t *testing.T) {
 		},
 		{
 			name: "GetStorageStatus",
-			body: `{"data":{"storage":"local","type":"dir","total":1000,"used":400}}`,
+			body: `{"data":{"type":"dir","total":1000,"used":400}}`,
 			path: "/api2/json/nodes/pve1/storage/local/status",
 			call: func(g *Gateway) error {
-				st, err := g.GetStorageStatus(context.Background(), "pve1", "local")
+				status, err := g.GetStorageStatus(context.Background(), "pve1", "local")
 				if assert.NoError(t, err) {
-					assert.Equal(t, int64(1000), st.Total)
-					assert.Equal(t, int64(400), st.Used)
+					assert.Equal(t, int64(1000), status.Total)
+					assert.Equal(t, int64(400), status.Used)
+					// PVE doesn't echo the storage name in the status body; the
+					// gateway fills it from the request argument.
+					assert.Equal(t, "local", status.Storage)
 				}
 
 				return err

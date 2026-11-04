@@ -129,7 +129,7 @@ var jsonRoundTripCases = []struct {
 		name: "storage",
 		in: Storage{
 			Storage: "local", Type: "dir", Status: "available", Content: "images,rootdir",
-			Nodes: "pve1", Shared: 0, Active: 1, Enabled: true, Path: "/var/lib/vz",
+			Nodes: "pve1", Shared: 0, Active: 1, Enabled: FlexBool(true), Path: "/var/lib/vz",
 		},
 		want: `{"storage":"local","type":"dir","status":"available","content":"images,rootdir",` +
 			`"nodes":"pve1","active":1,"enabled":true,"path":"/var/lib/vz"}`,
@@ -137,7 +137,7 @@ var jsonRoundTripCases = []struct {
 	{
 		name: "storage-status",
 		in: StorageStatus{
-			Storage: "local", Type: "dir", Total: 1000, Used: 400, Avail: 600, UsedFrac: 0.4, Enabled: true, Active: 1,
+			Storage: "local", Type: "dir", Total: 1000, Used: 400, Avail: 600, UsedFrac: 0.4, Enabled: FlexBool(true), Active: 1,
 		},
 		want: `{"storage":"local","type":"dir","total":1000,"used":400,"avail":600,"used_fraction":0.4,"enabled":true,"active":1}`,
 	},
