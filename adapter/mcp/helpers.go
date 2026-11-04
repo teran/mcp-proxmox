@@ -174,13 +174,19 @@ func outputSchema[Out any]() *jsonschema.Schema {
 	}
 	if elem.Kind() == reflect.Interface {
 		// Out is `any` (or a nil interface): the runtime shape is unknown, so
-		// advertise a permissive schema that accepts any JSON value.
-
-		return &jsonschema.Schema{}
+		// advertise a permissive schema that accepts any JSON object. This must
+		// be a concrete JSON-object schema (never an empty schema): the go-sdk
+		// serializes an empty *jsonschema.Schema as the boolean `true`, which
+		// MCP clients that require outputSchema to be an object (e.g. opencode)
+		// reject and skip the tool. wrapOutput always produces a JSON object, so
+		// {"type":"object"} is both valid and accurate.
+		return &jsonschema.Schema{Type: "object"}
 	}
 	base, err := jsonschema.ForType(elem, &jsonschema.ForOptions{})
 	if err != nil || base == nil {
-		return &jsonschema.Schema{}
+		// Same invariant: never hand the SDK an empty schema that serializes to
+		// `true`; a permissive object schema keeps outputSchema a valid object.
+		return &jsonschema.Schema{Type: "object"}
 	}
 	switch elem.Kind() {
 	case reflect.Slice, reflect.Array:
