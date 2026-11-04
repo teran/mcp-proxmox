@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -68,8 +69,14 @@ func TestOutputSchema(t *testing.T) {
 			wantProp: "value",
 		},
 		{
-			name:  "any is permissive",
-			build: func() *jsonschema.Schema { return outputSchema[any]() },
+			// The `any` branch must produce a concrete object schema, never an
+			// empty one: the go-sdk serializes an empty *jsonschema.Schema as the
+			// boolean `true`, which MCP clients (e.g. opencode) reject ("expected
+			// object, received boolean") and drop the tool. {"type":"object"} is
+			// permissive yet a valid object.
+			name:     "any is permissive object schema",
+			build:    func() *jsonschema.Schema { return outputSchema[any]() },
+			wantType: "object",
 		},
 	}
 
@@ -174,4 +181,44 @@ func TestToolExposesOutputSchema(t *testing.T) {
 	sc, ok := res.StructuredContent.(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "web", sc["name"])
+}
+
+// TestAnyOutputSchemaIsObjectNotBoolean is a regression guard for the opencode
+// ingestion bug: when a tool's handler returns `any` (the shape used by every
+// mcp-proxmox tool), the published outputSchema must serialize to a JSON OBJECT
+// (e.g. {"type":"object"}), never the boolean `true`. opencode rejects a boolean
+// outputSchema ("expected object, received boolean") and silently drops the
+// whole server's tools, so this guards the exact wire contract that keeps the
+// tools visible to opencode agent sessions.
+func TestAnyOutputSchemaIsObjectNotBoolean(t *testing.T) {
+	ro := func(_ context.Context, _ emptyIn) (any, error) {
+		return map[string]any{"status": "ok"}, nil
+	}
+
+	s := mcpSDK.NewServer(&mcpSDK.Implementation{Name: "t", Version: "v"}, nil)
+	roTool(s, "test_any_out", "Any", "a tool returning any", "instructions", toolLogger{log: nopLogger{}}, ro)
+
+	t1, t2 := mcpSDK.NewInMemoryTransports()
+	if _, err := s.Connect(context.Background(), t1, nil); err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	client := mcpSDK.NewClient(&mcpSDK.Implementation{Name: "c", Version: "v"}, nil)
+	sess, err := client.Connect(context.Background(), t2, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { _ = sess.Close() })
+
+	tools := toolsByName(t, sess)
+	tl, ok := tools["test_any_out"]
+	require.True(t, ok, "tool must be published")
+	require.NotNil(t, tl.OutputSchema, "tool must expose an outputSchema")
+
+	// Marshal the wire outputSchema and assert it is a JSON object, not `true`.
+	raw, err := json.Marshal(tl.OutputSchema)
+	require.NoError(t, err)
+	require.NotEqual(t, "true", string(raw), "outputSchema must never serialize to boolean true (opencode rejects it)")
+	var m map[string]any
+	require.NoError(t, json.Unmarshal(raw, &m), "outputSchema must be a JSON object")
+	assert.Equal(t, "object", m["type"], "permissive outputSchema should be {\"type\":\"object\"}")
 }
