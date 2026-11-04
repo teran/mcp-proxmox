@@ -12,14 +12,14 @@ import (
 )
 
 // TestGateway_ListBackupFiles_Success verifies
-// GET /admin/datastore/{store}/backups/{type}/{id}/{snapshot}/files returns the
-// decoded PBSFile list, forwarding the optional path query.
+// GET /admin/datastore/{store}/files?backup-type=...&backup-id=...&backup-time=<epoch>&path=...
+// returns the decoded PBSFile list, forwarding the optional path query.
 func TestGateway_ListBackupFiles_Success(t *testing.T) {
 	rec := &reqCapture{}
 	srv := mockServer(t, 200, `{"data":[{"filename":"client.logidx","type":"log","size":1024}]}`, rec)
 	g, _ := newTestGateway(t, srv)
 
-	files, err := g.ListBackupFiles(context.Background(), "backup", "vm", "100", "2024-01-01T00:00:00Z", "/var/lib/vz")
+	files, err := g.ListBackupFiles(context.Background(), "backup", "vm", "100", 1793662080, "/var/lib/vz")
 	require.NoError(t, err)
 	require.Len(t, files, 1)
 	assert.Equal(t, "client.logidx", files[0].Filename)
@@ -27,20 +27,20 @@ func TestGateway_ListBackupFiles_Success(t *testing.T) {
 	assert.Equal(t, int64(1024), files[0].Size)
 
 	assert.Equal(t, http.MethodGet, rec.method)
-	assert.Equal(t, "/api2/json/admin/datastore/backup/backups/vm/100/2024-01-01T00:00:00Z/files", rec.path)
-	assert.Equal(t, "path=%2Fvar%2Flib%2Fvz", rec.query)
+	assert.Equal(t, "/api2/json/admin/datastore/backup/files", rec.path)
+	assert.Equal(t, "backup-id=100&backup-time=1793662080&backup-type=vm&path=%2Fvar%2Flib%2Fvz", rec.query)
 }
 
 // TestGateway_ListBackupFiles_NoPath verifies the path query is omitted when
-// empty.
+// empty, while backup-type/backup-id/backup-time are always present.
 func TestGateway_ListBackupFiles_NoPath(t *testing.T) {
 	rec := &reqCapture{}
 	srv := mockServer(t, 200, `{"data":[{"filename":"f"}]}`, rec)
 	g, _ := newTestGateway(t, srv)
 
-	_, err := g.ListBackupFiles(context.Background(), "backup", "vm", "100", "snap", "")
+	_, err := g.ListBackupFiles(context.Background(), "backup", "vm", "100", 1793662080, "")
 	require.NoError(t, err)
-	assert.Equal(t, "", rec.query)
+	assert.Equal(t, "backup-id=100&backup-time=1793662080&backup-type=vm", rec.query)
 }
 
 // TestGateway_GetTaskStatus_Success verifies GET /admin/tasks/{upid} decodes a
@@ -99,7 +99,7 @@ func TestGateway_PBSReadOnlyErrorBranches(t *testing.T) {
 		rec := &reqCapture{}
 		srv := mockServer(t, http.StatusInternalServerError, `{"data":null}`, rec)
 		g, _ := newTestGateway(t, srv)
-		_, err := g.ListBackupFiles(context.Background(), "s", "vm", "100", "snap", "")
+		_, err := g.ListBackupFiles(context.Background(), "s", "vm", "100", 1793662080, "")
 		require.Error(t, err)
 	})
 

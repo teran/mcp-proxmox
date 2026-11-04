@@ -28,9 +28,13 @@ type PBSGateway interface {
 	GetBackupNotes(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error)
 
 	// Backup file listing & task status (read-only).
-	// ListBackupFiles lists the files inside a backup snapshot identified by
-	// backup type (vm|ct|host), backup ID and snapshot (the ISO-8601 timestamp).
-	ListBackupFiles(ctx context.Context, store, backupType, backupID, snapshot, path string) ([]model.PBSFile, error)
+	// ListBackupFiles lists the files inside a backup snapshot via
+	// GET /admin/datastore/{store}/files. The snapshot is identified by backup
+	// type (vm|ct|host), backup ID and backupTime — the snapshot's Unix epoch
+	// (seconds) as returned by the backup listing (model.Backup.BackupTime).
+	// path optionally restricts the listing to a subdirectory (query `path`,
+	// default "/").
+	ListBackupFiles(ctx context.Context, store, backupType, backupID string, backupTime int64, path string) ([]model.PBSFile, error)
 	// GetTaskStatus returns the status of a task by UPID (GET /admin/tasks/{upid}).
 	GetTaskStatus(ctx context.Context, upid string) (*model.PBSTask, error)
 	// GetTaskLog returns the log of a task by UPID (GET /admin/tasks/{upid}/log).

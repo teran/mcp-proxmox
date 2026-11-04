@@ -538,9 +538,11 @@ type mockPBSGateway struct {
 	startSync          func(ctx context.Context, store string, req model.PBSSyncRequest) (string, error)
 
 	// Backup file list & task status (read-only).
-	listBackupFiles func(ctx context.Context, store, backupType, backupID, snapshot, path string) ([]model.PBSFile, error)
-	getTaskStatus   func(ctx context.Context, upid string) (*model.PBSTask, error)
-	getTaskLog      func(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error)
+	listBackupFiles func(
+		ctx context.Context, store, backupType, backupID string, backupTime int64, path string,
+	) ([]model.PBSFile, error)
+	getTaskStatus func(ctx context.Context, upid string) (*model.PBSTask, error)
+	getTaskLog    func(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error)
 
 	// Restore (gated).
 	restoreFile     func(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error
@@ -655,10 +657,10 @@ func (m *mockPBSGateway) StartSync(ctx context.Context, store string, req model.
 }
 
 func (m *mockPBSGateway) ListBackupFiles(
-	ctx context.Context, store, backupType, backupID, snapshot, path string,
+	ctx context.Context, store, backupType, backupID string, backupTime int64, path string,
 ) ([]model.PBSFile, error) {
 	if m.listBackupFiles != nil {
-		return m.listBackupFiles(ctx, store, backupType, backupID, snapshot, path)
+		return m.listBackupFiles(ctx, store, backupType, backupID, backupTime, path)
 	}
 
 	return nil, errMockNotStubbed

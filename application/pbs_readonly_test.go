@@ -16,12 +16,14 @@ import (
 func TestPBSService_ReadOnlySuccess(t *testing.T) {
 	t.Run("ListBackupFiles", func(t *testing.T) {
 		gotPath := ""
-		gateway := &mockPBSGateway{listBackupFiles: func(_ context.Context, _, _, _, _, path string) ([]model.PBSFile, error) {
+		gateway := &mockPBSGateway{listBackupFiles: func(
+			_ context.Context, _, _, _ string, _ int64, path string,
+		) ([]model.PBSFile, error) {
 			gotPath = path
 
 			return []model.PBSFile{{Filename: "f"}}, nil
 		}}
-		files, err := (&PBSService{gw: gateway}).ListBackupFiles(context.Background(), "backup", "vm", "100", "snap", "/etc")
+		files, err := (&PBSService{gw: gateway}).ListBackupFiles(context.Background(), "backup", "vm", "100", 1793662080, "/etc")
 		require.NoError(t, err)
 		require.Len(t, files, 1)
 		assert.Equal(t, "f", files[0].Filename)
@@ -57,7 +59,7 @@ func TestPBSService_ReadOnlySuccess(t *testing.T) {
 func TestPBSService_ReadOnlyErrorPropagation(t *testing.T) {
 	sentinel := errors.New("pbs boom")
 	gateway := &mockPBSGateway{}
-	gateway.listBackupFiles = func(_ context.Context, _, _, _, _, _ string) ([]model.PBSFile, error) {
+	gateway.listBackupFiles = func(_ context.Context, _, _, _ string, _ int64, _ string) ([]model.PBSFile, error) {
 		return nil, sentinel
 	}
 	gateway.getTaskStatus = func(_ context.Context, _ string) (*model.PBSTask, error) { return nil, sentinel }
@@ -71,7 +73,7 @@ func TestPBSService_ReadOnlyErrorPropagation(t *testing.T) {
 		call func(*PBSService) error
 	}{
 		{"ListBackupFiles", func(s *PBSService) error {
-			_, e := s.ListBackupFiles(context.Background(), "s", "vm", "100", "snap", "")
+			_, e := s.ListBackupFiles(context.Background(), "s", "vm", "100", 1793662080, "")
 
 			return e
 		}},

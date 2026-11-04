@@ -406,18 +406,20 @@ func TestGateway_PathSegmentsEscaped(t *testing.T) {
 			"store and upid segments must be escaped")
 	})
 
-	t.Run("backup files path (store+backupType+backupID+snapshot)", func(t *testing.T) {
+	t.Run("backup files path (store escaped, backup params in query)", func(t *testing.T) {
 		rec := &reqCapture{}
 		srv := mockServer(t, 200, `{"data":[]}`, rec)
 		g, _ := newTestGateway(t, srv)
 
-		_, err := g.ListBackupFiles(context.Background(), "st/ore", "vm/type", "100/1", "snap/shot", "")
+		_, err := g.ListBackupFiles(context.Background(), "st/ore", "vm/type", "100/1", 1793662080, "")
 		skipIfStub(t, err)
 		require.NoError(t, err)
 
 		require.Equal(t, 1, rec.count)
-		assert.Equal(t, "/api2/json/admin/datastore/st%2Fore/backups/vm%2Ftype/100%2F1/snap%2Fshot/files", rec.escapedPath,
-			"store/backupType/backupID/snapshot segments must be escaped")
+		assert.Equal(t, "/api2/json/admin/datastore/st%2Fore/files", rec.escapedPath,
+			"store segment must be escaped")
+		assert.Equal(t, "backup-id=100%2F1&backup-time=1793662080&backup-type=vm%2Ftype", rec.query,
+			"backup-type/backup-id must be URL-encoded query parameters")
 	})
 }
 

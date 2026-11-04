@@ -53,7 +53,7 @@ type pbsFileListIn struct {
 	Store      string `json:"store" jsonschema:"PBS datastore name"`
 	BackupType string `json:"backup_type" jsonschema:"Backup type: vm | ct | host"`
 	BackupID   string `json:"backup_id" jsonschema:"Backup ID / group ID (e.g. a VMID)"`
-	Snapshot   string `json:"snapshot" jsonschema:"Backup snapshot identifier (ISO-8601 timestamp from the backup listing)"`
+	BackupTime int64  `json:"backup_time" jsonschema:"Backup snapshot Unix epoch (seconds) from the backup listing"`
 	Path       string `json:"path,omitempty" jsonschema:"Directory path within the backup to list (default /)"`
 }
 
@@ -185,11 +185,11 @@ func registerPBSQueryTools1(s *mcpSDK.Server, app *application.App, log toolLogg
 		// --- restore & task status (read-only) ---
 		roTool(s, "pbs_backup_files_list", "List PBS backup files",
 			"List the files inside a PBS backup snapshot.",
-			"Provide the datastore name, backup type (vm|ct|host), backup ID, and the snapshot"+
-				"identifier (the ISO-8601 timestamp from the backup listing). Optionally set path to list a"+
-				"subdirectory (default /). Read-only and idempotent.",
+			"Provide the datastore name, backup type (vm|ct|host), backup ID, and the backup_time"+
+				" (the snapshot's Unix epoch timestamp in seconds, from the backup listing). Optionally"+
+				" set path to list a subdirectory (default /). Read-only and idempotent.",
 			log, func(ctx context.Context, in pbsFileListIn) (any, error) {
-				return app.PBS.ListBackupFiles(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, in.Path)
+				return app.PBS.ListBackupFiles(ctx, in.Store, in.BackupType, in.BackupID, in.BackupTime, in.Path)
 			}),
 		roTool(s, "pbs_task_status", "Get PBS task status",
 			"Get the status of a PBS task by UPID.",

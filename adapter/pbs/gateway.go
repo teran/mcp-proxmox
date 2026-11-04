@@ -476,6 +476,11 @@ func (g *Gateway) GetPBSVersion(ctx context.Context) (*model.PBSVersion, error) 
 // backupFilesPath builds the PBS backup file-list path prefix for a store,
 // backup type, backup ID and snapshot. Each segment is path-escaped so values
 // containing reserved path characters cannot inject extra segments.
+//
+// NOTE: this legacy path shape (…/backups/{type}/{id}/{snapshot}) does not
+// exist in the PBS API and is only used by the restore mutations. The read-only
+// ListBackupFiles uses GET /admin/datastore/{store}/files with backup-type /
+// backup-id / backup-time query parameters instead.
 func backupFilesPath(store, backupType, backupID, snapshot string) string {
 	return "/admin/datastore/" + url.PathEscape(store) +
 		"/backups/" + url.PathEscape(backupType) +
@@ -484,20 +489,23 @@ func backupFilesPath(store, backupType, backupID, snapshot string) string {
 }
 
 // ListBackupFiles lists the files inside a backup snapshot via
-// GET /admin/datastore/{store}/backups/{type}/{id}/{snapshot}/files. The
-// optional path filter is passed as the `path` query parameter (default "/").
-// Read-only.
+// GET /admin/datastore/{store}/files?backup-type=<type>&backup-id=<id>&backup-time=<epoch>&path=<path>.
+// The snapshot is identified by backupTime — its Unix epoch in seconds as
+// returned by the backup listing (model.Backup.BackupTime) — passed as the
+// `backup-time` query parameter. The optional path filter is passed as the
+// `path` query parameter (default "/"). Read-only.
 func (g *Gateway) ListBackupFiles(
-	ctx context.Context, store, backupType, backupID, snapshot, path string,
+	ctx context.Context, store, backupType, backupID string, backupTime int64, path string,
 ) ([]model.PBSFile, error) {
 	query := url.Values{}
+	query.Set("backup-type", backupType)
+	query.Set("backup-id", backupID)
+	query.Set("backup-time", strconv.FormatInt(backupTime, 10))
 	if path != "" {
 		query.Set("path", path)
 	}
-	urlPath := backupFilesPath(store, backupType, backupID, snapshot) + "/files"
-	if len(query) > 0 {
-		urlPath += "?" + query.Encode()
-	}
+	urlPath := "/admin/datastore/" + url.PathEscape(store) + "/files?" + query.Encode()
+
 	var out []model.PBSFile
 	if err := g.do(ctx, http.MethodGet, urlPath, &out); err != nil {
 		return nil, err
