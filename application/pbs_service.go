@@ -59,11 +59,12 @@ func (s *PBSService) GetPBSVersion(ctx context.Context) (*model.PBSVersion, erro
 	return s.gw.GetPBSVersion(ctx)
 }
 
-// ListBackupFiles lists the files inside a PBS backup snapshot.
+// ListBackupFiles lists the files inside a PBS backup snapshot. backupTime is
+// the snapshot's Unix epoch (seconds) from the backup listing.
 func (s *PBSService) ListBackupFiles(
-	ctx context.Context, store, backupType, backupID, snapshot, path string,
+	ctx context.Context, store, backupType, backupID string, backupTime int64, path string,
 ) ([]model.PBSFile, error) {
-	return s.gw.ListBackupFiles(ctx, store, backupType, backupID, snapshot, path)
+	return s.gw.ListBackupFiles(ctx, store, backupType, backupID, backupTime, path)
 }
 
 // GetTaskStatus returns the status of a PBS task by UPID.

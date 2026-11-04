@@ -1,8 +1,8 @@
 package model
 
 // PBSFile is a file inside a PBS backup snapshot as returned by
-// GET /admin/datastore/{store}/backups/{type}/{id}/{snapshot}/files. Size is in
-// bytes.
+// GET /admin/datastore/{store}/files?backup-type=...&backup-id=...&backup-time=....
+// Size is in bytes.
 type PBSFile struct {
 	Filename string `json:"filename"`
 	Type     string `json:"type,omitempty"`

@@ -19,7 +19,7 @@ func TestPBSReadOnlyToolSuccess(t *testing.T) {
 		args map[string]any
 	}{
 		{"pbs_backup_files_list", map[string]any{
-			"store": "backup", "backup_type": "vm", "backup_id": "100", "snapshot": "snap1", "path": "/etc",
+			"store": "backup", "backup_type": "vm", "backup_id": "100", "backup_time": 1793662080, "path": "/etc",
 		}},
 		{"pbs_task_status", map[string]any{"upid": "UPID:..."}},
 		{"pbs_task_log", map[string]any{"upid": "UPID:...", "limit": 50}},
@@ -45,7 +45,7 @@ func TestPBSReadOnlyToolErrorPropagation(t *testing.T) {
 		args map[string]any
 	}{
 		{"pbs_backup_files_list", map[string]any{
-			"store": "backup", "backup_type": "vm", "backup_id": "100", "snapshot": "snap1",
+			"store": "backup", "backup_type": "vm", "backup_id": "100", "backup_time": 1793662080,
 		}},
 		{"pbs_task_status", map[string]any{"upid": "UPID:..."}},
 		{"pbs_task_log", map[string]any{"upid": "UPID:..."}},

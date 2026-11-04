@@ -693,7 +693,9 @@ type stubPBSGateway struct {
 	startPrune         func(ctx context.Context, store string) (string, error)
 	startSync          func(ctx context.Context, store string, req model.PBSSyncRequest) (string, error)
 
-	listBackupFiles func(ctx context.Context, store, backupType, backupID, snapshot, path string) ([]model.PBSFile, error)
+	listBackupFiles func(
+		ctx context.Context, store, backupType, backupID string, backupTime int64, path string,
+	) ([]model.PBSFile, error)
 	getTaskStatus   func(ctx context.Context, upid string) (*model.PBSTask, error)
 	getTaskLog      func(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error)
 	restoreFile     func(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error
@@ -848,13 +850,13 @@ func (s *stubPBSGateway) StartSync(ctx context.Context, store string, req model.
 }
 
 func (s *stubPBSGateway) ListBackupFiles(
-	ctx context.Context, store, backupType, backupID, snapshot, path string,
+	ctx context.Context, store, backupType, backupID string, backupTime int64, path string,
 ) ([]model.PBSFile, error) {
 	if s.fail() {
 		return nil, s.err
 	}
 	if s.listBackupFiles != nil {
-		return s.listBackupFiles(ctx, store, backupType, backupID, snapshot, path)
+		return s.listBackupFiles(ctx, store, backupType, backupID, backupTime, path)
 	}
 
 	return []model.PBSFile{{Filename: "client.logidx"}}, nil
