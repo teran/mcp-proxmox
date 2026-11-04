@@ -94,6 +94,14 @@ func buildClient(cfg Config) (*resty.Client, error) {
 			transport = t.Clone()
 		}
 	}
+	// Pin the client to HTTP/1.1. The Proxmox Backup Server web server (Rust
+	// hyper/axum) has an HTTP/2 interop bug (Proxmox #5217; golang/go#46071):
+	// a Go HTTP/2 client receives a 200 response with an EMPTY body — and no
+	// error — whereas HTTP/1.1 returns the full JSON envelope. curl works
+	// because it defaults to HTTP/1.1. Disabling HTTP/2 makes PBS serve the
+	// complete body (TLS verification stays on; no protocol downgrade).
+	transport.Protocols = new(http.Protocols)
+	transport.Protocols.SetHTTP1(true)
 	client.SetTimeout(timeout)
 	client.SetTransport(transport)
 

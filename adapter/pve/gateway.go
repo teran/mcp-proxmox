@@ -92,6 +92,13 @@ func buildClient(cfg Config) (*resty.Client, error) {
 			transport = t.Clone()
 		}
 	}
+	// Pin the client to HTTP/1.1. Proxmox VE's API daemon behind nginx (and PBS
+	// on its native hyper/axum server) can mishandle Go HTTP/2, returning a 200
+	// with an EMPTY body and no error (golang/go#46071). HTTP/1.1 always serves
+	// the full JSON envelope. Disabling HTTP/2 is safe: nginx/pveproxy serve
+	// HTTP/1.1 fine (TLS verification stays on; no protocol downgrade).
+	transport.Protocols = new(http.Protocols)
+	transport.Protocols.SetHTTP1(true)
 	client.SetTimeout(timeout)
 	client.SetTransport(transport)
 
