@@ -92,13 +92,14 @@ func buildClient(cfg Config) (*resty.Client, error) {
 			transport = t.Clone()
 		}
 	}
-	// Pin the client to HTTP/1.1. Proxmox VE's API daemon behind nginx (and PBS
-	// on its native hyper/axum server) can mishandle Go HTTP/2, returning a 200
-	// with an EMPTY body and no error (golang/go#46071). HTTP/1.1 always serves
-	// the full JSON envelope. Disabling HTTP/2 is safe: nginx/pveproxy serve
-	// HTTP/1.1 fine (TLS verification stays on; no protocol downgrade).
-	transport.Protocols = new(http.Protocols)
-	transport.Protocols.SetHTTP1(true)
+	// Send an explicit Accept-Encoding so resty v3 (resty.dev/v3, currently
+	// only available as pre-release v3.0.0-rc.4) does not manage the header via
+	// its own auto-decompress middleware. In auto mode resty v3 rc.4 drops the
+	// response body of the Proxmox APIs (a 200 with a plain Content-Length but
+	// no Content-Encoding), returning 0 bytes. Setting Accept-Encoding
+	// explicitly (identity = no compression) makes resty pass the body through
+	// unchanged. TLS verification stays on; no protocol downgrade.
+	client.SetHeader("Accept-Encoding", "identity")
 	client.SetTimeout(timeout)
 	client.SetTransport(transport)
 
