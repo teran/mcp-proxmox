@@ -94,6 +94,15 @@ func buildClient(cfg Config) (*resty.Client, error) {
 			transport = t.Clone()
 		}
 	}
+	// Send an explicit Accept-Encoding so resty v3 (resty.dev/v3, currently
+	// only available as pre-release v3.0.0-rc.4) does not manage the header via
+	// its own auto-decompress middleware. In auto mode resty v3 rc.4 drops the
+	// response body of the PBS API (a 200 with a plain Content-Length but no
+	// Content-Encoding), returning 0 bytes — observed against the real PBS
+	// (curl reads the full body; resty does not). Setting Accept-Encoding
+	// explicitly (identity = no compression) makes resty pass the body through
+	// unchanged. TLS verification stays on; no protocol downgrade.
+	client.SetHeader("Accept-Encoding", "identity")
 	client.SetTimeout(timeout)
 	client.SetTransport(transport)
 

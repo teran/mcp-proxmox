@@ -395,6 +395,7 @@ disabled and its tools are not registered.
 | `LOG_FILENAME` | log file path used when `LOG_LEVEL` is set (default `/tmp/mcp-proxmox.log`, mode `0600`) (L3) |
 | `LOG_FORMAT` | log format `text` (default) \| `json` (L4) |
 | `ENABLE_MUTATIONS` | register mutation tools (default `false`). When `true`, mutation tools are registered for enabled backends; when `false`, only read-only query tools are exposed (§2.5) |
+| `HTTP_TIMEOUT` | upstream API call timeout for both PVE and PBS (default `2m`; `Go` duration string such as `90s`, `3m`) (X3) |
 
 These are the **only** environment variables the server reads. The tokens are
 read once per backend from the environment and re-used on every call; they are
@@ -481,7 +482,8 @@ apply here:
   creation, HA-add by resource key) — the server issues one request and does not
   create duplicates itself. Read-only tools set `idempotentHint=true` (X2/N25).
 - **Upstream connection & limits (X3).** Upstream calls use an explicit timeout
-  (default 30s) and context; on failure (including `429`) the error is returned
+  (default 2m, configurable via `HTTP_TIMEOUT`) and context; on failure
+  (including `429`) the error is returned
   to the model **and logged** — there is **no silent retry** except a bounded
   retry with backoff for **idempotent read-only** requests, and the underlying
   error is always logged (§7.5).

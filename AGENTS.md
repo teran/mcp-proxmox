@@ -192,8 +192,9 @@ contradiction, raise it with the architect.
   (/`PVE_CA_CERT_PATH`), `PBS_ENDPOINT`/`PBS_TOKEN` (/`PBS_CA_CERT_PATH`),
   `LOG_LEVEL`, `LOG_FILENAME` (default `/tmp/mcp-proxmox.log`), `LOG_FORMAT`
   (text|json), and `ENABLE_MUTATIONS` (default `false` — when `true`, mutation
-  tools are registered for enabled backends; SPEC.md §2.5). There is **no YAML/
-  config file**.
+  tools are registered for enabled backends; SPEC.md §2.5), and `HTTP_TIMEOUT`
+  (default `2m` — upstream API call timeout for PVE/PBS; SPEC.md §4.5/X3).
+  There is **no YAML/config file**.
 - **Dynamic availability:** a backend is active only if **both** its `endpoint`
   and its `token` are present; otherwise it is **disabled** and its tools must
   **not** be registered. Nothing fails when a backend is absent.
