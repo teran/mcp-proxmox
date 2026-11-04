@@ -1200,3 +1200,28 @@ complements, never replaces, them.
 7. **API-token only** (no ticket/CSRF flow) — matches the stated requirement.
 8. **Tokens from config, not per-call** — confirmed in §2.4; revisit only if a
    remote/OAuth2 relay is added.
+
+## 11. TODO / Future work
+
+Tracked follow-ups (not yet implemented). Each is a self-contained piece of work
+with its own branch/PR, following the TDD workflow (§8.5).
+
+1. **Pagination for large datastore snapshot listings (`pbs_backup_list` /
+   `pbs_backup_get`).** The current implementation issues a single
+   `GET /admin/datastore/{store}/snapshots` and returns the **entire** list
+   in one response. On a datastore with many snapshots (observed: 132 snapshots
+   for a single VM, and `pbs_backup_list` returning a multi-hundred-KB payload)
+   this is slow and unbounded. PBS supports query-parameter paging
+   (`limit`, and time-window `start`/`end` filters on `backup-time`); add
+   pagination / windowing to avoid returning the whole set and to bound the
+   response size. Applies the same reasoning as the `pbs_backup_files_list`
+   fix (epoch `backup-time`).
+2. **Fix `RestoreFile` / `RestoreVMBackup` endpoints.** Both still build the
+   same wrong path as the (now fixed) `ListBackupFiles` did
+   (`/admin/datastore/{store}/backups/{type}/{id}/{snapshot}/files` and
+   `.../restore`), which returns 404 against a real PBS. Per the PBS source,
+   these are `POST /admin/datastore/{store}/files` (single file) and
+   `POST /admin/datastore/{store}/restore` (VM), with the same
+   `backup-type`/`backup-id`/`backup-time` (epoch) parameters. After fixing,
+   the legacy `backupFilesPath` helper can be removed entirely.
+
