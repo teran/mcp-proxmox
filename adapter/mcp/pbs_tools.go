@@ -248,6 +248,15 @@ func registerPBSMutationTools0(s *mcpSDK.Server, app *application.App, log toolL
 
 				return map[string]any{"upid": upid}, nil
 			}, true),
+
+		mutTool(s, "pbs_task_stop", "Stop PBS task",
+			"Stop (cancel) a running PBS task by UPID.",
+			"Provide the task UPID (e.g. from a restore, verify, GC, prune or sync job). Destructive:"+
+				"cancels/interrupts the running task, aborting its work. Returns no task UPID. Not"+
+				"idempotent: stopping an already-stopped task may fail.",
+			log, false, func(ctx context.Context, in pbsTaskIn) (any, error) {
+				return nil, app.PBS.StopTask(ctx, in.UPID)
+			}, true),
 	}
 }
 

@@ -536,6 +536,7 @@ type mockPBSGateway struct {
 	startGC            func(ctx context.Context, store string) (string, error)
 	startPrune         func(ctx context.Context, store string) (string, error)
 	startSync          func(ctx context.Context, store string, req model.PBSSyncRequest) (string, error)
+	stopTask           func(ctx context.Context, upid string) error
 
 	// Backup file list & task status (read-only).
 	listBackupFiles func(
@@ -654,6 +655,14 @@ func (m *mockPBSGateway) StartSync(ctx context.Context, store string, req model.
 	}
 
 	return "", nil
+}
+
+func (m *mockPBSGateway) StopTask(ctx context.Context, upid string) error {
+	if m.stopTask != nil {
+		return m.stopTask(ctx, upid)
+	}
+
+	return nil
 }
 
 func (m *mockPBSGateway) ListBackupFiles(

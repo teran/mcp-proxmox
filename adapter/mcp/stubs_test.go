@@ -698,6 +698,7 @@ type stubPBSGateway struct {
 	) ([]model.PBSFile, error)
 	getTaskStatus   func(ctx context.Context, upid string) (*model.PBSTask, error)
 	getTaskLog      func(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error)
+	stopTask        func(ctx context.Context, upid string) error
 	restoreFile     func(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error
 	restoreVMBackup func(
 		ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest,
@@ -849,6 +850,17 @@ func (s *stubPBSGateway) StartSync(ctx context.Context, store string, req model.
 	return "UPID:pbs:sync:...", nil
 }
 
+func (s *stubPBSGateway) StopTask(ctx context.Context, upid string) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.stopTask != nil {
+		return s.stopTask(ctx, upid)
+	}
+
+	return nil
+}
+
 func (s *stubPBSGateway) ListBackupFiles(
 	ctx context.Context, store, backupType, backupID string, backupTime int64, path string,
 ) ([]model.PBSFile, error) {
@@ -956,7 +968,7 @@ var pveMutationTools = []string{
 // pbsMutationTools is the gated PBS mutation tool surface (SPEC.md §6.x).
 var pbsMutationTools = []string{
 	"pbs_verify_start", "pbs_gc_start", "pbs_prune_start", "pbs_sync_start",
-	"pbs_backup_restore_file", "pbs_backup_vm_restore",
+	"pbs_backup_restore_file", "pbs_backup_vm_restore", "pbs_task_stop",
 }
 
 // newTestServer builds an mcpSDK.Server wired through the real application.App

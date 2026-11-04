@@ -143,6 +143,18 @@ func TestPBSService_MutationSuccess(t *testing.T) {
 		assert.Equal(t, "UPID:sync", upid)
 		assert.Equal(t, req, gotReq)
 	})
+
+	t.Run("StopTask", func(t *testing.T) {
+		gotUPID := ""
+		gateway := &mockPBSGateway{stopTask: func(_ context.Context, upid string) error {
+			gotUPID = upid
+
+			return nil
+		}}
+		err := (&PBSService{gw: gateway}).StopTask(context.Background(), "UPID:stop")
+		require.NoError(t, err)
+		assert.Equal(t, "UPID:stop", gotUPID)
+	})
 }
 
 // pbsErrorPropagationCases pairs each PBS service method with a call that
@@ -216,6 +228,9 @@ var pbsErrorPropagationCases = []struct {
 
 		return e
 	}},
+	{"StopTask", func(s *PBSService) error {
+		return s.StopTask(context.Background(), "upid")
+	}},
 }
 
 // newFailingPBSGateway returns a gateway whose every method returns sentinel.
@@ -238,6 +253,7 @@ func newFailingPBSGateway(sentinel error) *mockPBSGateway {
 	gateway.startSync = func(_ context.Context, _ string, _ model.PBSSyncRequest) (string, error) {
 		return "", sentinel
 	}
+	gateway.stopTask = func(_ context.Context, _ string) error { return sentinel }
 
 	return gateway
 }

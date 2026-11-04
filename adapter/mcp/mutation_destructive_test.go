@@ -32,6 +32,7 @@ func TestMutationToolDestructiveHints(t *testing.T) {
 		"pbs_prune_start",
 		"pbs_backup_restore_file",
 		"pbs_backup_vm_restore",
+		"pbs_task_stop",
 	}
 
 	for _, name := range destructive {

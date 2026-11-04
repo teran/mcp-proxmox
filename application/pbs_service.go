@@ -111,3 +111,9 @@ func (s *PBSService) StartPrune(ctx context.Context, store string) (string, erro
 func (s *PBSService) StartSync(ctx context.Context, store string, req model.PBSSyncRequest) (string, error) {
 	return s.gw.StartSync(ctx, store, req)
 }
+
+// StopTask stops (cancels) a running PBS task by UPID. It is a destructive
+// mutation (gated by EnableMutations) and is never retried.
+func (s *PBSService) StopTask(ctx context.Context, upid string) error {
+	return s.gw.StopTask(ctx, upid)
+}
