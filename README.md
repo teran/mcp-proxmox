@@ -38,7 +38,7 @@ an API token for it.
 
 ## Features
 
-- **Two optional backends + system tools — 73 MCP tools in total with
+- **Two optional backends + system tools — 74 MCP tools in total with
   `ENABLE_MUTATIONS=true`** (35 read-only tools with mutations disabled, the default):
   - **Proxmox VE** (`pve_*`, 53 tools): nodes, cluster & HA (list/status/resources/next-id/backup-jobs/HA-add),
     backup jobs (create/update/delete), QEMU VMs
@@ -46,7 +46,7 @@ an API token for it.
     delete/clone/snapshot-create/delete/rollback/restore/set), LXC
     containers (list/get/status/snapshot-list/start/stop/shutdown/reboot/delete/clone/snapshot-*/set), storage
     (list/status), network (list), tasks (list/status/log), and PVE version.
-  - **Proxmox Backup Server** (`pbs_*`, 18 tools): datastores (list/status/config),
+  - **Proxmox Backup Server** (`pbs_*`, 19 tools): datastores (list/status/config),
     backups/snapshots & files (list/get/notes/files), restore (file, VM), verify/prune/task
     status, verify/gc/prune/sync start, and PBS version.
   - **System**: `ping`, `status` — always registered; report which backends are enabled.
