@@ -389,7 +389,7 @@ disabled and its tools are not registered.
 | `PVE_TOKEN` | PVE API token (`user@realm!tokenid=uuid`); enables PVE when non-empty |
 | `PVE_CA_CERT_PATH` | optional custom CA (PEM) for the PVE endpoint; empty = system roots |
 | `PBS_ENDPOINT` | PBS API endpoint (e.g. `https://pbs.example.com:8007`); enables PBS when non-empty |
-| `PBS_TOKEN` | PBS API token (`user@pbs!tokenid=uuid`); enables PBS when non-empty |
+| `PBS_TOKEN` | PBS API token (`user@pbs!tokenid:secret` — `:` separator, `=` normalized to `:`); enables PBS when non-empty |
 | `PBS_CA_CERT_PATH` | optional custom CA (PEM) for the PBS endpoint; empty = system roots |
 | `LOG_LEVEL` | log level `trace\|debug\|info\|warn\|error`; **when set, logging is enabled** (to `LOG_FILENAME`); when unset, logging is **disabled** (L2) |
 | `LOG_FILENAME` | log file path used when `LOG_LEVEL` is set (default `/tmp/mcp-proxmox.log`, mode `0600`) (L3) |
