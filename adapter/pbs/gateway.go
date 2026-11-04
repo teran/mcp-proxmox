@@ -442,25 +442,18 @@ func (g *Gateway) GetBackupNotes(ctx context.Context, store, backupID, backupTyp
 	return &model.BackupNotes{Notes: notes}, nil
 }
 
-// GetVerifyStatus returns the status of a verify job by UPID.
-func (g *Gateway) GetVerifyStatus(ctx context.Context, store, upid string) (*model.VerifyStatus, error) {
-	var out model.VerifyStatus
-	path := "/admin/datastore/" + url.PathEscape(store) + "/verify/" + url.PathEscape(upid)
-	if err := g.do(ctx, http.MethodGet, path, &out); err != nil {
-		return nil, err
-	}
-
-	return &out, nil
+// GetVerifyStatus returns the status of a verify job by UPID. PBS exposes a
+// verify job only as a task, so this delegates to the task-status endpoint
+// (GET /nodes/{node}/tasks/{upid}/status). Read-only.
+func (g *Gateway) GetVerifyStatus(ctx context.Context, upid string) (*model.PBSTask, error) {
+	return g.GetTaskStatus(ctx, upid)
 }
 
-// GetPruneStatus returns the status of a prune job by UPID.
-func (g *Gateway) GetPruneStatus(ctx context.Context, store, upid string) (*model.PruneStatus, error) {
-	var out model.PruneStatus
-	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+url.PathEscape(store)+"/prune/"+url.PathEscape(upid), &out); err != nil {
-		return nil, err
-	}
-
-	return &out, nil
+// GetPruneStatus returns the status of a prune job by UPID. PBS exposes a prune
+// job only as a task, so this delegates to the task-status endpoint
+// (GET /nodes/{node}/tasks/{upid}/status). Read-only.
+func (g *Gateway) GetPruneStatus(ctx context.Context, upid string) (*model.PBSTask, error) {
+	return g.GetTaskStatus(ctx, upid)
 }
 
 // GetPBSVersion returns the PBS version info.
@@ -515,10 +508,11 @@ func (g *Gateway) ListBackupFiles(
 }
 
 // GetTaskStatus returns the status of a task by UPID via
-// GET /admin/tasks/{upid}. Read-only.
+// GET /nodes/{node}/tasks/{upid}/status, where node is the local PBS node
+// (always "localhost" — see pbsTaskNode). Read-only.
 func (g *Gateway) GetTaskStatus(ctx context.Context, upid string) (*model.PBSTask, error) {
 	var out model.PBSTask
-	if err := g.do(ctx, http.MethodGet, "/admin/tasks/"+url.PathEscape(upid), &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, pbsTaskStatusPath(upid), &out); err != nil {
 		return nil, err
 	}
 
@@ -526,10 +520,11 @@ func (g *Gateway) GetTaskStatus(ctx context.Context, upid string) (*model.PBSTas
 }
 
 // GetTaskLog returns the log of a task by UPID via
-// GET /admin/tasks/{upid}/log. The optional limit caps the number of returned
-// lines. Read-only.
+// GET /nodes/{node}/tasks/{upid}/log, where node is the local PBS node (always
+// "localhost" — see pbsTaskNode). The optional limit caps the number of
+// returned lines. Read-only.
 func (g *Gateway) GetTaskLog(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error) {
-	urlPath := "/admin/tasks/" + url.PathEscape(upid) + "/log"
+	urlPath := pbsTaskLogPath(upid)
 	if limit > 0 {
 		urlPath += "?limit=" + strconv.Itoa(limit)
 	}
@@ -539,6 +534,51 @@ func (g *Gateway) GetTaskLog(ctx context.Context, upid string, limit int) ([]mod
 	}
 
 	return out, nil
+}
+
+// pbsTaskNode is the node name used to address the local PBS node's task
+// endpoints. PBS routes /nodes/{node}/tasks server-side, and "localhost" always
+// means the node the client is talking to (the PBS CLI and docs use it for
+// local-node operations). Using a fixed "localhost" avoids fragile UPID parsing
+// and works for any PBS installation regardless of the node's real hostname.
+const pbsTaskNode = "localhost"
+
+// pbsTaskStatusPath builds GET /nodes/{node}/tasks/{upid}/status for a UPID.
+// The UPID is encoded as a single path segment so ':' and '@' are escaped and a
+// '/' cannot inject extra path segments (S11).
+func pbsTaskStatusPath(upid string) string {
+	return "/nodes/" + pbsTaskNode + "/tasks/" + encodeUPIDSegment(upid) + "/status"
+}
+
+// pbsTaskLogPath builds GET /nodes/{node}/tasks/{upid}/log for a UPID.
+func pbsTaskLogPath(upid string) string {
+	return "/nodes/" + pbsTaskNode + "/tasks/" + encodeUPIDSegment(upid) + "/log"
+}
+
+// encodeUPIDSegment percent-encodes a UPID so it is safe as a single path
+// segment. It escapes ':' (→%3A), '@' (→%40) and '/' (→%2F, so a UPID cannot
+// inject extra path segments), but deliberately leaves '!' literal. The live PBS
+// API rejects %21 for the '!' inside the API-token id of the UPID user (e.g.
+// user@realm!tokenid), so '!' must be sent raw. Only unreserved characters plus
+// '!' are left unescaped (S11 path-injection safety).
+func encodeUPIDSegment(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := range len(s) {
+		c := s[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' ||
+			c == '-' || c == '_' || c == '.' || c == '~' || c == '!' {
+			b.WriteByte(c)
+
+			continue
+		}
+		const hex = "0123456789ABCDEF"
+		b.WriteByte('%')
+		b.WriteByte(hex[c>>4])
+		b.WriteByte(hex[c&0x0f])
+	}
+
+	return b.String()
 }
 
 // RestoreFile restores a single file out of a backup snapshot via

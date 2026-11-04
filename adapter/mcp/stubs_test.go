@@ -685,8 +685,8 @@ type stubPBSGateway struct {
 	listBackups        func(ctx context.Context, store string) ([]model.Backup, error)
 	getBackup          func(ctx context.Context, store, backupID string) ([]model.Backup, error)
 	getBackupNotes     func(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error)
-	getVerifyStatus    func(ctx context.Context, store, upid string) (*model.VerifyStatus, error)
-	getPruneStatus     func(ctx context.Context, store, upid string) (*model.PruneStatus, error)
+	getVerifyStatus    func(ctx context.Context, upid string) (*model.PBSTask, error)
+	getPruneStatus     func(ctx context.Context, upid string) (*model.PBSTask, error)
 	getPBSVersion      func(ctx context.Context) (*model.PBSVersion, error)
 	startVerify        func(ctx context.Context, store string) (string, error)
 	startGC            func(ctx context.Context, store string) (string, error)
@@ -772,26 +772,26 @@ func (s *stubPBSGateway) GetBackupNotes(ctx context.Context, store, backupID, ba
 	return &model.BackupNotes{Notes: "keep"}, nil
 }
 
-func (s *stubPBSGateway) GetVerifyStatus(ctx context.Context, store, upid string) (*model.VerifyStatus, error) {
+func (s *stubPBSGateway) GetVerifyStatus(ctx context.Context, upid string) (*model.PBSTask, error) {
 	if s.fail() {
 		return nil, s.err
 	}
 	if s.getVerifyStatus != nil {
-		return s.getVerifyStatus(ctx, store, upid)
+		return s.getVerifyStatus(ctx, upid)
 	}
 
-	return &model.VerifyStatus{UPID: upid, Status: "ok"}, nil
+	return &model.PBSTask{UPID: upid, Status: "ok"}, nil
 }
 
-func (s *stubPBSGateway) GetPruneStatus(ctx context.Context, store, upid string) (*model.PruneStatus, error) {
+func (s *stubPBSGateway) GetPruneStatus(ctx context.Context, upid string) (*model.PBSTask, error) {
 	if s.fail() {
 		return nil, s.err
 	}
 	if s.getPruneStatus != nil {
-		return s.getPruneStatus(ctx, store, upid)
+		return s.getPruneStatus(ctx, upid)
 	}
 
-	return &model.PruneStatus{UPID: upid, Status: "running"}, nil
+	return &model.PBSTask{UPID: upid, Status: "running"}, nil
 }
 
 func (s *stubPBSGateway) GetPBSVersion(ctx context.Context) (*model.PBSVersion, error) {

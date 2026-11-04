@@ -45,13 +45,13 @@ func (s *PBSService) GetBackupNotes(ctx context.Context, store, backupID, backup
 }
 
 // GetVerifyStatus returns the status of a verify job by UPID.
-func (s *PBSService) GetVerifyStatus(ctx context.Context, store, upid string) (*model.VerifyStatus, error) {
-	return s.gw.GetVerifyStatus(ctx, store, upid)
+func (s *PBSService) GetVerifyStatus(ctx context.Context, upid string) (*model.PBSTask, error) {
+	return s.gw.GetVerifyStatus(ctx, upid)
 }
 
 // GetPruneStatus returns the status of a prune job by UPID.
-func (s *PBSService) GetPruneStatus(ctx context.Context, store, upid string) (*model.PruneStatus, error) {
-	return s.gw.GetPruneStatus(ctx, store, upid)
+func (s *PBSService) GetPruneStatus(ctx context.Context, upid string) (*model.PBSTask, error) {
+	return s.gw.GetPruneStatus(ctx, upid)
 }
 
 // GetPBSVersion returns the PBS version info.

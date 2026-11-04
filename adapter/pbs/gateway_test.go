@@ -392,18 +392,20 @@ func TestGateway_PathSegmentsEscaped(t *testing.T) {
 			"store segment must be escaped; raw '/' would inject extra path segments")
 	})
 
-	t.Run("store+upid", func(t *testing.T) {
+	t.Run("task status upid", func(t *testing.T) {
 		rec := &reqCapture{}
 		srv := mockServer(t, 200, `{"data":{"upid":"x","status":"OK"}}`, rec)
 		g, _ := newTestGateway(t, srv)
 
-		_, err := g.GetVerifyStatus(context.Background(), "st/ore", "upid/with/slash")
+		_, err := g.GetTaskStatus(context.Background(), "UPID:pbs01:1:2:3:verify:tier1:teran@homelab!mcp:")
 		skipIfStub(t, err)
 		require.NoError(t, err)
 
 		require.Equal(t, 1, rec.count)
-		assert.Equal(t, "/api2/json/admin/datastore/st%2Fore/verify/upid%2Fwith%2Fslash", rec.escapedPath,
-			"store and upid segments must be escaped")
+		assert.Equal(t,
+			"/api2/json/nodes/localhost/tasks/UPID%3Apbs01%3A1%3A2%3A3%3Averify%3Atier1%3Ateran%40homelab!mcp%3A/status",
+			rec.escapedPath,
+			"upid segment must escape ':' and '@' but leave '!' literal, with no raw '/' to inject segments")
 	})
 
 	t.Run("backup files path (store escaped, backup params in query)", func(t *testing.T) {
@@ -421,6 +423,50 @@ func TestGateway_PathSegmentsEscaped(t *testing.T) {
 		assert.Equal(t, "backup-id=100%2F1&backup-time=1793662080&backup-type=vm%2Ftype", rec.query,
 			"backup-type/backup-id must be URL-encoded query parameters")
 	})
+}
+
+// TestEncodeUPIDSegment covers the UPID path-segment encoder: ':' → %3A,
+// '@' → %40, '/' → %2F (path-injection safety), while '!' and unreserved
+// characters stay literal. This matches the live PBS URL
+// .../tasks/UPID%3A...%40homelab!mcp%3A/status.
+func TestEncodeUPIDSegment(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "live verify upid",
+			in:   "UPID:pbs01:00000500:000012E1:00007A49:6AEB575A:verify:tier1:teran@homelab!mcp:",
+			want: "UPID%3Apbs01%3A00000500%3A000012E1%3A00007A49%3A6AEB575A%3Averify%3Atier1%3Ateran%40homelab!mcp%3A",
+		},
+		{
+			name: "exclamation stays literal",
+			in:   "a!b",
+			want: "a!b",
+		},
+		{
+			name: "slash is escaped (path-injection safe)",
+			in:   "a/b",
+			want: "a%2Fb",
+		},
+		{
+			name: "at and colon escaped",
+			in:   "user@realm!tok:",
+			want: "user%40realm!tok%3A",
+		},
+		{
+			name: "empty stays empty",
+			in:   "",
+			want: "",
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, encodeUPIDSegment(tt.in))
+		})
+	}
 }
 
 // compile-time: Gateway implements port.PBSGateway.

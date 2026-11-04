@@ -35,14 +35,18 @@ type PBSGateway interface {
 	// path optionally restricts the listing to a subdirectory (query `path`,
 	// default "/").
 	ListBackupFiles(ctx context.Context, store, backupType, backupID string, backupTime int64, path string) ([]model.PBSFile, error)
-	// GetTaskStatus returns the status of a task by UPID (GET /admin/tasks/{upid}).
+	// GetTaskStatus returns the status of a task by UPID
+	// (GET /nodes/localhost/tasks/{upid}/status).
 	GetTaskStatus(ctx context.Context, upid string) (*model.PBSTask, error)
-	// GetTaskLog returns the log of a task by UPID (GET /admin/tasks/{upid}/log).
+	// GetTaskLog returns the log of a task by UPID
+	// (GET /nodes/localhost/tasks/{upid}/log).
 	GetTaskLog(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error)
 
-	// Verify & prune (status polling is read-only).
-	GetVerifyStatus(ctx context.Context, store, upid string) (*model.VerifyStatus, error)
-	GetPruneStatus(ctx context.Context, store, upid string) (*model.PruneStatus, error)
+	// Verify & prune (status polling is read-only). PBS exposes a verify/prune
+	// job only as a task, so both are polled through the task-status endpoint
+	// (GET /nodes/localhost/tasks/{upid}/status), which returns a PBSTask.
+	GetVerifyStatus(ctx context.Context, upid string) (*model.PBSTask, error)
+	GetPruneStatus(ctx context.Context, upid string) (*model.PBSTask, error)
 
 	// RestoreFile restores a single file out of a backup snapshot to a target
 	// path on the PBS filesystem. It is a mutation (gated by EnableMutations),

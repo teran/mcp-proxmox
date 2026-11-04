@@ -73,19 +73,19 @@ func TestPBSService_ReadStatusAndVersion(t *testing.T) {
 	})
 
 	t.Run("GetVerifyStatus", func(t *testing.T) {
-		gateway := &mockPBSGateway{getVerifyStatus: func(_ context.Context, _, upid string) (*model.VerifyStatus, error) {
-			return &model.VerifyStatus{UPID: upid, Status: "ok"}, nil
+		gateway := &mockPBSGateway{getVerifyStatus: func(_ context.Context, upid string) (*model.PBSTask, error) {
+			return &model.PBSTask{UPID: upid, Status: "ok"}, nil
 		}}
-		got, err := (&PBSService{gw: gateway}).GetVerifyStatus(context.Background(), "backup", "UPID:...")
+		got, err := (&PBSService{gw: gateway}).GetVerifyStatus(context.Background(), "UPID:...")
 		require.NoError(t, err)
 		assert.Equal(t, "ok", got.Status)
 	})
 
 	t.Run("GetPruneStatus", func(t *testing.T) {
-		gateway := &mockPBSGateway{getPruneStatus: func(_ context.Context, _, upid string) (*model.PruneStatus, error) {
-			return &model.PruneStatus{UPID: upid, Status: "running"}, nil
+		gateway := &mockPBSGateway{getPruneStatus: func(_ context.Context, upid string) (*model.PBSTask, error) {
+			return &model.PBSTask{UPID: upid, Status: "running"}, nil
 		}}
-		got, err := (&PBSService{gw: gateway}).GetPruneStatus(context.Background(), "backup", "UPID:...")
+		got, err := (&PBSService{gw: gateway}).GetPruneStatus(context.Background(), "UPID:...")
 		require.NoError(t, err)
 		assert.Equal(t, "running", got.Status)
 	})
@@ -182,12 +182,12 @@ var pbsErrorPropagationCases = []struct {
 		return e
 	}},
 	{"GetVerifyStatus", func(s *PBSService) error {
-		_, e := s.GetVerifyStatus(context.Background(), "s", "u")
+		_, e := s.GetVerifyStatus(context.Background(), "u")
 
 		return e
 	}},
 	{"GetPruneStatus", func(s *PBSService) error {
-		_, e := s.GetPruneStatus(context.Background(), "s", "u")
+		_, e := s.GetPruneStatus(context.Background(), "u")
 
 		return e
 	}},
@@ -229,8 +229,8 @@ func newFailingPBSGateway(sentinel error) *mockPBSGateway {
 	gateway.getBackupNotes = func(_ context.Context, _, _, _ string) (*model.BackupNotes, error) {
 		return nil, sentinel
 	}
-	gateway.getVerifyStatus = func(_ context.Context, _, _ string) (*model.VerifyStatus, error) { return nil, sentinel }
-	gateway.getPruneStatus = func(_ context.Context, _, _ string) (*model.PruneStatus, error) { return nil, sentinel }
+	gateway.getVerifyStatus = func(_ context.Context, _ string) (*model.PBSTask, error) { return nil, sentinel }
+	gateway.getPruneStatus = func(_ context.Context, _ string) (*model.PBSTask, error) { return nil, sentinel }
 	gateway.getPBSVersion = func(_ context.Context) (*model.PBSVersion, error) { return nil, sentinel }
 	gateway.startVerify = func(_ context.Context, _ string) (string, error) { return "", sentinel }
 	gateway.startGC = func(_ context.Context, _ string) (string, error) { return "", sentinel }

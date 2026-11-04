@@ -35,7 +35,9 @@ type PBSVMRestoreRequest struct {
 	Reload      bool   `json:"reload,omitempty"`
 }
 
-// PBSTask is the status of a task by UPID from GET /admin/tasks/{upid}.
+// PBSTask is the status of a task by UPID from
+// GET /nodes/localhost/tasks/{upid}/status. It is also the response type for
+// verify/prune status, which PBS exposes only as tasks.
 type PBSTask struct {
 	UPID      string `json:"upid"`
 	Type      string `json:"type,omitempty"`
