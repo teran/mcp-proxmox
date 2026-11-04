@@ -30,8 +30,7 @@ type backupNotesIn struct {
 // jobIn identifies a verify/prune job by UPID (pbs_verify_status /
 // pbs_prune_status).
 type jobIn struct {
-	Store string `json:"store" jsonschema:"PBS datastore name"`
-	UPID  string `json:"upid" jsonschema:"Job UPID"`
+	UPID string `json:"upid" jsonschema:"Job UPID"`
 }
 
 // syncIn is the input of pbs_sync_start (a datastore plus sync-job parameters).
@@ -162,16 +161,16 @@ func registerPBSQueryTools1(s *mcpSDK.Server, app *application.App, log toolLogg
 		roTool(s, "pbs_verify_status", "Get PBS verify job status",
 			"Get the status of a PBS verify job by UPID. The UPID comes from a running/known verify job"+
 				"(PBS has no task-list endpoint in this version).",
-			"Provide the datastore name and the verify job's UPID. Returns the job status; use to poll a running verify. Read-only.",
+			"Provide the verify job's UPID. Returns the job status; use to poll a running verify. Read-only.",
 			log, func(ctx context.Context, in jobIn) (any, error) {
-				return app.PBS.GetVerifyStatus(ctx, in.Store, in.UPID)
+				return app.PBS.GetVerifyStatus(ctx, in.UPID)
 			}),
 		roTool(s, "pbs_prune_status", "Get PBS prune job status",
 			"Get the status of a PBS prune job by UPID. The UPID comes from a running/known prune job"+
 				"(PBS has no task-list endpoint in this version).",
-			"Provide the datastore name and the prune job's UPID. Returns the job status; use to poll a running prune. Read-only.",
+			"Provide the prune job's UPID. Returns the job status; use to poll a running prune. Read-only.",
 			log, func(ctx context.Context, in jobIn) (any, error) {
-				return app.PBS.GetPruneStatus(ctx, in.Store, in.UPID)
+				return app.PBS.GetPruneStatus(ctx, in.UPID)
 			}),
 
 		// --- version ---

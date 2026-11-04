@@ -172,17 +172,18 @@ func TestGateway_Backup_Success(t *testing.T) {
 }
 
 // TestGateway_VerifyPrune_Success exercises the verify/prune status read
-// methods.
+// methods. Both route through the task-status endpoint and return a PBSTask.
 func TestGateway_VerifyPrune_Success(t *testing.T) {
 	runSurfaceCases(t, []surfaceCase{
 		{
 			name: "GetVerifyStatus",
-			body: `{"data":{"upid":"upid1","store":"backup","status":"ok","errors":0}}`,
-			path: "/api2/json/admin/datastore/backup/verify/upid1",
+			body: `{"data":{"upid":"upid1","type":"verify","status":"ok","worker":"w","errors":0}}`,
+			path: "/api2/json/nodes/localhost/tasks/upid1/status",
 			call: func(g *Gateway) error {
-				st, err := g.GetVerifyStatus(context.Background(), "backup", "upid1")
+				st, err := g.GetVerifyStatus(context.Background(), "upid1")
 				if assert.NoError(t, err) {
 					assert.Equal(t, "ok", st.Status)
+					assert.Equal(t, "verify", st.Type)
 				}
 
 				return err
@@ -190,12 +191,13 @@ func TestGateway_VerifyPrune_Success(t *testing.T) {
 		},
 		{
 			name: "GetPruneStatus",
-			body: `{"data":{"upid":"upid1","store":"backup","status":"running","duration":5}}`,
-			path: "/api2/json/admin/datastore/backup/prune/upid1",
+			body: `{"data":{"upid":"upid1","type":"prune","status":"running","worker":"w"}}`,
+			path: "/api2/json/nodes/localhost/tasks/upid1/status",
 			call: func(g *Gateway) error {
-				st, err := g.GetPruneStatus(context.Background(), "backup", "upid1")
+				st, err := g.GetPruneStatus(context.Background(), "upid1")
 				if assert.NoError(t, err) {
 					assert.Equal(t, "running", st.Status)
+					assert.Equal(t, "prune", st.Type)
 				}
 
 				return err
@@ -306,12 +308,12 @@ func TestGateway_EmptyDataForGetters(t *testing.T) {
 			return e
 		}},
 		{"GetVerifyStatus", func(g *Gateway) error {
-			_, e := g.GetVerifyStatus(context.Background(), "backup", "upid1")
+			_, e := g.GetVerifyStatus(context.Background(), "upid1")
 
 			return e
 		}},
 		{"GetPruneStatus", func(g *Gateway) error {
-			_, e := g.GetPruneStatus(context.Background(), "backup", "upid1")
+			_, e := g.GetPruneStatus(context.Background(), "upid1")
 
 			return e
 		}},
@@ -398,12 +400,12 @@ func TestGateway_AllMethodErrorBranches(t *testing.T) {
 			return e
 		}},
 		{"GetVerifyStatus", func(g *Gateway) error {
-			_, e := g.GetVerifyStatus(context.Background(), "s", "u")
+			_, e := g.GetVerifyStatus(context.Background(), "u")
 
 			return e
 		}},
 		{"GetPruneStatus", func(g *Gateway) error {
-			_, e := g.GetPruneStatus(context.Background(), "s", "u")
+			_, e := g.GetPruneStatus(context.Background(), "u")
 
 			return e
 		}},

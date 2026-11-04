@@ -140,8 +140,8 @@ func TestPBSToolSuccess(t *testing.T) {
 		{"pbs_backup_list", map[string]any{"store": "backup"}},
 		{"pbs_backup_get", map[string]any{"store": "backup", "backup_id": "vm/100/..."}},
 		{"pbs_backup_notes_get", map[string]any{"store": "backup", "backup_id": "vm/100/...", "backup_type": "vm"}},
-		{"pbs_verify_status", map[string]any{"store": "backup", "upid": "UPID:..."}},
-		{"pbs_prune_status", map[string]any{"store": "backup", "upid": "UPID:..."}},
+		{"pbs_verify_status", map[string]any{"upid": "UPID:..."}},
+		{"pbs_prune_status", map[string]any{"upid": "UPID:..."}},
 		{"pbs_version", nil},
 	}
 
@@ -209,8 +209,8 @@ func TestPBSToolErrorPropagation(t *testing.T) {
 		{"pbs_backup_list", map[string]any{"store": "backup"}},
 		{"pbs_backup_get", map[string]any{"store": "backup", "backup_id": "vm/100/..."}},
 		{"pbs_backup_notes_get", map[string]any{"store": "backup", "backup_id": "vm/100/...", "backup_type": "vm"}},
-		{"pbs_verify_status", map[string]any{"store": "backup", "upid": "UPID:..."}},
-		{"pbs_prune_status", map[string]any{"store": "backup", "upid": "UPID:..."}},
+		{"pbs_verify_status", map[string]any{"upid": "UPID:..."}},
+		{"pbs_prune_status", map[string]any{"upid": "UPID:..."}},
 		{"pbs_version", nil},
 	}
 

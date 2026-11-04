@@ -43,8 +43,8 @@ func TestGateway_ListBackupFiles_NoPath(t *testing.T) {
 	assert.Equal(t, "backup-id=100&backup-time=1793662080&backup-type=vm", rec.query)
 }
 
-// TestGateway_GetTaskStatus_Success verifies GET /admin/tasks/{upid} decodes a
-// PBSTask.
+// TestGateway_GetTaskStatus_Success verifies GET /nodes/localhost/tasks/{upid}/status
+// decodes a PBSTask.
 func TestGateway_GetTaskStatus_Success(t *testing.T) {
 	rec := &reqCapture{}
 	srv := mockServer(t, 200, `{"data":{"upid":"upid1","type":"restore","status":"running","worker":"w","errors":2}}`, rec)
@@ -60,11 +60,11 @@ func TestGateway_GetTaskStatus_Success(t *testing.T) {
 	assert.Equal(t, 2, task.Errors)
 
 	assert.Equal(t, http.MethodGet, rec.method)
-	assert.Equal(t, "/api2/json/admin/tasks/upid1", rec.path)
+	assert.Equal(t, "/api2/json/nodes/localhost/tasks/upid1/status", rec.path)
 }
 
-// TestGateway_GetTaskLog_Success verifies GET /admin/tasks/{upid}/log decodes
-// the log entries and forwards the limit query.
+// TestGateway_GetTaskLog_Success verifies GET /nodes/localhost/tasks/{upid}/log
+// decodes the log entries and forwards the limit query.
 func TestGateway_GetTaskLog_Success(t *testing.T) {
 	rec := &reqCapture{}
 	srv := mockServer(t, 200, `{"data":[{"n":1,"t":"TASK OK"}]}`, rec)
@@ -77,7 +77,7 @@ func TestGateway_GetTaskLog_Success(t *testing.T) {
 	assert.Equal(t, "TASK OK", entries[0].Text)
 
 	assert.Equal(t, http.MethodGet, rec.method)
-	assert.Equal(t, "/api2/json/admin/tasks/upid1/log", rec.path)
+	assert.Equal(t, "/api2/json/nodes/localhost/tasks/upid1/log", rec.path)
 	assert.Equal(t, "limit=50", rec.query)
 }
 

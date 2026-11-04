@@ -245,16 +245,6 @@ var jsonRoundTripCases = []struct {
 		want: `{"notes":"keep forever"}`,
 	},
 	{
-		name: "verify-status",
-		in:   VerifyStatus{UPID: "UPID:...", Store: "backup", Status: "ok", Errors: 0, Duration: 42},
-		want: `{"upid":"UPID:...","store":"backup","status":"ok","duration":42}`,
-	},
-	{
-		name: "prune-status",
-		in:   PruneStatus{UPID: "UPID:...", Store: "backup", Status: "running", Duration: 7},
-		want: `{"upid":"UPID:...","store":"backup","status":"running","duration":7}`,
-	},
-	{
 		name: "pbs-version",
 		in:   PBSVersion{Version: "3.2.3", Release: "3.2", RepoID: "efgh"},
 		want: `{"version":"3.2.3","release":"3.2","repoid":"efgh"}`,

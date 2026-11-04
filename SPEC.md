@@ -1200,3 +1200,44 @@ complements, never replaces, them.
 7. **API-token only** (no ticket/CSRF flow) — matches the stated requirement.
 8. **Tokens from config, not per-call** — confirmed in §2.4; revisit only if a
    remote/OAuth2 relay is added.
+
+## 11. TODO / Future work
+
+Tracked follow-ups (not yet implemented). Each is a self-contained piece of work
+with its own branch/PR, following the TDD workflow (§8.5).
+
+1. **Pagination for large datastore snapshot listings (`pbs_backup_list` /
+   `pbs_backup_get`).** The current implementation issues a single
+   `GET /admin/datastore/{store}/snapshots` and returns the **entire** list
+   in one response. On a datastore with many snapshots (observed: 132 snapshots
+   for a single VM, and `pbs_backup_list` returning a multi-hundred-KB payload)
+   this is slow and unbounded. PBS supports query-parameter paging
+   (`limit`, and time-window `start`/`end` filters on `backup-time`); add
+   pagination / windowing to avoid returning the whole set and to bound the
+   response size. Applies the same reasoning as the `pbs_backup_files_list`
+   fix (epoch `backup-time`).
+2. **Fix `RestoreFile` / `RestoreVMBackup` endpoints.** Both still build the
+   same wrong path as the (now fixed) `ListBackupFiles` did
+   (`/admin/datastore/{store}/backups/{type}/{id}/{snapshot}/files` and
+   `.../restore`), which returns 404 against a real PBS. Per the PBS source,
+   these are `POST /admin/datastore/{store}/files` (single file) and
+   `POST /admin/datastore/{store}/restore` (VM), with the same
+   `backup-type`/`backup-id`/`backup-time` (epoch) parameters. After fixing,
+   the legacy `backupFilesPath` helper can be removed entirely.
+3. **Fix PBS task / verify / prune status endpoints.** `pbs_verify_status`,
+   `pbs_prune_status`, `pbs_task_status` and `pbs_task_log` all return 404
+   against a real PBS because they hit non-existent paths:
+   `GET /admin/tasks/{upid}`, `GET /admin/tasks/{upid}/log`,
+   `GET /admin/datastore/{store}/verify/{upid}`,
+   `GET /admin/datastore/{store}/prune/{upid}`. PBS is a single node and tasks
+   live under the node API. Confirmed live (a running verify job), the correct
+   request is, e.g.:
+   `GET /api2/json/nodes/pbs01/tasks/UPID%3Apbs01%3A...%3Ateran%40homelab!mcp%3A/status`
+   i.e. `/nodes/{node}/tasks/{url-encoded-upid}/status` (and `/log` for the
+   log; node = the PBS node, `localhost` also resolves). The UPID must be
+   URL-encoded as a path segment (`:` → `%3A`, `@` → `%40`, `!` left literal) —
+   not `url.PathEscape`'d and not appended raw. Verify/prune status are read
+   through the same task endpoints (no separate `/verify/{upid}` /
+   `/prune/{upid}`). Fix the gateway paths accordingly (task list is
+   `GET /nodes/{node}/tasks`).
+
