@@ -22,7 +22,7 @@ type Config struct {
 
 	// PBS backend.
 	PBSEndpoint   string `envconfig:"PBS_ENDPOINT" desc:"Proxmox Backup Server API endpoint. Empty = disabled."`
-	PBSToken      string `envconfig:"PBS_TOKEN" desc:"Proxmox Backup Server API token (user@pbs!tokenid=uuid). Empty = disabled."`
+	PBSToken      string `envconfig:"PBS_TOKEN" desc:"PBS API token (user@pbs!tokenid:secret; '=' to ':'). Empty = disabled."`
 	PBSCACertPath string `envconfig:"PBS_CA_CERT_PATH" desc:"Optional custom CA (PEM) for PBS TLS. Empty = system roots."`
 
 	// Logging.

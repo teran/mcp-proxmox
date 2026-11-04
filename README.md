@@ -52,8 +52,10 @@ an API token for it.
   - **System**: `ping`, `status` — always registered; report which backends are enabled.
 - **Backends enabled only when configured:** a backend whose `endpoint` or `token`
   is missing is simply **absent** — its tools are not registered and nothing fails.
-- **API-token authentication** (`Authorization: PVEAPIToken=user@realm!tokenid=uuid`),
-  read once per backend from config — **never per-call, never logged**.
+- **API-token authentication** — PVE: `Authorization: PVEAPIToken=user@realm!tokenid=secret`
+  (**`=`** separator); PBS: `Authorization: PBSAPIToken=user@pbs!tokenid:secret`
+  (**`:`** separator — not `=`). Read once per backend from config — **never per-call,
+  never logged**.
 - **Local stdio mode** today; the transport and `TokenSource` boundaries are designed
   so a future **remote (Streamable HTTP) + OAuth2** mode can be added without
   rearchitecting.
@@ -128,10 +130,10 @@ disabled and its tools are not registered.
 | Variable | Description |
 |---|---|
 | `PVE_ENDPOINT` | PVE API endpoint (e.g. `https://pve.example.com:8006`). Non-empty enables the PVE backend. |
-| `PVE_TOKEN` | PVE API token (`user@realm!tokenid=uuid`). Non-empty enables the PVE backend. |
+| `PVE_TOKEN` | PVE API token (`user@realm!tokenid=secret` — **`=`** separator). Non-empty enables the PVE backend. |
 | `PVE_CA_CERT_PATH` | Optional custom CA (PEM) for the PVE endpoint. Empty = system roots. |
 | `PBS_ENDPOINT` | PBS API endpoint (e.g. `https://pbs.example.com:8007`). Non-empty enables the PBS backend. |
-| `PBS_TOKEN` | PBS API token (`user@pbs!tokenid=uuid`). Non-empty enables the PBS backend. |
+| `PBS_TOKEN` | PBS API token (`user@pbs!tokenid:secret` — note the **`:`** separator, **not** `=`). Non-empty enables the PBS backend. |
 | `PBS_CA_CERT_PATH` | Optional custom CA (PEM) for the PBS endpoint. Empty = system roots. |
 | `LOG_LEVEL` | Log level (`trace`, `debug`, `info`, `warn`, `error`). **When set, logging is enabled**; when unset, logging is **disabled** (no logs are emitted anywhere). |
 | `LOG_FILENAME` | Path of the log file used when `LOG_LEVEL` is set (default `/tmp/mcp-proxmox.log`, mode `0600`). |
@@ -143,6 +145,15 @@ tokens are long-lived, privilege-scoped credentials configured once per backend
 and re-used on every call — **never per-call, never logged**. TLS verification
 is **always on**; a self-signed/custom CA is supported only via the per-backend
 `*_CA_CERT_PATH` variable.
+
+> ⚠️ **Token format — PVE and PBS differ.** The canonical (documented) formats are
+> `PVE_TOKEN="user@realm!tokenid=secret"` (**`=`**) and
+> `PBS_TOKEN="user@pbs!tokenid:secret"` (**`:`**, per PBS docs). The server
+> **normalizes** a `=`-form PBS token to `:` automatically, so both forms work
+> through the server; but **direct API clients** (e.g. `curl`) send the value
+> verbatim and require the `:` form for PBS. If a backend reports
+> `authentication failed` / an empty response, double-check the separator and
+> that the value is the full `user@realm!tokenid` + secret.
 
 ### Logging
 
@@ -177,9 +188,9 @@ Set the API token(s) as environment variables, then start the server:
 
 ```sh
 export PVE_ENDPOINT="https://pve.example.com:8006"
-export PVE_TOKEN="user@pam!tokenid=abc123=deadbeef"
+export PVE_TOKEN="user@pam!tokenid=deadbeef"
 export PBS_ENDPOINT="https://pbs.example.com:8007"
-export PBS_TOKEN="user@pbs!tokenid=xyz789=deadbeef"
+export PBS_TOKEN="user@pbs!tokenid:deadbeef"
 
 ./bin/mcp-proxmox   # logging off by default; enable via LOG_LEVEL env
 ```
@@ -201,9 +212,9 @@ client as a subprocess (see the client configuration below).
       "args": [],
       "env": {
         "PVE_ENDPOINT": "https://pve.example.com:8006",
-        "PVE_TOKEN": "user@pam!tokenid=abc123=deadbeef",
+        "PVE_TOKEN": "user@pam!tokenid=deadbeef",
         "PBS_ENDPOINT": "https://pbs.example.com:8007",
-        "PBS_TOKEN": "user@pbs!tokenid=xyz789=deadbeef",
+        "PBS_TOKEN": "user@pbs!tokenid:deadbeef",
         "LOG_LEVEL": "info"
       }
     }
