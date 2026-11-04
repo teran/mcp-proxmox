@@ -29,12 +29,31 @@ var jsonRoundTripCases = []struct {
 	{
 		name: "node-status",
 		in: NodeStatus{
-			Node: "pve1", Status: "online", CPU: 0.5, MaxCPU: 8, Mem: 512, MaxMem: 16384,
-			Disk: 200, MaxDisk: 512, Uptime: 7200, LoadAvg: []float64{0.1, 0.2, 0.3},
-			KVM: 1, PVE: 1, Swap: SwapInfo{Total: 64}, KSmem: 16, Wait: 0.01,
+			CPU: 0.5,
+			CPUInfo: CPUInfo{
+				MHz: "1114.960", Cores: 8, CPUs: 16, Sockets: 1,
+				Vendor: "AuthenticAMD", Model: "AMD Ryzen 7 255", Family: "25", Flags: "fpu",
+			},
+			BootInfo:      BootInfo{SecureBoot: FlexInt(1), Mode: "efi"},
+			CurrentKernel: KernelInfo{Machine: "x86_64", Release: "7.0.14-11-pve", Sysname: "Linux", Version: "#1 SMP"},
+			Idle:          0.1,
+			KSM:           KSMInfo{Shared: 16},
+			KVersion:      "Linux 7.0.14-11-pve",
+			LoadAvg:       LoadAvg{0.36, 0.60, 2.73},
+			Memory:        MemoryInfo{Used: 18149171200, Free: 42468319232, Available: 46922694656, Total: 65071865856},
+			PVEVersion:    "pve-manager/9.2.10/43df2e01f27a1a19",
+			RootFS:        RootFSInfo{Avail: 29257637888, Free: 29257637888, Used: 13045903360, Total: 42303541248},
+			Swap:          SwapInfo{Used: 1, Free: 2, Total: 64},
+			Uptime:        3000927,
+			Wait:          0.01,
 		},
-		want: `{"node":"pve1","status":"online","cpu":0.5,"maxcpu":8,"mem":512,"maxmem":16384,"disk":200,` +
-			`"maxdisk":512,"uptime":7200,"loadavg":[0.1,0.2,0.3],"kvm":1,"pve":1,"swap":{"total":64},"ksm":16,"wait":0.01}`,
+		want: `{"cpu":0.5,"cpuinfo":{"mhz":"1114.960","cores":8,"cpus":16,"sockets":1,"vendor":"AuthenticAMD",` +
+			`"model":"AMD Ryzen 7 255","family":"25","flags":"fpu"},"boot-info":{"secureboot":1,"mode":"efi"},` +
+			`"current-kernel":{"machine":"x86_64","release":"7.0.14-11-pve","sysname":"Linux","version":"#1 SMP"},` +
+			`"idle":0.1,"ksm":{"shared":16},"kversion":"Linux 7.0.14-11-pve","loadavg":[0.36,0.6,2.73],` +
+			`"memory":{"used":18149171200,"free":42468319232,"available":46922694656,"total":65071865856},` +
+			`"pveversion":"pve-manager/9.2.10/43df2e01f27a1a19","rootfs":{"avail":29257637888,"free":29257637888,` +
+			`"used":13045903360,"total":42303541248},"swap":{"total":64,"used":1,"free":2},"uptime":3000927,"wait":0.01}`,
 	},
 	{
 		name: "vm",

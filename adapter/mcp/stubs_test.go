@@ -97,7 +97,7 @@ func (s *stubPVEGateway) GetNodeStatus(ctx context.Context, node string) (*model
 		return s.getNodeStatus(ctx, node)
 	}
 
-	return &model.NodeStatus{Node: node, Status: "online"}, nil
+	return &model.NodeStatus{PVEVersion: "pve-manager/9.2.10"}, nil
 }
 
 func (s *stubPVEGateway) GetClusterStatus(ctx context.Context) ([]model.ClusterStatus, error) {
