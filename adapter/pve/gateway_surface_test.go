@@ -128,7 +128,9 @@ func TestGateway_ClusterBackup_Success(t *testing.T) {
 		{
 			name: "ListBackupJobs",
 			body: `{"data":[{"id":"backup-100","enabled":1,"schedule":"daily","node":"pve1",` +
-				`"mode":"snapshot","storage":"local","all":1,"next-run":1700000000}]}`,
+				`"mode":"snapshot","storage":"local","all":1,"fleecing":{"enabled":0},` +
+				`"prune-backups":{"keep-all":1},"notification-mode":"notification-system",` +
+				`"next-run":1700000000}]}`,
 			path: "/api2/json/cluster/backup",
 			call: func(g *Gateway) error {
 				jobs, err := g.ListBackupJobs(context.Background())
@@ -138,6 +140,9 @@ func TestGateway_ClusterBackup_Success(t *testing.T) {
 					assert.True(t, bool(jobs[0].Enabled))
 					assert.Equal(t, "snapshot", jobs[0].Mode)
 					assert.Equal(t, int64(1700000000), jobs[0].NextRun)
+					assert.False(t, bool(jobs[0].Fleecing.Enabled))
+					assert.Equal(t, model.FlexInt(1), jobs[0].PruneBackups.KeepAll)
+					assert.Equal(t, "notification-system", jobs[0].MailNotification)
 				}
 
 				return err

@@ -32,31 +32,49 @@ type ClusterResource struct {
 	Uptime  int64   `json:"uptime,omitempty"`
 }
 
+// Fleecing is the fleece-disks config of a backup job: PVE returns it as
+// an object, e.g. {"enabled":0} (not a bare boolean).
+type Fleecing struct {
+	Enabled FlexBool `json:"enabled,omitempty"`
+}
+
+// PruneBackups is the retention config of a backup job: PVE returns it as
+// an object with keep-* keys, e.g. {"keep-all":1}.
+type PruneBackups struct {
+	KeepAll     FlexInt `json:"keep-all,omitempty"`
+	KeepLast    FlexInt `json:"keep-last,omitempty"`
+	KeepHourly  FlexInt `json:"keep-hourly,omitempty"`
+	KeepDaily   FlexInt `json:"keep-daily,omitempty"`
+	KeepWeekly  FlexInt `json:"keep-weekly,omitempty"`
+	KeepMonthly FlexInt `json:"keep-monthly,omitempty"`
+	KeepYearly  FlexInt `json:"keep-yearly,omitempty"`
+}
+
 // BackupJob is one entry of GET /cluster/backup: a configured vzdump backup
 // job (schedule) on the cluster.
 type BackupJob struct {
-	ID               string   `json:"id"`
-	Comment          string   `json:"comment,omitempty"`
-	Enabled          FlexBool `json:"enabled,omitempty"`
-	Schedule         string   `json:"schedule,omitempty"`
-	Node             string   `json:"node,omitempty"`
-	Mode             string   `json:"mode,omitempty"` // snapshot | suspend | stop
-	Storage          string   `json:"storage,omitempty"`
-	All              FlexBool `json:"all,omitempty"` // backup all VMs/CTs
-	Pool             string   `json:"pool,omitempty"`
-	Protected        FlexBool `json:"protected,omitempty"`
-	VMID             string   `json:"vmid,omitempty"` // comma-separated list, empty when All
-	NextRun          int64    `json:"next-run,omitempty"`
-	MailNotification string   `json:"mailnotification,omitempty"`
-	MailTo           string   `json:"mailto,omitempty"`
-	Notify           string   `json:"notify,omitempty"`
-	Compress         string   `json:"compress,omitempty"`
-	BwLimit          int64    `json:"bwlimit,omitempty"`
-	Fleecing         FlexBool `json:"fleecing,omitempty"`
-	Template         FlexBool `json:"template,omitempty"`
-	NotesTemplate    string   `json:"notes-template,omitempty"`
-	PruneBackups     string   `json:"prune-backups,omitempty"`
-	ExcludePath      string   `json:"exclude-path,omitempty"`
+	ID               string       `json:"id"`
+	Comment          string       `json:"comment,omitempty"`
+	Enabled          FlexBool     `json:"enabled,omitempty"`
+	Schedule         string       `json:"schedule,omitempty"`
+	Node             string       `json:"node,omitempty"`
+	Mode             string       `json:"mode,omitempty"` // snapshot | suspend | stop
+	Storage          string       `json:"storage,omitempty"`
+	All              FlexBool     `json:"all,omitempty"` // backup all VMs/CTs
+	Pool             string       `json:"pool,omitempty"`
+	Protected        FlexBool     `json:"protected,omitempty"`
+	VMID             string       `json:"vmid,omitempty"` // comma-separated list, empty when All
+	NextRun          int64        `json:"next-run,omitempty"`
+	MailNotification string       `json:"notification-mode,omitempty"`
+	MailTo           string       `json:"mailto,omitempty"`
+	Notify           string       `json:"notify,omitempty"`
+	Compress         string       `json:"compress,omitempty"`
+	BwLimit          int64        `json:"bwlimit,omitempty"`
+	Fleecing         Fleecing     `json:"fleecing,omitzero"`
+	Template         FlexBool     `json:"template,omitempty"`
+	NotesTemplate    string       `json:"notes-template,omitempty"`
+	PruneBackups     PruneBackups `json:"prune-backups,omitzero"`
+	ExcludePath      string       `json:"exclude-path,omitempty"`
 }
 
 // CreateBackupJobRequest is the form body of POST /cluster/backup (and the
