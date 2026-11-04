@@ -24,12 +24,12 @@ func TestPVEService_ReadNodes(t *testing.T) {
 	})
 
 	t.Run("GetNodeStatus", func(t *testing.T) {
-		gateway := &mockPVEGateway{getNodeStatus: func(_ context.Context, node string) (*model.NodeStatus, error) {
-			return &model.NodeStatus{Node: node, Status: "online"}, nil
+		gateway := &mockPVEGateway{getNodeStatus: func(_ context.Context, _ string) (*model.NodeStatus, error) {
+			return &model.NodeStatus{PVEVersion: "pve-manager/9.2.10"}, nil
 		}}
 		got, err := (&PVEService{gw: gateway}).GetNodeStatus(context.Background(), "pve1")
 		require.NoError(t, err)
-		assert.Equal(t, "online", got.Status)
+		assert.Equal(t, "pve-manager/9.2.10", got.PVEVersion)
 	})
 
 	t.Run("GetClusterStatus", func(t *testing.T) {

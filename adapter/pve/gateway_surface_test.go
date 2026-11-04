@@ -78,13 +78,21 @@ func TestGateway_NodeCluster_Success(t *testing.T) {
 		},
 		{
 			name: "GetNodeStatus",
-			body: `{"data":{"node":"pve1","status":"online","mem":1024}}`,
+			body: `{"data":{"loadavg":["0.36","0.60","2.73"],"cpu":0,` +
+				`"memory":{"used":18149171200,"free":42468319232,"available":46922694656,"total":65071865856},` +
+				`"wait":0,"uptime":3000927,"pveversion":"pve-manager/9.2.10/43df2e01f27a1a19","idle":0,` +
+				`"kversion":"Linux 7.0.14-11-pve","swap":{"used":0,"free":0,"total":0},` +
+				`"rootfs":{"avail":29257637888,"free":29257637888,"used":13045903360,"total":42303541248},` +
+				`"boot-info":{"secureboot":1,"mode":"efi"},` +
+				`"cpuinfo":{"mhz":"1114.960","cores":8,"cpus":16,"sockets":1}}}`,
 			path: "/api2/json/nodes/pve1/status",
 			call: func(g *Gateway) error {
 				ns, err := g.GetNodeStatus(context.Background(), "pve1")
 				if assert.NoError(t, err) {
-					assert.Equal(t, "online", ns.Status)
-					assert.Equal(t, int64(1024), ns.Mem)
+					assert.Equal(t, "pve-manager/9.2.10/43df2e01f27a1a19", ns.PVEVersion)
+					assert.Equal(t, model.LoadAvg{0.36, 0.60, 2.73}, ns.LoadAvg)
+					assert.Equal(t, int64(65071865856), ns.Memory.Total)
+					assert.Equal(t, model.FlexInt(1), ns.BootInfo.SecureBoot)
 				}
 
 				return err
