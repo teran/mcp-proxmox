@@ -232,7 +232,7 @@ client as a subprocess (see the client configuration below).
 | Prefix | Domain | Example tools |
 |---|---|---|
 | `pve_` | Proxmox VE | `pve_node_list`, `pve_vm_start`, `pve_vm_clone`, `pve_storage_list`, `pve_network_list`, `pve_task_status`, `pve_version` |
-| `pbs_` | Proxmox Backup Server | `pbs_datastore_list`, `pbs_backup_list`, `pbs_backup_vm_restore`, `pbs_backup_notes_get`, `pbs_verify_start`, `pbs_prune_status` |
+| `pbs_` | Proxmox Backup Server | `pbs_datastore_list`, `pbs_backup_list`, `pbs_backup_vm_restore`, `pbs_backup_notes_get`, `pbs_verify_start`, `pbs_task_stop` |
 | — | System | `ping`, `status` |
 
 > **Enablement recap:** all `pve_*` tools are registered only when the PVE backend
@@ -252,7 +252,7 @@ client as a subprocess (see the client configuration below).
 
 ## Complete tool registry
 
-**73 tools** with `ENABLE_MUTATIONS=true`, grouped by domain (35 read-only tools
+**74 tools** with `ENABLE_MUTATIONS=true`, grouped by domain (35 read-only tools
 with mutations disabled, the default). `query` = read (idempotent, retried);
 `mutation` = write (never retried). This mirrors
 [`SPEC.md`](./SPEC.md#6-tool-registry-complete) §6.
@@ -366,7 +366,7 @@ with mutations disabled, the default). `query` = read (idempotent, retried);
 | `pbs_backup_restore_file` | mutation | restore a single file from a backup snapshot |
 | `pbs_backup_vm_restore` | mutation | restore a VM backup snapshot into PVE (returns task UPID) |
 
-### PBS — verify, GC, prune, sync, tasks & version (9)
+### PBS — verify, GC, prune, sync, tasks & version (10)
 
 | Tool | Type | Description |
 |---|---|---|
@@ -379,8 +379,9 @@ with mutations disabled, the default). `query` = read (idempotent, retried);
 | `pbs_gc_start` | mutation | start a garbage-collection job on a datastore |
 | `pbs_prune_start` | mutation | start a prune job on a datastore |
 | `pbs_sync_start` | mutation | start a one-off sync job on a datastore |
+| `pbs_task_stop` | mutation | stop a running PBS task by UPID |
 
-**Total: 73 tools** with `ENABLE_MUTATIONS=true` (system 2, PVE 53, PBS 18).
+**Total: 74 tools** with `ENABLE_MUTATIONS=true` (system 2, PVE 53, PBS 19).
 Mutation tools are registered **only** when `ENABLE_MUTATIONS=true`; with the
 default (mutations disabled) **35 read-only tools** are registered (system 2,
 PVE 21, PBS 12). For the authoritative registry, see
