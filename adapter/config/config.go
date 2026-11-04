@@ -9,6 +9,7 @@ package config
 
 import (
 	"os"
+	"time"
 
 	"github.com/kelseyhightower/envconfig"
 )
@@ -43,6 +44,12 @@ type Config struct {
 	// read-only query surface is exposed. When true, mutation tools are
 	// registered for enabled backends (SPEC.md §2.5).
 	EnableMutations bool `envconfig:"ENABLE_MUTATIONS" default:"false" desc:"Register mutation tools (default false)."`
+
+	// HTTPTimeout maps to HTTP_TIMEOUT, the per-request timeout applied to both
+	// PVE and PBS upstream API calls. Some PBS queries (e.g. listing all
+	// snapshots of a large datastore) can exceed the old fixed 30s default.
+	// Default 2m (SPEC.md §4.5 / X3).
+	HTTPTimeout time.Duration `envconfig:"HTTP_TIMEOUT" default:"2m" desc:"Upstream API call timeout (default 2m)."`
 }
 
 // Load reads the configuration from environment variables. It never fails on a
@@ -55,6 +62,15 @@ func Load() (Config, error) {
 	// Unset behaviour is unchanged: default:"false" already yields false.
 	if v, ok := os.LookupEnv("ENABLE_MUTATIONS"); ok && v == "" {
 		if err := os.Setenv("ENABLE_MUTATIONS", "false"); err != nil {
+			return Config{}, err
+		}
+	}
+
+	// Same normalization for HTTP_TIMEOUT: envconfig fails to parse an
+	// explicitly-set-empty value into a time.Duration. An empty value falls
+	// back to the 2m default (SPEC.md §4.5 / X3).
+	if v, ok := os.LookupEnv("HTTP_TIMEOUT"); ok && v == "" {
+		if err := os.Setenv("HTTP_TIMEOUT", "2m"); err != nil {
 			return Config{}, err
 		}
 	}

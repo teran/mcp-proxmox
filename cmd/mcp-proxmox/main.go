@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -107,6 +108,7 @@ func buildApp(cfg config.Config, logger port.AppLogger, version string) *applica
 			Endpoint:     cfg.PVEEndpoint,
 			TokenSource:  pveToken,
 			CACertPath:   cfg.PVECACertPath,
+			HTTPClient:   &http.Client{Timeout: cfg.HTTPTimeout},
 			Logger:       logger,
 			Retries:      defaultRetries,
 			RetryBackoff: defaultRetryBackoff,
@@ -122,6 +124,7 @@ func buildApp(cfg config.Config, logger port.AppLogger, version string) *applica
 			Endpoint:     cfg.PBSEndpoint,
 			TokenSource:  pbsToken,
 			CACertPath:   cfg.PBSCACertPath,
+			HTTPClient:   &http.Client{Timeout: cfg.HTTPTimeout},
 			Logger:       logger,
 			Retries:      defaultRetries,
 			RetryBackoff: defaultRetryBackoff,

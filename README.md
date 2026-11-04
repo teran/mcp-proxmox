@@ -139,6 +139,7 @@ disabled and its tools are not registered.
 | `LOG_FILENAME` | Path of the log file used when `LOG_LEVEL` is set (default `/tmp/mcp-proxmox.log`, mode `0600`). |
 | `LOG_FORMAT` | Log format: `text` (default) or `json`. |
 | `ENABLE_MUTATIONS` | Register mutation tools (default `false`). When `true`, **all** mutation tools are registered for enabled backends: PVE — create/resize/migrate/HA-add/backup/backup-jobs/start/stop/shutdown/reboot/reset/suspend/resume/delete/clone/snapshot/restore/set; PBS — verify/gc/prune/sync start, file & VM restore. When `false`, only read-only query tools are exposed. |
+| `HTTP_TIMEOUT` | Upstream API call timeout for both PVE and PBS (default `2m`; a Go duration string such as `90s` or `3m`). Raised from the old fixed 30s so large PBS queries (e.g. listing all snapshots of a big datastore) complete. |
 
 These are the **only** environment variables the server reads. Proxmox API
 tokens are long-lived, privilege-scoped credentials configured once per backend
@@ -191,6 +192,7 @@ export PVE_ENDPOINT="https://pve.example.com:8006"
 export PVE_TOKEN="user@pam!tokenid=deadbeef"
 export PBS_ENDPOINT="https://pbs.example.com:8007"
 export PBS_TOKEN="user@pbs!tokenid:deadbeef"
+export HTTP_TIMEOUT="2m"   # optional; default 2m, e.g. "90s" for slow PBS datastores
 
 ./bin/mcp-proxmox   # logging off by default; enable via LOG_LEVEL env
 ```
@@ -215,7 +217,8 @@ client as a subprocess (see the client configuration below).
         "PVE_TOKEN": "user@pam!tokenid=deadbeef",
         "PBS_ENDPOINT": "https://pbs.example.com:8007",
         "PBS_TOKEN": "user@pbs!tokenid:deadbeef",
-        "LOG_LEVEL": "info"
+        "LOG_LEVEL": "info",
+        "HTTP_TIMEOUT": "2m"
       }
     }
   }

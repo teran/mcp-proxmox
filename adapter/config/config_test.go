@@ -2,6 +2,7 @@ package config
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,7 +15,7 @@ func clearEnv(t *testing.T) {
 		"PVE_ENDPOINT", "PVE_TOKEN", "PVE_CA_CERT_PATH",
 		"PBS_ENDPOINT", "PBS_TOKEN", "PBS_CA_CERT_PATH",
 		"LOG_LEVEL", "LOG_FILENAME", "LOG_FORMAT",
-		"ENABLE_MUTATIONS",
+		"ENABLE_MUTATIONS", "HTTP_TIMEOUT",
 	} {
 		t.Setenv(k, "")
 	}
@@ -33,6 +34,7 @@ func TestLoad(t *testing.T) {
 		assert.False(t, c.PBSEnabled())
 		assert.Equal(t, "", c.LogLevel)
 		assert.False(t, c.EnableMutations)
+		assert.Equal(t, 2*time.Minute, c.HTTPTimeout)
 	})
 
 	t.Run("full env", func(t *testing.T) {
@@ -47,6 +49,7 @@ func TestLoad(t *testing.T) {
 		t.Setenv("LOG_FORMAT", "json")
 		t.Setenv("LOG_FILENAME", "/var/log/mcp.log")
 		t.Setenv("ENABLE_MUTATIONS", "true")
+		t.Setenv("HTTP_TIMEOUT", "90s")
 
 		c, err := Load()
 		require.NoError(t, err)
@@ -62,6 +65,7 @@ func TestLoad(t *testing.T) {
 		assert.Equal(t, "json", c.LogFormat)
 		assert.Equal(t, "/var/log/mcp.log", c.LogFileName)
 		assert.True(t, c.EnableMutations)
+		assert.Equal(t, 90*time.Second, c.HTTPTimeout)
 	})
 }
 
