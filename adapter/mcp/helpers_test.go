@@ -229,6 +229,10 @@ func TestMutTool(t *testing.T) {
 		assert.Equal(t, "result:x", sc["value"])
 	})
 
+	t.Run("no-output success returns empty structuredContent", func(t *testing.T) {
+		testMutToolNoOutput(t)
+	})
+
 	t.Run("error path flags IsError", func(t *testing.T) {
 		_, sess := newServerWithTool(t, true)
 		res := callTool(t, sess, "test_mut", map[string]any{"fail": true})
@@ -247,6 +251,30 @@ func TestMutTool(t *testing.T) {
 		res := callTool(t, sess, "test_mut_status", map[string]any{})
 		assert.True(t, res.IsError)
 	})
+}
+
+// testMutToolNoOutput pins the behavior of a successful mutation tool that
+// returns no output value: it must still emit structuredContent (an empty
+// object) so the client does not reject it with "has an output schema but did
+// not return structured content".
+func testMutToolNoOutput(t *testing.T) {
+	t.Helper()
+	// Return a typed nil interface so the (nil, nil) linter rule is not hit,
+	// while still exercising the out==nil branch in mutTool.
+	noOutput := func(_ context.Context, _ mutTestInput) (any, error) {
+		var v any
+
+		return v, nil
+	}
+	s := mcpSDK.NewServer(&mcpSDK.Implementation{Name: "t", Version: "v"}, nil)
+	mutTool(s, "test_mut_nil", "Mut", "d", "Instructions: none", toolLogger{log: nopLogger{}}, false, noOutput, true)
+	sess := connectTestServer(t, s)
+
+	res := callTool(t, sess, "test_mut_nil", map[string]any{})
+	assert.False(t, res.IsError)
+	sc, ok := res.StructuredContent.(map[string]any)
+	require.True(t, ok, "no-output success must produce structuredContent")
+	assert.Empty(t, sc)
 }
 
 // secretOut is a local output struct used to pin the reflect-based
