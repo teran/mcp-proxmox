@@ -52,7 +52,7 @@ func TestPVEService_ReadNodes(t *testing.T) {
 
 	t.Run("ListBackupJobs", func(t *testing.T) {
 		gateway := &mockPVEGateway{listBackupJobs: func(_ context.Context) ([]model.BackupJob, error) {
-			return []model.BackupJob{{ID: "backup-100", Enabled: true, Storage: "local"}}, nil
+			return []model.BackupJob{{ID: "backup-100", Enabled: model.FlexBool(true), Storage: "local"}}, nil
 		}}
 		got, err := (&PVEService{gw: gateway}).ListBackupJobs(context.Background())
 		require.NoError(t, err)
