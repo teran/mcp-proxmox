@@ -35,28 +35,28 @@ type ClusterResource struct {
 // BackupJob is one entry of GET /cluster/backup: a configured vzdump backup
 // job (schedule) on the cluster.
 type BackupJob struct {
-	ID               string `json:"id"`
-	Comment          string `json:"comment,omitempty"`
-	Enabled          bool   `json:"enabled,omitempty"`
-	Schedule         string `json:"schedule,omitempty"`
-	Node             string `json:"node,omitempty"`
-	Mode             string `json:"mode,omitempty"` // snapshot | suspend | stop
-	Storage          string `json:"storage,omitempty"`
-	All              bool   `json:"all,omitempty"` // backup all VMs/CTs
-	Pool             string `json:"pool,omitempty"`
-	Protected        bool   `json:"protected,omitempty"`
-	VMID             string `json:"vmid,omitempty"` // comma-separated list, empty when All
-	NextRun          int64  `json:"next-run,omitempty"`
-	MailNotification string `json:"mailnotification,omitempty"`
-	MailTo           string `json:"mailto,omitempty"`
-	Notify           string `json:"notify,omitempty"`
-	Compress         string `json:"compress,omitempty"`
-	BwLimit          int64  `json:"bwlimit,omitempty"`
-	Fleecing         bool   `json:"fleecing,omitempty"`
-	Template         bool   `json:"template,omitempty"`
-	NotesTemplate    string `json:"notes-template,omitempty"`
-	PruneBackups     string `json:"prune-backups,omitempty"`
-	ExcludePath      string `json:"exclude-path,omitempty"`
+	ID               string   `json:"id"`
+	Comment          string   `json:"comment,omitempty"`
+	Enabled          FlexBool `json:"enabled,omitempty"`
+	Schedule         string   `json:"schedule,omitempty"`
+	Node             string   `json:"node,omitempty"`
+	Mode             string   `json:"mode,omitempty"` // snapshot | suspend | stop
+	Storage          string   `json:"storage,omitempty"`
+	All              FlexBool `json:"all,omitempty"` // backup all VMs/CTs
+	Pool             string   `json:"pool,omitempty"`
+	Protected        FlexBool `json:"protected,omitempty"`
+	VMID             string   `json:"vmid,omitempty"` // comma-separated list, empty when All
+	NextRun          int64    `json:"next-run,omitempty"`
+	MailNotification string   `json:"mailnotification,omitempty"`
+	MailTo           string   `json:"mailto,omitempty"`
+	Notify           string   `json:"notify,omitempty"`
+	Compress         string   `json:"compress,omitempty"`
+	BwLimit          int64    `json:"bwlimit,omitempty"`
+	Fleecing         FlexBool `json:"fleecing,omitempty"`
+	Template         FlexBool `json:"template,omitempty"`
+	NotesTemplate    string   `json:"notes-template,omitempty"`
+	PruneBackups     string   `json:"prune-backups,omitempty"`
+	ExcludePath      string   `json:"exclude-path,omitempty"`
 }
 
 // CreateBackupJobRequest is the form body of POST /cluster/backup (and the

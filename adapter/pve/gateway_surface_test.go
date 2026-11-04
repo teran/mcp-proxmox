@@ -127,15 +127,15 @@ func TestGateway_ClusterBackup_Success(t *testing.T) {
 		},
 		{
 			name: "ListBackupJobs",
-			body: `{"data":[{"id":"backup-100","enabled":true,"schedule":"daily","node":"pve1",` +
-				`"mode":"snapshot","storage":"local","all":true,"next-run":1700000000}]}`,
+			body: `{"data":[{"id":"backup-100","enabled":1,"schedule":"daily","node":"pve1",` +
+				`"mode":"snapshot","storage":"local","all":1,"next-run":1700000000}]}`,
 			path: "/api2/json/cluster/backup",
 			call: func(g *Gateway) error {
 				jobs, err := g.ListBackupJobs(context.Background())
 				if assert.NoError(t, err) {
 					require.Len(t, jobs, 1)
 					assert.Equal(t, "backup-100", jobs[0].ID)
-					assert.True(t, jobs[0].Enabled)
+					assert.True(t, bool(jobs[0].Enabled))
 					assert.Equal(t, "snapshot", jobs[0].Mode)
 					assert.Equal(t, int64(1700000000), jobs[0].NextRun)
 				}

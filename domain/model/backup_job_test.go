@@ -8,6 +8,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestBackupJobUnmarshalIntegerBooleans is a regression test for the live bug
+// where PVE /cluster/backup returns boolean fields as integers 0/1
+// (e.g. "enabled":1), which a plain Go bool could not decode. It verifies that
+// a realistic entry decodes without error and maps integer values to the
+// correct FlexBool state.
+func TestBackupJobUnmarshalIntegerBooleans(t *testing.T) {
+	const body = `{"id":"backup-100","enabled":1,"schedule":"00 2 * * 1","node":"n51",` +
+		`"mode":"snapshot","storage":"local","all":1,"protected":0,"vmid":"100,101","next-run":1700000000}`
+
+	var job BackupJob
+	require.NoError(t, json.Unmarshal([]byte(body), &job))
+	assert.Equal(t, "backup-100", job.ID)
+	assert.Equal(t, FlexBool(true), job.Enabled)
+	assert.Equal(t, FlexBool(true), job.All)
+	assert.Equal(t, FlexBool(false), job.Protected)
+	assert.Equal(t, int64(1700000000), job.NextRun)
+}
+
+// TestBackupJobUnmarshalAllFalse verifies the "all":0 case maps to
+// FlexBool(false).
+func TestBackupJobUnmarshalAllFalse(t *testing.T) {
+	const body = `{"id":"backup-101","enabled":1,"schedule":"00 2 * * 1","mode":"snapshot",` +
+		`"storage":"local","all":0,"vmid":"100"}`
+
+	var job BackupJob
+	require.NoError(t, json.Unmarshal([]byte(body), &job))
+	assert.Equal(t, FlexBool(false), job.All)
+	assert.Equal(t, FlexBool(true), job.Enabled)
+}
+
 // TestCreateBackupJobRequestMarshalMinimal pins the exact JSON for a minimal
 // create request: only the required Storage and Schedule fields appear, and
 // every optional field (ID, All, VMID, Mode, Compress, Enabled, NotesTemplate,

@@ -113,11 +113,11 @@ var jsonRoundTripCases = []struct {
 	{
 		name: "backup-job",
 		in: BackupJob{
-			ID: "backup-100", Comment: "nightly", Enabled: true, Schedule: "0 2 * * *",
-			Node: "pve1", Mode: "snapshot", Storage: "local", All: true,
+			ID: "backup-100", Comment: "nightly", Enabled: FlexBool(true), Schedule: "0 2 * * *",
+			Node: "pve1", Mode: "snapshot", Storage: "local", All: FlexBool(true),
 			VMID: "100,101", NextRun: 1700000000, MailNotification: "always",
 			MailTo: "root", Notify: "always", Compress: "zstd", BwLimit: 1000,
-			Fleecing: true, NotesTemplate: "{{guestname}}", PruneBackups: "keep-last=3",
+			Fleecing: FlexBool(true), NotesTemplate: "{{guestname}}", PruneBackups: "keep-last=3",
 		},
 		want: `{"id":"backup-100","comment":"nightly","enabled":true,"schedule":"0 2 * * *","node":"pve1",` +
 			`"mode":"snapshot","storage":"local","all":true,"vmid":"100,101","next-run":1700000000,` +

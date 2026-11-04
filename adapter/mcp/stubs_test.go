@@ -141,7 +141,7 @@ func (s *stubPVEGateway) ListBackupJobs(ctx context.Context) ([]model.BackupJob,
 		return s.listBackupJobs(ctx)
 	}
 
-	return []model.BackupJob{{ID: "backup-100", Enabled: true, Schedule: "daily", Storage: "local"}}, nil
+	return []model.BackupJob{{ID: "backup-100", Enabled: model.FlexBool(true), Schedule: "daily", Storage: "local"}}, nil
 }
 
 func (s *stubPVEGateway) ListVMs(ctx context.Context, node string) ([]model.VM, error) {
