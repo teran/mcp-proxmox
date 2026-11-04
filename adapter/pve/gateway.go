@@ -564,6 +564,11 @@ func (g *Gateway) GetStorageStatus(ctx context.Context, node, storage string) (*
 		return nil, err
 	}
 
+	// PVE does not echo the storage name in the status response body (it is
+	// carried only in the request path), so populate it from the argument to
+	// make the result self-describing.
+	out.Storage = storage
+
 	return &out, nil
 }
 
