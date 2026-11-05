@@ -28,11 +28,13 @@ func TestMutationToolDestructiveHints(t *testing.T) {
 		"pve_lxc_delete",
 		"pve_lxc_snapshot_delete",
 		"pve_lxc_snapshot_rollback",
+		"pve_ha_remove",
 		"pbs_gc_start",
 		"pbs_prune_start",
 		"pbs_backup_restore_file",
 		"pbs_backup_vm_restore",
 		"pbs_task_stop",
+		"pbs_backup_forget",
 	}
 
 	for _, name := range destructive {

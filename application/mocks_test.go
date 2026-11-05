@@ -39,6 +39,7 @@ type mockPVEGateway struct {
 	resizeVM         func(ctx context.Context, node string, vmid int, req model.ResizeVMRequest) error
 	migrateVM        func(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error
 	addHAResource    func(ctx context.Context, req model.HAResourceRequest) error
+	removeHAResource func(ctx context.Context, sid string) error
 	startVMBackup    func(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
 	setVMConfig      func(ctx context.Context, node string, vmid int, req model.SetVMConfigRequest) error
 	setLXCConfig     func(ctx context.Context, node string, vmid int, req model.SetLXCConfigRequest) error
@@ -261,6 +262,14 @@ func (m *mockPVEGateway) MigrateVM(ctx context.Context, node string, vmid int, r
 func (m *mockPVEGateway) AddHAResource(ctx context.Context, req model.HAResourceRequest) error {
 	if m.addHAResource != nil {
 		return m.addHAResource(ctx, req)
+	}
+
+	return nil
+}
+
+func (m *mockPVEGateway) RemoveHAResource(ctx context.Context, sid string) error {
+	if m.removeHAResource != nil {
+		return m.removeHAResource(ctx, sid)
 	}
 
 	return nil
@@ -537,6 +546,7 @@ type mockPBSGateway struct {
 	startPrune         func(ctx context.Context, store string) (string, error)
 	startSync          func(ctx context.Context, store string, req model.PBSSyncRequest) (string, error)
 	stopTask           func(ctx context.Context, upid string) error
+	forgetBackup       func(ctx context.Context, store, backupType, backupID string, backupTime int64) error
 
 	// Backup file list & task status (read-only).
 	listBackupFiles func(
@@ -660,6 +670,16 @@ func (m *mockPBSGateway) StartSync(ctx context.Context, store string, req model.
 func (m *mockPBSGateway) StopTask(ctx context.Context, upid string) error {
 	if m.stopTask != nil {
 		return m.stopTask(ctx, upid)
+	}
+
+	return nil
+}
+
+func (m *mockPBSGateway) ForgetBackup(
+	ctx context.Context, store, backupType, backupID string, backupTime int64,
+) error {
+	if m.forgetBackup != nil {
+		return m.forgetBackup(ctx, store, backupType, backupID, backupTime)
 	}
 
 	return nil

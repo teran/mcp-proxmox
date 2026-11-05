@@ -738,3 +738,21 @@ func (g *Gateway) StartSync(ctx context.Context, store string, req model.PBSSync
 func (g *Gateway) StopTask(ctx context.Context, upid string) error {
 	return g.doMutation(ctx, http.MethodDelete, pbsTaskStopPath(upid), nil, nil)
 }
+
+// ForgetBackup forgets (deletes) a single backup snapshot within a group via
+// DELETE /admin/datastore/{store}/snapshots/{backup_type}/{backup_id}/{backup_time}.
+// The snapshot is identified by backupType (vm|ct|host), backupID and backupTime
+// (its Unix epoch in seconds as returned by the backup listing). Each path
+// segment is URL-escaped (store, type, id) so a value cannot inject extra path
+// segments (S11); backupTime is a plain epoch integer. It is a destructive
+// mutation: never retried (doMutation) and the request carries no body. A 404
+// for an unknown snapshot/time surfaces as the standard not-found/upstream
+// error via the shared error mapping.
+func (g *Gateway) ForgetBackup(ctx context.Context, store, backupType, backupID string, backupTime int64) error {
+	path := "/admin/datastore/" + url.PathEscape(store) +
+		"/snapshots/" + url.PathEscape(backupType) +
+		"/" + url.PathEscape(backupID) +
+		"/" + strconv.FormatInt(backupTime, 10)
+
+	return g.doMutation(ctx, http.MethodDelete, path, nil, nil)
+}

@@ -90,6 +90,11 @@ type haAddIn struct {
 	Comment string `json:"comment,omitempty" jsonschema:"Optional comment"`
 }
 
+// haRemoveIn is the input of pve_ha_remove.
+type haRemoveIn struct {
+	SID string `json:"sid" jsonschema:"HA resource ID to remove (e.g. vm:100)"`
+}
+
 // nodesToStrings normalizes the pve_ha_add `nodes` input (either an array of
 // node names or a comma-separated string, matching PVE's documented form) into
 // a []string the gateway comma-joins for the outbound request.
@@ -594,6 +599,14 @@ func registerPVEMutationTools1(s *mcpSDK.Server, app *application.App, log toolL
 
 func registerPVEMutationTools2(s *mcpSDK.Server, app *application.App, log toolLogger) []ToolSurface {
 	return []ToolSurface{
+		mutTool(s, "pve_ha_remove", "Remove HA resource",
+			"Remove (unregister) a high-availability resource from the cluster.",
+			"Provide the resource SID (e.g. vm:100). Destructive: removes the HA protection from the"+
+				"resource. Not idempotent: removing an already-removed resource may fail.",
+			log, false, func(ctx context.Context, in haRemoveIn) (any, error) {
+				return nil, app.PVE.RemoveHAResource(ctx, in.SID)
+			}, true),
+
 		mutTool(s, "pve_backup_job_update", "Update PVE backup job",
 			"Update an existing vzdump backup job (schedule) on the PVE cluster.",
 			"Provide the job id and the fields to change (storage, schedule, targets, mode,"+

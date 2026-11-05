@@ -67,6 +67,12 @@ type PBSGateway interface {
 	// (DELETE /nodes/localhost/tasks/{upid}). It is a destructive mutation
 	// (gated by EnableMutations), never retried, and returns no task UPID.
 	StopTask(ctx context.Context, upid string) error
+	// ForgetBackup forgets (deletes) a single backup snapshot within a group,
+	// identified by datastore, backup type (vm|ct|host), backup ID and the
+	// snapshot's Unix epoch in seconds (DELETE /admin/datastore/{store}/snapshots/
+	// {backup_type}/{backup_id}/{backup_time}). It is a destructive mutation
+	// (gated by EnableMutations), never retried, and returns no task UPID.
+	ForgetBackup(ctx context.Context, store, backupType, backupID string, backupTime int64) error
 
 	// Version.
 	GetPBSVersion(ctx context.Context) (*model.PBSVersion, error)

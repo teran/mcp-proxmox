@@ -41,6 +41,7 @@ type stubPVEGateway struct {
 	resizeVM         func(ctx context.Context, node string, vmid int, req model.ResizeVMRequest) error
 	migrateVM        func(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error
 	addHAResource    func(ctx context.Context, req model.HAResourceRequest) error
+	removeHAResource func(ctx context.Context, sid string) error
 	startVMBackup    func(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
 	createBackupJob  func(ctx context.Context, req model.CreateBackupJobRequest) (string, error)
 	updateBackupJob  func(ctx context.Context, id string, req model.CreateBackupJobRequest) (string, error)
@@ -326,6 +327,17 @@ func (s *stubPVEGateway) AddHAResource(ctx context.Context, req model.HAResource
 	}
 	if s.addHAResource != nil {
 		return s.addHAResource(ctx, req)
+	}
+
+	return nil
+}
+
+func (s *stubPVEGateway) RemoveHAResource(ctx context.Context, sid string) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.removeHAResource != nil {
+		return s.removeHAResource(ctx, sid)
 	}
 
 	return nil
@@ -699,6 +711,7 @@ type stubPBSGateway struct {
 	getTaskStatus   func(ctx context.Context, upid string) (*model.PBSTask, error)
 	getTaskLog      func(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error)
 	stopTask        func(ctx context.Context, upid string) error
+	forgetBackup    func(ctx context.Context, store, backupType, backupID string, backupTime int64) error
 	restoreFile     func(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error
 	restoreVMBackup func(
 		ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest,
@@ -861,6 +874,19 @@ func (s *stubPBSGateway) StopTask(ctx context.Context, upid string) error {
 	return nil
 }
 
+func (s *stubPBSGateway) ForgetBackup(
+	ctx context.Context, store, backupType, backupID string, backupTime int64,
+) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.forgetBackup != nil {
+		return s.forgetBackup(ctx, store, backupType, backupID, backupTime)
+	}
+
+	return nil
+}
+
 func (s *stubPBSGateway) ListBackupFiles(
 	ctx context.Context, store, backupType, backupID string, backupTime int64, path string,
 ) ([]model.PBSFile, error) {
@@ -954,7 +980,7 @@ var pbsROTools = []string{
 
 // pveMutationTools is the gated PVE mutation tool surface (SPEC.md §6.x).
 var pveMutationTools = []string{
-	"pve_vm_create", "pve_vm_resize", "pve_vm_migrate", "pve_ha_add", "pve_vm_backup",
+	"pve_vm_create", "pve_vm_resize", "pve_vm_migrate", "pve_ha_add", "pve_ha_remove", "pve_vm_backup",
 	"pve_vm_start", "pve_vm_stop", "pve_vm_shutdown", "pve_vm_reboot",
 	"pve_vm_reset", "pve_vm_suspend", "pve_vm_resume", "pve_vm_delete",
 	"pve_vm_clone", "pve_vm_snapshot_create", "pve_vm_snapshot_delete",
@@ -969,6 +995,7 @@ var pveMutationTools = []string{
 var pbsMutationTools = []string{
 	"pbs_verify_start", "pbs_gc_start", "pbs_prune_start", "pbs_sync_start",
 	"pbs_backup_restore_file", "pbs_backup_vm_restore", "pbs_task_stop",
+	"pbs_backup_forget",
 }
 
 // newTestServer builds an mcpSDK.Server wired through the real application.App

@@ -101,8 +101,7 @@ func TestGateway_MigrateVM_Success(t *testing.T) {
 // TestGateway_AddHAResource_Success verifies POST /cluster/ha/resources with
 // sid/type and the node list joined by commas.
 func TestGateway_AddHAResource_Success(t *testing.T) {
-	rec := &reqCapture{}
-	srv := mockServer(t, 200, `{}`, rec)
+	srv, seq := mockServerSeq(t, 200, `{}`)
 	g, _ := newTestGateway(t, srv)
 
 	err := g.AddHAResource(context.Background(), model.HAResourceRequest{
@@ -110,12 +109,21 @@ func TestGateway_AddHAResource_Success(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, http.MethodPost, rec.method)
-	assert.Equal(t, "/api2/json/cluster/ha/resources", rec.path)
-	assert.Equal(t, "vm:100", rec.form.Get("sid"))
-	assert.Equal(t, "vm", rec.form.Get("type"))
-	assert.Equal(t, "pve1,pve2", rec.form.Get("nodes"))
-	assert.Equal(t, "primary", rec.form.Get("comment"))
+	require.Len(t, seq.recs, 2, "create + update must both be issued when nodes are provided")
+
+	create := seq.recs[0]
+	assert.Equal(t, http.MethodPost, create.method)
+	assert.Equal(t, "/api2/json/cluster/ha/resources", create.path)
+	assert.Equal(t, "vm:100", create.form.Get("sid"))
+	assert.Equal(t, "vm", create.form.Get("type"))
+	assert.Equal(t, "primary", create.form.Get("comment"))
+	_, hasNodes := create.form["nodes"]
+	assert.False(t, hasNodes, "create body must not include nodes (PVE rejects it)")
+
+	update := seq.recs[1]
+	assert.Equal(t, http.MethodPut, update.method)
+	assert.Equal(t, "/api2/json/cluster/ha/resources/vm:100", update.path)
+	assert.Equal(t, "pve1,pve2", update.form.Get("nodes"))
 }
 
 // TestGateway_StartVMBackup_Success verifies POST /nodes/{node}/vzdump and that

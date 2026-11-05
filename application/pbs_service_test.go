@@ -143,7 +143,11 @@ func TestPBSService_MutationSuccess(t *testing.T) {
 		assert.Equal(t, "UPID:sync", upid)
 		assert.Equal(t, req, gotReq)
 	})
+}
 
+// TestPBSService_MutationDestroySuccess exercises the destructive PBS mutation
+// use cases (StopTask/ForgetBackup) through the PBSGateway mock.
+func TestPBSService_MutationDestroySuccess(t *testing.T) {
 	t.Run("StopTask", func(t *testing.T) {
 		gotUPID := ""
 		gateway := &mockPBSGateway{stopTask: func(_ context.Context, upid string) error {
@@ -154,6 +158,24 @@ func TestPBSService_MutationSuccess(t *testing.T) {
 		err := (&PBSService{gw: gateway}).StopTask(context.Background(), "UPID:stop")
 		require.NoError(t, err)
 		assert.Equal(t, "UPID:stop", gotUPID)
+	})
+
+	t.Run("ForgetBackup", func(t *testing.T) {
+		var gotStore, gotType, gotID string
+		var gotTime int64
+		gateway := &mockPBSGateway{forgetBackup: func(
+			_ context.Context, store, backupType, backupID string, backupTime int64,
+		) error {
+			gotStore, gotType, gotID, gotTime = store, backupType, backupID, backupTime
+
+			return nil
+		}}
+		err := (&PBSService{gw: gateway}).ForgetBackup(context.Background(), "backup", "vm", "141", 1700000000)
+		require.NoError(t, err)
+		assert.Equal(t, "backup", gotStore)
+		assert.Equal(t, "vm", gotType)
+		assert.Equal(t, "141", gotID)
+		assert.Equal(t, int64(1700000000), gotTime)
 	})
 }
 
@@ -231,6 +253,9 @@ var pbsErrorPropagationCases = []struct {
 	{"StopTask", func(s *PBSService) error {
 		return s.StopTask(context.Background(), "upid")
 	}},
+	{"ForgetBackup", func(s *PBSService) error {
+		return s.ForgetBackup(context.Background(), "store", "vm", "id", 1)
+	}},
 }
 
 // newFailingPBSGateway returns a gateway whose every method returns sentinel.
@@ -254,6 +279,7 @@ func newFailingPBSGateway(sentinel error) *mockPBSGateway {
 		return "", sentinel
 	}
 	gateway.stopTask = func(_ context.Context, _ string) error { return sentinel }
+	gateway.forgetBackup = func(_ context.Context, _, _, _ string, _ int64) error { return sentinel }
 
 	return gateway
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/teran/mcp-proxmox/application"
 	"github.com/teran/mcp-proxmox/domain/model"
@@ -67,4 +68,36 @@ func TestMutationTool_BackupJobCreate_EmptyIDSuccess(t *testing.T) {
 		"storage": "local", "schedule": "00 2 * * 1",
 	})
 	assert.False(t, res.IsError, "pve_backup_job_create must not flag IsError when the job is created with empty data")
+}
+
+// TestMutationTool_VMCreate_OutputsNumericVMID pins Bug 1's tool contract: even
+// though the real PVE create may return a task UPID (see the gateway regression
+// test TestGateway_CreateVM_UPIDResponse), CreateVM resolves it to a numeric
+// vmid and pve_vm_create must surface that numeric vmid in its output — never
+// error and never echo the UPID.
+func TestMutationTool_VMCreate_OutputsNumericVMID(t *testing.T) {
+	gateway := &stubPVEGateway{
+		createVM: func(_ context.Context, _ string, _ model.CreateVMRequest) (int, error) {
+			return 141, nil // resolved from a UPID/numeric-string response
+		},
+	}
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(gateway))
+	_, sess := newTestServer(t, app, true)
+
+	res := callTool(t, sess, "pve_vm_create", map[string]any{"node": "pve1", "name": "web", "vmid": 141})
+	assert.False(t, res.IsError)
+	sc, ok := res.StructuredContent.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, float64(141), sc["vmid"], "pve_vm_create must surface the numeric vmid")
+}
+
+// TestMutationTool_HAAdd_NoNodesSuccess guards Bug 2's no-nodes path:
+// pve_ha_add without nodes must succeed (the gateway then performs a single
+// create POST with no follow-up update — see TestGateway_AddHAResource_NoNodesSinglePost).
+func TestMutationTool_HAAdd_NoNodesSuccess(t *testing.T) {
+	app := application.New(nopLogger{}, "v1.0.0", application.WithPVE(&stubPVEGateway{}))
+	_, sess := newTestServer(t, app, true)
+
+	res := callTool(t, sess, "pve_ha_add", map[string]any{"sid": "vm:100", "type": "vm"})
+	assert.False(t, res.IsError, "pve_ha_add without nodes must succeed")
 }

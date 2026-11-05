@@ -265,6 +265,18 @@ func TestPVEService_MutationResource(t *testing.T) {
 		assert.Equal(t, req, gotReq)
 	})
 
+	t.Run("RemoveHAResource", func(t *testing.T) {
+		gotSID := ""
+		gateway := &mockPVEGateway{removeHAResource: func(_ context.Context, sid string) error {
+			gotSID = sid
+
+			return nil
+		}}
+		err := (&PVEService{gw: gateway}).RemoveHAResource(context.Background(), "vm:100")
+		require.NoError(t, err)
+		assert.Equal(t, "vm:100", gotSID)
+	})
+
 	t.Run("StartVMBackup", func(t *testing.T) {
 		gotReq := model.VMBackupRequest{}
 		gateway := &mockPVEGateway{startVMBackup: func(_ context.Context, _ string, req model.VMBackupRequest) (*model.Task, error) {
@@ -479,6 +491,7 @@ var pveErrorPropagationCases = []struct {
 	{"ResizeVM", func(s *PVEService) error { return s.ResizeVM(context.Background(), "n", 1, model.ResizeVMRequest{}) }},
 	{"MigrateVM", func(s *PVEService) error { return s.MigrateVM(context.Background(), "n", 1, model.MigrateVMRequest{}) }},
 	{"AddHAResource", func(s *PVEService) error { return s.AddHAResource(context.Background(), model.HAResourceRequest{}) }},
+	{"RemoveHAResource", func(s *PVEService) error { return s.RemoveHAResource(context.Background(), "sid") }},
 	{"StartVMBackup", func(s *PVEService) error {
 		_, e := s.StartVMBackup(context.Background(), "n", model.VMBackupRequest{})
 
@@ -545,6 +558,7 @@ func setMutationFailures(gateway *mockPVEGateway, sentinel error) {
 	gateway.resizeVM = func(_ context.Context, _ string, _ int, _ model.ResizeVMRequest) error { return sentinel }
 	gateway.migrateVM = func(_ context.Context, _ string, _ int, _ model.MigrateVMRequest) error { return sentinel }
 	gateway.addHAResource = func(_ context.Context, _ model.HAResourceRequest) error { return sentinel }
+	gateway.removeHAResource = func(_ context.Context, _ string) error { return sentinel }
 	gateway.startVMBackup = func(_ context.Context, _ string, _ model.VMBackupRequest) (*model.Task, error) {
 		return nil, sentinel
 	}

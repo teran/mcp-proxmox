@@ -2,7 +2,9 @@ package pve
 
 import (
 	"context"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -167,11 +169,12 @@ func TestGateway_CreateBackupJob_EmptyObjectDataSuccess(t *testing.T) {
 // string for the exact live scenario (["nuc01","ms01"]).
 // ---------------------------------------------------------------------------
 
-// TestGateway_AddHAResource_NodesCommaJoined pins Defect 4's gateway behavior: the
-// outbound form body must carry `nodes` as a single comma-joined string.
+// TestGateway_AddHAResource_NodesCommaJoined pins Defect 4's comma-joining
+// guarantee under the Regression 2 contract: preferred nodes must still be sent as a
+// single comma-joined STRING (not a JSON array), but — per Regression 2 — on the
+// follow-up PUT /cluster/ha/resources/{sid} (the create POST must omit nodes).
 func TestGateway_AddHAResource_NodesCommaJoined(t *testing.T) {
-	rec := &reqCapture{}
-	srv := mockServer(t, 200, `{}`, rec)
+	srv, seq := mockServerSeq(t, 200, `{}`)
 	g, _ := newTestGateway(t, srv)
 
 	err := g.AddHAResource(context.Background(), model.HAResourceRequest{
@@ -179,11 +182,180 @@ func TestGateway_AddHAResource_NodesCommaJoined(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	require.Len(t, seq.recs, 2, "create + update must both be issued when nodes are provided")
+	create := seq.recs[0]
+	assert.Equal(t, http.MethodPost, create.method)
+	assert.Equal(t, "/api2/json/cluster/ha/resources", create.path)
+	_, hasNodes := create.form["nodes"]
+	assert.False(t, hasNodes, "nodes must not be on the create (PVE rejects it)")
+
+	update := seq.recs[1]
+	assert.Equal(t, http.MethodPut, update.method)
+	assert.Equal(t, "/api2/json/cluster/ha/resources/vm:100", update.path)
+	assert.Equal(t, "nuc01,ms01", update.form.Get("nodes"),
+		"nodes must be a comma-joined string on the update, not a JSON array")
+	assert.Equal(t, "PVEAPIToken=user@pam!tokenid=secret", update.auth)
+}
+
+// ---------------------------------------------------------------------------
+// Regression 1 (regression from e930617) — pve_vm_create with an explicit vmid.
+// Real PVE 9.2 returns a task UPID STRING ({"data":"UPID:...:qmcreate:141:..."})
+// when a vmid is supplied explicitly, NOT a numeric vmid. The earlier fix made
+// CreateVM decode the WHOLE data field as a number via FlexInt/strconv.Atoi, so
+// a UPID response now fails with:
+//   strconv.Atoi: parsing "UPID:...qmcreate:141:..." invalid syntax
+// CreateVM must NOT parse the whole data as an int. Contract: (a) a
+// numeric-string data returns that vmid; (b) a UPID data returns the vmid
+// extracted from its ":<vmid>:" segment. Both must return the numeric vmid
+// without error so the tool keeps surfacing a numeric vmid.
+// ---------------------------------------------------------------------------
+
+// TestGateway_CreateVM_UPIDResponse is the RED reproducer for Regression 1: PVE
+// returns a task UPID when the VM is created with an explicit vmid. CreateVM
+// must not error and must return the vmid (141) extracted from the UPID. Today
+// FlexInt.UnmarshalJSON fails strconv.Atoi on the whole UPID, so CreateVM
+// errors.
+func TestGateway_CreateVM_UPIDResponse(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, 200, `{"data":"UPID:nuc01:00001111:00000002:66ABCDEF:qmcreate:141:root@pam:"}`, rec)
+	g, _ := newTestGateway(t, srv)
+
+	vmid, err := g.CreateVM(context.Background(), "pve1", model.CreateVMRequest{VMID: 141, Name: "web"})
+	require.NoError(t, err, "CreateVM must not error on a UPID create response")
+	assert.Equal(t, 141, vmid, "vmid must be extracted from the UPID's :<vmid>: segment")
+
 	assert.Equal(t, http.MethodPost, rec.method)
-	assert.Equal(t, "/api2/json/cluster/ha/resources", rec.path)
+	assert.Equal(t, "/api2/json/nodes/pve1/qemu", rec.path)
 	assert.Equal(t, "PVEAPIToken=user@pam!tokenid=secret", rec.auth)
-	assert.Equal(t, "nuc01,ms01", rec.form.Get("nodes"),
-		"nodes must be a comma-joined string, not a JSON array")
-	assert.Equal(t, "vm:100", rec.form.Get("sid"))
-	assert.Equal(t, "vm", rec.form.Get("type"))
+}
+
+// TestGateway_CreateVM_NumericStringVMID guards that the Regression 1 fix does not
+// break the numeric-string response ({"data":"141"}) PVE returns when no vmid
+// is supplied — CreateVM must still return 141 (regression guard on the
+// existing TestGateway_CreateVM_StringVMID path).
+func TestGateway_CreateVM_NumericStringVMID(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, 200, `{"data":"141"}`, rec)
+	g, _ := newTestGateway(t, srv)
+
+	vmid, err := g.CreateVM(context.Background(), "pve1", model.CreateVMRequest{Name: "web"})
+	require.NoError(t, err, "CreateVM must decode a numeric-string VMID")
+	assert.Equal(t, 141, vmid)
+}
+
+// ---------------------------------------------------------------------------
+// Regression 2 — pve_ha_add with nodes. Real PVE POST /cluster/ha/resources REJECTS
+// `nodes` in the create body:
+//   nodes: property is not defined in schema and the schema does not allow
+//   additional properties
+// PVE only accepts `nodes` on a SEPARATE update call (PUT
+// /cluster/ha/resources/{sid}). Contract: AddHAResource must POST the create
+// WITHOUT nodes (sid+type+comment only); when preferred nodes are supplied it
+// must issue a follow-up PUT /cluster/ha/resources/{sid} setting nodes
+// comma-joined. Without nodes, exactly one create POST (no follow-up).
+// ---------------------------------------------------------------------------
+
+// seqCapture records every request a multi-call mock server receives, in order.
+type seqCapture struct {
+	recs []reqCapture
+}
+
+// mockServerSeq spins up an httptest server that records every request in order
+// and always responds with the given status and body. Used to assert the
+// create-then-update sequence of AddHAResource.
+func mockServerSeq(t *testing.T, status int, body string) (*httptest.Server, *seqCapture) {
+	t.Helper()
+	seq := &seqCapture{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var rec reqCapture
+		rec.method = r.Method
+		rec.path = r.URL.Path
+		rec.auth = r.Header.Get("Authorization")
+		_ = r.ParseForm()
+		rec.form = r.PostForm
+		if b, err := io.ReadAll(r.Body); err == nil {
+			rec.rawBody = string(b)
+		}
+		seq.recs = append(seq.recs, rec)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv, seq
+}
+
+// TestGateway_AddHAResource_CreateOmitsNodes is the RED reproducer for Regression 2's
+// first half: the outbound create POST must NOT carry a `nodes` field (PVE
+// rejects it). Today AddHAResource sends nodes on the create.
+func TestGateway_AddHAResource_CreateOmitsNodes(t *testing.T) {
+	srv, seq := mockServerSeq(t, 200, `{}`)
+	g, _ := newTestGateway(t, srv)
+
+	err := g.AddHAResource(context.Background(), model.HAResourceRequest{
+		SID: "vm:100", Type: "vm", Nodes: []string{"nuc01", "ms01"}, Comment: "primary",
+	})
+	require.NoError(t, err)
+
+	require.GreaterOrEqual(t, len(seq.recs), 1, "a create request must be made")
+	create := seq.recs[0]
+	assert.Equal(t, http.MethodPost, create.method)
+	assert.Equal(t, "/api2/json/cluster/ha/resources", create.path)
+	_, hasNodes := create.form["nodes"]
+	assert.False(t, hasNodes, "create body must NOT include nodes (PVE rejects it)")
+	assert.Equal(t, "vm:100", create.form.Get("sid"))
+	assert.Equal(t, "vm", create.form.Get("type"))
+	assert.Equal(t, "primary", create.form.Get("comment"))
+}
+
+// TestGateway_AddHAResource_NodesViaFollowUpUpdate is the RED reproducer for
+// Regression 2's second half: preferred nodes must be applied via a follow-up
+// PUT /cluster/ha/resources/{sid} with the nodes comma-joined, NOT on the
+// create. Today only a single POST (with nodes) is sent and no update occurs.
+func TestGateway_AddHAResource_NodesViaFollowUpUpdate(t *testing.T) {
+	srv, seq := mockServerSeq(t, 200, `{}`)
+	g, _ := newTestGateway(t, srv)
+
+	err := g.AddHAResource(context.Background(), model.HAResourceRequest{
+		SID: "vm:100", Type: "vm", Nodes: []string{"nuc01", "ms01"}, Comment: "primary",
+	})
+	require.NoError(t, err)
+
+	require.Len(t, seq.recs, 2, "create + update must both be issued when nodes are provided")
+
+	create := seq.recs[0]
+	assert.Equal(t, http.MethodPost, create.method)
+	assert.Equal(t, "/api2/json/cluster/ha/resources", create.path)
+	_, hasNodes := create.form["nodes"]
+	assert.False(t, hasNodes, "nodes must NOT be on the create")
+
+	update := seq.recs[1]
+	assert.Equal(t, http.MethodPut, update.method)
+	assert.Equal(t, "/api2/json/cluster/ha/resources/vm:100", update.path)
+	assert.Equal(t, "nuc01,ms01", update.form.Get("nodes"), "update must set nodes comma-joined")
+	assert.Equal(t, "PVEAPIToken=user@pam!tokenid=secret", update.auth)
+}
+
+// TestGateway_AddHAResource_NoNodesSinglePost guards Regression 2's no-nodes path:
+// without nodes only a single create POST is made (no follow-up update), and
+// its body carries sid/type/comment but no nodes.
+func TestGateway_AddHAResource_NoNodesSinglePost(t *testing.T) {
+	srv, seq := mockServerSeq(t, 200, `{}`)
+	g, _ := newTestGateway(t, srv)
+
+	err := g.AddHAResource(context.Background(), model.HAResourceRequest{
+		SID: "vm:200", Type: "ct", Comment: "backup",
+	})
+	require.NoError(t, err)
+
+	require.Len(t, seq.recs, 1, "no follow-up update when nodes are absent")
+	create := seq.recs[0]
+	assert.Equal(t, http.MethodPost, create.method)
+	assert.Equal(t, "/api2/json/cluster/ha/resources", create.path)
+	_, hasNodes := create.form["nodes"]
+	assert.False(t, hasNodes)
+	assert.Equal(t, "vm:200", create.form.Get("sid"))
+	assert.Equal(t, "ct", create.form.Get("type"))
+	assert.Equal(t, "backup", create.form.Get("comment"))
 }
