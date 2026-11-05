@@ -69,6 +69,7 @@ func TestMutationToolSuccess(t *testing.T) {
 		{"pve_vm_resize", map[string]any{"node": "pve1", "vmid": 100, "disk": "scsi0", "size_gb": 20}, false},
 		{"pve_vm_migrate", map[string]any{"node": "pve1", "vmid": 100, "target": "pve2", "online": true}, false},
 		{"pve_ha_add", map[string]any{"sid": "vm:100", "type": "vm", "nodes": []string{"pve1"}}, false},
+		{"pve_ha_remove", map[string]any{"sid": "vm:100"}, false},
 		{"pve_vm_backup", map[string]any{"node": "pve1", "vmid": 100, "storage": "backup", "mode": "snapshot"}, true},
 		{"pve_vm_set", map[string]any{"node": "pve1", "vmid": 100, "config": map[string]any{"onboot": "0"}}, false},
 		{"pve_lxc_set", map[string]any{"node": "pve1", "vmid": 200, "config": map[string]any{"onboot": "0"}}, false},
@@ -77,6 +78,9 @@ func TestMutationToolSuccess(t *testing.T) {
 		{"pbs_prune_start", map[string]any{"store": "backup"}, true},
 		{"pbs_sync_start", map[string]any{"store": "backup", "remote": "r", "remote_store": "s"}, true},
 		{"pbs_task_stop", map[string]any{"upid": "UPID:pbs:task:..."}, false},
+		{"pbs_backup_forget", map[string]any{
+			"store": "backup", "backup_type": "vm", "backup_id": "100", "backup_time": int64(1793662080),
+		}, false},
 	}
 
 	for _, testCase := range cases {
@@ -131,6 +135,7 @@ func TestMutationToolErrorPropagation(t *testing.T) {
 		{"pve_vm_resize", map[string]any{"node": "pve1", "vmid": 100, "disk": "scsi0", "size_gb": 20}},
 		{"pve_vm_migrate", map[string]any{"node": "pve1", "vmid": 100, "target": "pve2"}},
 		{"pve_ha_add", map[string]any{"sid": "vm:100", "type": "vm"}},
+		{"pve_ha_remove", map[string]any{"sid": "vm:100"}},
 		{"pve_vm_backup", map[string]any{"node": "pve1", "vmid": 100, "storage": "backup", "mode": "snapshot"}},
 		{"pve_vm_set", map[string]any{"node": "pve1", "vmid": 100, "config": map[string]any{"onboot": "0"}}},
 		{"pve_lxc_set", map[string]any{"node": "pve1", "vmid": 200, "config": map[string]any{"onboot": "0"}}},
@@ -139,6 +144,9 @@ func TestMutationToolErrorPropagation(t *testing.T) {
 		{"pbs_prune_start", map[string]any{"store": "backup"}},
 		{"pbs_sync_start", map[string]any{"store": "backup", "remote": "r"}},
 		{"pbs_task_stop", map[string]any{"upid": "UPID:pbs:task:..."}},
+		{"pbs_backup_forget", map[string]any{
+			"store": "backup", "backup_type": "vm", "backup_id": "100", "backup_time": int64(1),
+		}},
 	}
 
 	for _, testCase := range cases {
@@ -177,6 +185,7 @@ func TestMutationToolAnnotations(t *testing.T) {
 	nonIdempotent := []string{
 		"pve_vm_create", "pve_vm_backup", "pbs_verify_start",
 		"pbs_gc_start", "pbs_prune_start", "pbs_sync_start",
+		"pve_ha_remove", "pbs_backup_forget",
 	}
 
 	for _, name := range nonDestructive {

@@ -410,16 +410,31 @@ func (g *Gateway) ListBackupJobs(ctx context.Context) ([]model.BackupJob, error)
 }
 
 // CreateBackupJob creates a vzdump backup job via POST /cluster/backup. The
-// response `data` is the new job's ID; an empty/absent ID is treated as success
-// without a name, so an empty return is possible only when the API returns no
-// data.
+// response `data` is the new job's ID, but PVE may also return empty or `{}`
+// data on success (the job is still created). The raw `data` is captured and
+// the job ID extracted leniently, so a success with no ID does not error.
 func (g *Gateway) CreateBackupJob(ctx context.Context, req model.CreateBackupJobRequest) (string, error) {
-	var id string
-	if err := g.doMutation(ctx, http.MethodPost, "/cluster/backup", backupJobForm(req), &id); err != nil {
+	var raw json.RawMessage
+	if err := g.doMutation(ctx, http.MethodPost, "/cluster/backup", backupJobForm(req), &raw); err != nil {
 		return "", err
 	}
 
-	return id, nil
+	return backupJobIDFromData(raw), nil
+}
+
+// backupJobIDFromData extracts the backup-job ID from a create/update response
+// `data`. PVE returns the job ID as a JSON string, or nothing at all (empty or
+// `{}` data) on success.
+func backupJobIDFromData(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var id string
+	if err := json.Unmarshal(raw, &id); err != nil {
+		return ""
+	}
+
+	return id
 }
 
 // UpdateBackupJob updates a vzdump backup job via PUT /cluster/backup/{id}. The
@@ -510,6 +525,11 @@ func (g *Gateway) GetVMConfig(ctx context.Context, node string, vmid int) (*mode
 	if err := g.do(ctx, http.MethodGet, vmPath(node, vmid)+"/config", nil, &out); err != nil {
 		return nil, err
 	}
+
+	// PVE does not echo the VMID in the config response body (it is carried only
+	// in the request path), so populate it from the argument to make the result
+	// self-describing.
+	out.VMID = vmid
 
 	return &out, nil
 }
@@ -670,16 +690,80 @@ func (g *Gateway) doMutation(ctx context.Context, method, path string, form url.
 }
 
 // CreateVM creates a QEMU VM via POST /nodes/{node}/qemu. The response `data`
-// is the new VMID; an empty/absent VMID is treated as success without a
-// number, so a zero return is possible only when the API returns no data.
+// is the new VMID, but real PVE returns it in two different shapes depending on
+// whether an explicit vmid was requested:
+//
+//   - synchronous create (auto-assigned vmid): data is the VMID as a JSON
+//     string or number, e.g. {"data":"100"} or {"data":100};
+//   - async/task-based create (explicit vmid): data is a task UPID, e.g.
+//     {"data":"UPID:...:qmcreate:141:..."}.
+//
+// vmIDFromCreateResponse resolves the numeric VMID from either shape, falling
+// back to the requested req.VMID when the VMID cannot be extracted (e.g. a
+// UPID without a numeric id segment). An empty/absent data is treated as
+// success returning the requested vmid (or 0 when none was requested).
 func (g *Gateway) CreateVM(ctx context.Context, node string, req model.CreateVMRequest) (int, error) {
 	form := buildCreateVMForm(req)
-	var vmid int
-	if err := g.doMutation(ctx, http.MethodPost, nodePath(node)+"/qemu", form, &vmid); err != nil {
+	var raw json.RawMessage
+	if err := g.doMutation(ctx, http.MethodPost, nodePath(node)+"/qemu", form, &raw); err != nil {
 		return 0, err
 	}
 
-	return vmid, nil
+	return vmIDFromCreateResponse(raw, req.VMID), nil
+}
+
+// vmIDFromCreateResponse resolves the created VMID from the create response
+// `data`. It accepts a plain JSON number ({"data":100}), a numeric JSON string
+// ({"data":"100"}), or a task UPID ({"data":"UPID:...:qmcreate:<vmid>:..."}),
+// extracting the VMID from the UPID or falling back to fallback (the requested
+// vmid). A zero/empty data returns the fallback (or 0).
+func vmIDFromCreateResponse(raw json.RawMessage, fallback int) int {
+	if len(raw) == 0 {
+		return fallback
+	}
+	// A plain JSON number ({"data":100} or {"data":0}).
+	var n int
+	if err := json.Unmarshal(raw, &n); err == nil {
+		return n
+	}
+	// A JSON string: either the numeric VMID ("100") or a task UPID.
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		s = strings.TrimSpace(s)
+		if v, err := strconv.Atoi(s); err == nil {
+			return v
+		}
+		if v := vmIDFromUPID(s); v > 0 {
+			return v
+		}
+	}
+
+	return fallback
+}
+
+// UPID layout constants. A create-task UPID is
+// "UPID:<node>:<pid>:<pstart>:<starttime>:<type>:<id>:<user>:<uuid>"; the VMID
+// is the <id> segment immediately after the task type.
+const (
+	upidMinSegments = 7 // node,pid,pstart,starttime,type,id (then user,uuid)
+	upidIDIndex     = 6
+)
+
+// vmIDFromUPID extracts the VMID from a create-task UPID of the form
+// "UPID:<node>:<pid>:<pstart>:<starttime>:<type>:<id>:<user>:<uuid>". For a
+// per-VM task the <id> segment (index 6, immediately after the task type) is
+// the numeric VMID. It returns 0 when the segment is absent or not numeric.
+func vmIDFromUPID(upid string) int {
+	parts := strings.Split(upid, ":")
+	if len(parts) < upidMinSegments {
+		return 0
+	}
+	n, err := strconv.Atoi(parts[upidIDIndex])
+	if err != nil || n <= 0 {
+		return 0
+	}
+
+	return n
 }
 
 // buildCreateVMForm maps a CreateVMRequest into the form-encoded mutation body,
@@ -769,19 +853,44 @@ func (g *Gateway) MigrateVM(ctx context.Context, node string, vmid int, req mode
 	return g.doMutation(ctx, http.MethodPost, "/nodes/"+url.PathEscape(node)+"/qemu/"+strconv.Itoa(vmid)+"/migrate", form, nil)
 }
 
-// AddHAResource registers a new HA resource via POST /cluster/ha/resources.
+// AddHAResource registers a new HA resource. Real PVE REJECTS `nodes` in the
+// POST /cluster/ha/resources create body (nodes is only accepted on a later
+// update), so the create POST carries only sid/type/comment. When preferred
+// nodes are provided, a second PUT /cluster/ha/resources/{sid} sets them
+// comma-joined. The two-step flow is idempotent: re-issuing the same create
+// then nodes update converges to the same resource state.
 func (g *Gateway) AddHAResource(ctx context.Context, req model.HAResourceRequest) error {
-	form := url.Values{}
-	form.Set("sid", req.SID)
-	form.Set("type", req.Type)
-	if len(req.Nodes) > 0 {
-		form.Set("nodes", strings.Join(req.Nodes, ","))
-	}
+	create := url.Values{}
+	create.Set("sid", req.SID)
+	create.Set("type", req.Type)
 	if req.Comment != "" {
-		form.Set("comment", req.Comment)
+		create.Set("comment", req.Comment)
+	}
+	if err := g.doMutation(ctx, http.MethodPost, "/cluster/ha/resources", create, nil); err != nil {
+		return err
 	}
 
-	return g.doMutation(ctx, http.MethodPost, "/cluster/ha/resources", form, nil)
+	if len(req.Nodes) > 0 {
+		update := url.Values{}
+		update.Set("nodes", strings.Join(req.Nodes, ","))
+		if err := g.doMutation(ctx, http.MethodPut, "/cluster/ha/resources/"+url.PathEscape(req.SID), update, nil); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// RemoveHAResource removes (unregisters) a HA resource by its SID via
+// DELETE /cluster/ha/resources/{sid}. sid is URL-escaped as a path segment so
+// a '/' cannot inject extra path segments (S11). Note url.PathEscape leaves
+// ':' unescaped, so an SID like vm:100 stays vm:100 on the wire (as PVE
+// expects), while vm:14/1 becomes vm:14%2F1. It is a destructive mutation:
+// never retried (doMutation) and the request carries no body. A 404 for an
+// unknown SID surfaces as the standard not-found/upstream error via the shared
+// error mapping.
+func (g *Gateway) RemoveHAResource(ctx context.Context, sid string) error {
+	return g.doMutation(ctx, http.MethodDelete, "/cluster/ha/resources/"+url.PathEscape(sid), nil, nil)
 }
 
 // StartVMBackup starts a vzdump backup via POST /nodes/{node}/vzdump. The

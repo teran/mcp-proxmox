@@ -205,6 +205,12 @@ func (s *PVEService) AddHAResource(ctx context.Context, req model.HAResourceRequ
 	return s.gw.AddHAResource(ctx, req)
 }
 
+// RemoveHAResource removes (unregisters) a HA resource by SID. It is a
+// destructive mutation (gated by EnableMutations) and is never retried.
+func (s *PVEService) RemoveHAResource(ctx context.Context, sid string) error {
+	return s.gw.RemoveHAResource(ctx, sid)
+}
+
 // StartVMBackup starts a vzdump backup of a VM on a node.
 func (s *PVEService) StartVMBackup(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error) {
 	return s.gw.StartVMBackup(ctx, node, req)

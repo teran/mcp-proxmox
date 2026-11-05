@@ -61,6 +61,16 @@ type pbsTaskIn struct {
 	UPID string `json:"upid" jsonschema:"Task UPID"`
 }
 
+// pbsBackupForgetIn is the input of pbs_backup_forget: it identifies a single
+// backup snapshot within a group by datastore, backup type, backup ID and the
+// snapshot's Unix epoch in seconds (from the backup listing).
+type pbsBackupForgetIn struct {
+	Store      string `json:"store" jsonschema:"PBS datastore name"`
+	BackupType string `json:"backup_type" jsonschema:"Backup type: vm | ct | host"`
+	BackupID   string `json:"backup_id" jsonschema:"Backup ID / group ID (e.g. a VMID)"`
+	BackupTime int64  `json:"backup_time" jsonschema:"Backup snapshot Unix epoch (seconds) from the backup listing"`
+}
+
 // pbsTaskLogIn is the input of pbs_task_log.
 type pbsTaskLogIn struct {
 	UPID  string `json:"upid" jsonschema:"Task UPID"`
@@ -256,6 +266,16 @@ func registerPBSMutationTools0(s *mcpSDK.Server, app *application.App, log toolL
 				"idempotent: stopping an already-stopped task may fail.",
 			log, false, func(ctx context.Context, in pbsTaskIn) (any, error) {
 				return nil, app.PBS.StopTask(ctx, in.UPID)
+			}, true),
+
+		mutTool(s, "pbs_backup_forget", "Forget PBS backup snapshot",
+			"Delete (forget) a single backup snapshot within a group.",
+			"Provide the datastore name, backup type (vm|ct|host), backup ID and the backup_time (Unix"+
+				"epoch in seconds) of the snapshot to delete, as returned by pbs_backup_list. Destructive:"+
+				"permanently removes the snapshot's data. Not idempotent: forgetting an already-forgotten"+
+				"snapshot may fail.",
+			log, false, func(ctx context.Context, in pbsBackupForgetIn) (any, error) {
+				return nil, app.PBS.ForgetBackup(ctx, in.Store, in.BackupType, in.BackupID, in.BackupTime)
 			}, true),
 	}
 }

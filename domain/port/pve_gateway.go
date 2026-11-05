@@ -70,6 +70,7 @@ type PVEGateway interface {
 	ResizeVM(ctx context.Context, node string, vmid int, req model.ResizeVMRequest) error
 	MigrateVM(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error
 	AddHAResource(ctx context.Context, req model.HAResourceRequest) error
+	RemoveHAResource(ctx context.Context, sid string) error
 	StartVMBackup(ctx context.Context, node string, req model.VMBackupRequest) (*model.Task, error)
 	CreateBackupJob(ctx context.Context, req model.CreateBackupJobRequest) (string, error)
 	UpdateBackupJob(ctx context.Context, id string, req model.CreateBackupJobRequest) (string, error)

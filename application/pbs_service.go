@@ -117,3 +117,9 @@ func (s *PBSService) StartSync(ctx context.Context, store string, req model.PBSS
 func (s *PBSService) StopTask(ctx context.Context, upid string) error {
 	return s.gw.StopTask(ctx, upid)
 }
+
+// ForgetBackup forgets (deletes) a single backup snapshot within a group. It is
+// a destructive mutation (gated by EnableMutations) and is never retried.
+func (s *PBSService) ForgetBackup(ctx context.Context, store, backupType, backupID string, backupTime int64) error {
+	return s.gw.ForgetBackup(ctx, store, backupType, backupID, backupTime)
+}
