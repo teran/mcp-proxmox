@@ -410,16 +410,31 @@ func (g *Gateway) ListBackupJobs(ctx context.Context) ([]model.BackupJob, error)
 }
 
 // CreateBackupJob creates a vzdump backup job via POST /cluster/backup. The
-// response `data` is the new job's ID; an empty/absent ID is treated as success
-// without a name, so an empty return is possible only when the API returns no
-// data.
+// response `data` is the new job's ID, but PVE may also return empty or `{}`
+// data on success (the job is still created). The raw `data` is captured and
+// the job ID extracted leniently, so a success with no ID does not error.
 func (g *Gateway) CreateBackupJob(ctx context.Context, req model.CreateBackupJobRequest) (string, error) {
-	var id string
-	if err := g.doMutation(ctx, http.MethodPost, "/cluster/backup", backupJobForm(req), &id); err != nil {
+	var raw json.RawMessage
+	if err := g.doMutation(ctx, http.MethodPost, "/cluster/backup", backupJobForm(req), &raw); err != nil {
 		return "", err
 	}
 
-	return id, nil
+	return backupJobIDFromData(raw), nil
+}
+
+// backupJobIDFromData extracts the backup-job ID from a create/update response
+// `data`. PVE returns the job ID as a JSON string, or nothing at all (empty or
+// `{}` data) on success.
+func backupJobIDFromData(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var id string
+	if err := json.Unmarshal(raw, &id); err != nil {
+		return ""
+	}
+
+	return id
 }
 
 // UpdateBackupJob updates a vzdump backup job via PUT /cluster/backup/{id}. The
@@ -510,6 +525,11 @@ func (g *Gateway) GetVMConfig(ctx context.Context, node string, vmid int) (*mode
 	if err := g.do(ctx, http.MethodGet, vmPath(node, vmid)+"/config", nil, &out); err != nil {
 		return nil, err
 	}
+
+	// PVE does not echo the VMID in the config response body (it is carried only
+	// in the request path), so populate it from the argument to make the result
+	// self-describing.
+	out.VMID = vmid
 
 	return &out, nil
 }
@@ -670,16 +690,17 @@ func (g *Gateway) doMutation(ctx context.Context, method, path string, form url.
 }
 
 // CreateVM creates a QEMU VM via POST /nodes/{node}/qemu. The response `data`
-// is the new VMID; an empty/absent VMID is treated as success without a
-// number, so a zero return is possible only when the API returns no data.
+// is the new VMID, which real PVE may return as a JSON string ("100") or a
+// number (100); an empty/absent VMID is treated as success without a number, so
+// a zero return is possible only when the API returns no data.
 func (g *Gateway) CreateVM(ctx context.Context, node string, req model.CreateVMRequest) (int, error) {
 	form := buildCreateVMForm(req)
-	var vmid int
+	var vmid model.FlexInt
 	if err := g.doMutation(ctx, http.MethodPost, nodePath(node)+"/qemu", form, &vmid); err != nil {
 		return 0, err
 	}
 
-	return vmid, nil
+	return int(vmid), nil
 }
 
 // buildCreateVMForm maps a CreateVMRequest into the form-encoded mutation body,

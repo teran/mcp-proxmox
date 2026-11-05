@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"strings"
 
 	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -83,10 +84,39 @@ type migrateVMIn struct {
 
 // haAddIn is the input of pve_ha_add.
 type haAddIn struct {
-	SID     string   `json:"sid" jsonschema:"HA resource ID (e.g. vm:100)"`
-	Type    string   `json:"type" jsonschema:"Resource type: vm | ct"`
-	Nodes   []string `json:"nodes,omitempty" jsonschema:"Ordered preferred nodes"`
-	Comment string   `json:"comment,omitempty" jsonschema:"Optional comment"`
+	SID     string `json:"sid" jsonschema:"HA resource ID (e.g. vm:100)"`
+	Type    string `json:"type" jsonschema:"Resource type: vm | ct"`
+	Nodes   any    `json:"nodes,omitempty" jsonschema:"Preferred nodes: array of node names or a comma-separated string"`
+	Comment string `json:"comment,omitempty" jsonschema:"Optional comment"`
+}
+
+// nodesToStrings normalizes the pve_ha_add `nodes` input (either an array of
+// node names or a comma-separated string, matching PVE's documented form) into
+// a []string the gateway comma-joins for the outbound request.
+func nodesToStrings(v any) []string {
+	switch t := v.(type) {
+	case nil:
+		return nil
+	case string:
+		if t == "" {
+			return nil
+		}
+
+		return strings.Split(t, ",")
+	case []string:
+		return t
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, item := range t {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+
+		return out
+	default:
+		return nil
+	}
 }
 
 // vmBackupIn is the input of pve_vm_backup.
@@ -513,7 +543,7 @@ func registerPVEMutationTools1(s *mcpSDK.Server, app *application.App, log toolL
 				return nil, app.PVE.AddHAResource(ctx, model.HAResourceRequest{
 					SID:     in.SID,
 					Type:    in.Type,
-					Nodes:   in.Nodes,
+					Nodes:   nodesToStrings(in.Nodes),
 					Comment: in.Comment,
 				})
 			}),
