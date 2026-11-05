@@ -16,6 +16,14 @@ type TaskListOptions struct {
 	Limit      int    `json:"limit,omitempty"`      // cap the number of returned tasks
 }
 
+// StorageContentListOptions filters GET /nodes/{node}/storage/{storage}/content.
+// Content is a comma-separated list of content types (e.g. "vztmpl,iso"); VMID
+// narrows the result to volumes owned by a single VM/CT.
+type StorageContentListOptions struct {
+	Content string `json:"content,omitempty"` // comma-separated content types, e.g. "vztmpl,iso"
+	VMID    int    `json:"vmid,omitempty"`    // filter by VMID
+}
+
 // PVEGateway is the secondary port implemented by adapter/pve. It models the
 // Proxmox VE REST API (/api2/json): the read-only (query) surface plus the
 // mutation surface (create/resize/migrate/ha/backup), which the MCP adapter
@@ -57,6 +65,7 @@ type PVEGateway interface {
 	// Storage & network.
 	ListStorage(ctx context.Context) ([]model.Storage, error)
 	GetStorageStatus(ctx context.Context, node, storage string) (*model.StorageStatus, error)
+	ListStorageContent(ctx context.Context, node, storage string, opts StorageContentListOptions) ([]model.StorageContent, error)
 	ListNetwork(ctx context.Context, node string) ([]model.NetworkInterface, error)
 
 	// Tasks & version.
@@ -67,6 +76,8 @@ type PVEGateway interface {
 
 	// Mutations (gated by EnableMutations). These are never retried.
 	CreateVM(ctx context.Context, node string, req model.CreateVMRequest) (int, error)
+	CreateLXC(ctx context.Context, node string, req model.CreateLXCRequest) (int, error)
+	DownloadURL(ctx context.Context, node, storage string, req model.StorageDownloadURLRequest) (string, error)
 	ResizeVM(ctx context.Context, node string, vmid int, req model.ResizeVMRequest) error
 	MigrateVM(ctx context.Context, node string, vmid int, req model.MigrateVMRequest) error
 	AddHAResource(ctx context.Context, req model.HAResourceRequest) error

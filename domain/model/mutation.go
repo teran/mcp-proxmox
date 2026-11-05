@@ -127,3 +127,38 @@ type PBSSyncRequest struct {
 	SkipLost       bool   `json:"skip-lost,omitempty"`
 	NotifyUser     string `json:"notify-user,omitempty"`
 }
+
+// StorageDownloadURLRequest is the form body of
+// POST /nodes/{node}/storage/{storage}/download-url. It downloads a file from
+// URL into the storage as Filename, tagging it with the given Content type.
+// Content, Filename and URL are required; verify-certificates controls TLS
+// verification of the source URL and is optional (PVE default applies when
+// omitted).
+type StorageDownloadURLRequest struct {
+	Content            string `json:"content"`
+	Filename           string `json:"filename"`
+	URL                string `json:"url"`
+	VerifyCertificates bool   `json:"verify-certificates,omitempty"`
+}
+
+// CreateLXCRequest is the form body of POST /nodes/{node}/lxc. It provisions a
+// new LXC container from a template. OSTemplate is required (e.g.
+// "local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst"); the other fields are
+// optional container overrides. VMID is optional — when omitted PVE assigns the
+// next free ID.
+type CreateLXCRequest struct {
+	VMID          int    `json:"vmid,omitempty"`
+	OSTemplate    string `json:"ostemplate"`
+	Hostname      string `json:"hostname,omitempty"`
+	Storage       string `json:"storage,omitempty"`
+	RootFS        string `json:"rootfs,omitempty"`
+	Cores         int    `json:"cores,omitempty"`
+	Memory        int    `json:"memory,omitempty"`
+	Swap          int    `json:"swap,omitempty"`
+	Net0          string `json:"net0,omitempty"`
+	Description   string `json:"description,omitempty"`
+	Tags          string `json:"tags,omitempty"`
+	Unprivileged  bool   `json:"unprivileged,omitempty"`
+	Password      string `json:"password,omitempty"`
+	SSHPublicKeys string `json:"ssh-public-keys,omitempty"`
+}

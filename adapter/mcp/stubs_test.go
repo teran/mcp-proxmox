@@ -75,6 +75,13 @@ type stubPVEGateway struct {
 	deleteLXCSnapshot   func(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
 	rollbackLXCSnapshot func(ctx context.Context, node string, vmid int, snapname string) (*model.Task, error)
 	restoreVM           func(ctx context.Context, node string, req model.PVERestoreRequest) (*model.Task, error)
+
+	// LXC create + storage content (feat/lxc-templates).
+	createLXC          func(ctx context.Context, node string, req model.CreateLXCRequest) (int, error)
+	listStorageContent func(
+		ctx context.Context, node, storage string, opts port.StorageContentListOptions,
+	) ([]model.StorageContent, error)
+	downloadURL func(ctx context.Context, node, storage string, req model.StorageDownloadURLRequest) (string, error)
 }
 
 func (s *stubPVEGateway) fail() bool { return s.err != nil }
@@ -685,6 +692,43 @@ func (s *stubPVEGateway) RestoreVM(ctx context.Context, node string, req model.P
 	return &model.Task{UPID: "UPID:pve:restore:..."}, nil
 }
 
+func (s *stubPVEGateway) CreateLXC(ctx context.Context, node string, req model.CreateLXCRequest) (int, error) {
+	if s.fail() {
+		return 0, s.err
+	}
+	if s.createLXC != nil {
+		return s.createLXC(ctx, node, req)
+	}
+
+	return 203, nil
+}
+
+func (s *stubPVEGateway) ListStorageContent(
+	ctx context.Context, node, storage string, opts port.StorageContentListOptions,
+) ([]model.StorageContent, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.listStorageContent != nil {
+		return s.listStorageContent(ctx, node, storage, opts)
+	}
+
+	return []model.StorageContent{{VolID: "local:iso/debian-12.iso", Content: "iso", Format: "iso", Size: 513802240}}, nil
+}
+
+func (s *stubPVEGateway) DownloadURL(
+	ctx context.Context, node, storage string, req model.StorageDownloadURLRequest,
+) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.downloadURL != nil {
+		return s.downloadURL(ctx, node, storage, req)
+	}
+
+	return "UPID:pve:download-url:...", nil
+}
+
 var _ port.PVEGateway = (*stubPVEGateway)(nil)
 
 // stubPBSGateway is a controllable port.PBSGateway stub for adapter/mcp tests.
@@ -966,6 +1010,7 @@ var pveROTools = []string{
 	"pve_vm_list", "pve_vm_get", "pve_vm_status",
 	"pve_lxc_list", "pve_lxc_get", "pve_lxc_status",
 	"pve_storage_list", "pve_storage_get", "pve_network_list",
+	"pve_storage_content_list",
 	"pve_task_list", "pve_task_status", "pve_task_log", "pve_version",
 	"pve_vm_snapshot_list", "pve_lxc_snapshot_list",
 }
@@ -988,6 +1033,7 @@ var pveMutationTools = []string{
 	"pve_lxc_start", "pve_lxc_stop", "pve_lxc_shutdown", "pve_lxc_reboot",
 	"pve_lxc_delete", "pve_lxc_clone", "pve_lxc_snapshot_create",
 	"pve_lxc_snapshot_delete", "pve_lxc_snapshot_rollback", "pve_lxc_set",
+	"pve_lxc_create", "pve_storage_download_url",
 	"pve_backup_job_create", "pve_backup_job_update", "pve_backup_job_delete",
 }
 

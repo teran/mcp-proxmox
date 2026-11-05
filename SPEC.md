@@ -748,13 +748,13 @@ the same sensitive-key policy.
 
 ## 6. Tool registry (complete)
 
-With both backends enabled and `ENABLE_MUTATIONS=true` (SPEC §2.5), **76 tools**
+With both backends enabled and `ENABLE_MUTATIONS=true` (SPEC §2.5), **79 tools**
 are registered. Naming uses the domain prefixes `pve_` and `pbs_`; system tools
 (`ping`, `status`) have no prefix. `query` = read (idempotent, retried);
 `mutation` = write (never retried). Read-only query tools are always registered
 for an enabled backend; mutation tools are registered **only** when
-`ENABLE_MUTATIONS=true` — with the default (mutations disabled) **35 tools** are
-registered (system 2, PVE 21, PBS 12).
+`ENABLE_MUTATIONS=true` — with the default (mutations disabled) **36 tools** are
+registered (system 2, PVE 22, PBS 12).
 
 > This list is the implemented, defensible surface — it is derived directly from
 > the tool-registration code in `adapter/mcp`. Every endpoint below exists in the
@@ -861,7 +861,7 @@ with destructive mutations (delete / restore / rollback / GC / prune) carrying
 | 34 | `pve_vm_restore` | mutation | `POST /nodes/{node}/qemu` (qmrestore, `archive` param) |
 | 35 | `pve_vm_set` | mutation | `PUT /nodes/{node}/qemu/{vmid}/config` |
 
-### 6.5 Proxmox VE — LXC containers (14)
+### 6.5 Proxmox VE — LXC containers (15)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
@@ -869,72 +869,75 @@ with destructive mutations (delete / restore / rollback / GC / prune) carrying
 | 37 | `pve_lxc_get` | query | `GET /nodes/{node}/lxc/{vmid}/config` |
 | 38 | `pve_lxc_status` | query | `GET /nodes/{node}/lxc/{vmid}/status/current` |
 | 39 | `pve_lxc_snapshot_list` | query | `GET /nodes/{node}/lxc/{vmid}/snapshot` |
-| 40 | `pve_lxc_start` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/start` |
-| 41 | `pve_lxc_stop` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/stop` |
-| 42 | `pve_lxc_shutdown` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/shutdown` |
-| 43 | `pve_lxc_reboot` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/reboot` |
-| 44 | `pve_lxc_delete` | mutation | `DELETE /nodes/{node}/lxc/{vmid}` |
-| 45 | `pve_lxc_clone` | mutation | `POST /nodes/{node}/lxc/{vmid}/clone` |
-| 46 | `pve_lxc_snapshot_create` | mutation | `POST /nodes/{node}/lxc/{vmid}/snapshot` |
-| 47 | `pve_lxc_snapshot_delete` | mutation | `DELETE /nodes/{node}/lxc/{vmid}/snapshot/{snapname}` |
-| 48 | `pve_lxc_snapshot_rollback` | mutation | `POST /nodes/{node}/lxc/{vmid}/snapshot/{snapname}/rollback` |
-| 49 | `pve_lxc_set` | mutation | `PUT /nodes/{node}/lxc/{vmid}/config` |
+| 40 | `pve_lxc_create` | mutation | `POST /nodes/{node}/lxc` |
+| 41 | `pve_lxc_start` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/start` |
+| 42 | `pve_lxc_stop` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/stop` |
+| 43 | `pve_lxc_shutdown` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/shutdown` |
+| 44 | `pve_lxc_reboot` | mutation | `POST /nodes/{node}/lxc/{vmid}/status/reboot` |
+| 45 | `pve_lxc_delete` | mutation | `DELETE /nodes/{node}/lxc/{vmid}` |
+| 46 | `pve_lxc_clone` | mutation | `POST /nodes/{node}/lxc/{vmid}/clone` |
+| 47 | `pve_lxc_snapshot_create` | mutation | `POST /nodes/{node}/lxc/{vmid}/snapshot` |
+| 48 | `pve_lxc_snapshot_delete` | mutation | `DELETE /nodes/{node}/lxc/{vmid}/snapshot/{snapname}` |
+| 49 | `pve_lxc_snapshot_rollback` | mutation | `POST /nodes/{node}/lxc/{vmid}/snapshot/{snapname}/rollback` |
+| 50 | `pve_lxc_set` | mutation | `PUT /nodes/{node}/lxc/{vmid}/config` |
 
-### 6.6 Proxmox VE — storage & network (3)
+### 6.6 Proxmox VE — storage & network (5)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 50 | `pve_storage_list` | query | `GET /storage` |
-| 51 | `pve_storage_get` | query | `GET /nodes/{node}/storage/{storage}/status` |
-| 52 | `pve_network_list` | query | `GET /nodes/{node}/network` |
+| 51 | `pve_storage_list` | query | `GET /storage` |
+| 52 | `pve_storage_get` | query | `GET /nodes/{node}/storage/{storage}/status` |
+| 53 | `pve_storage_content_list` | query | `GET /nodes/{node}/storage/{storage}/content` |
+| 54 | `pve_storage_download_url` | mutation | `POST /nodes/{node}/storage/{storage}/download-url` |
+| 55 | `pve_network_list` | query | `GET /nodes/{node}/network` |
 
 ### 6.7 Proxmox VE — tasks & version (4)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 53 | `pve_task_list` | query | `GET /nodes/{node}/tasks` |
-| 54 | `pve_task_status` | query | `GET /nodes/{node}/tasks/{upid}/status` |
-| 55 | `pve_task_log` | query | `GET /nodes/{node}/tasks/{upid}/log` |
-| 56 | `pve_version` | query | `GET /version` |
+| 56 | `pve_task_list` | query | `GET /nodes/{node}/tasks` |
+| 57 | `pve_task_status` | query | `GET /nodes/{node}/tasks/{upid}/status` |
+| 58 | `pve_task_log` | query | `GET /nodes/{node}/tasks/{upid}/log` |
+| 59 | `pve_version` | query | `GET /version` |
 
 ### 6.8 PBS — datastores (3)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 57 | `pbs_datastore_list` | query | `GET /admin/datastore` |
-| 58 | `pbs_datastore_status` | query | `GET /admin/datastore/{store}/status` |
-| 59 | `pbs_datastore_config_get` | query | `GET /admin/datastore/{store}/config` |
+| 60 | `pbs_datastore_list` | query | `GET /admin/datastore` |
+| 61 | `pbs_datastore_status` | query | `GET /admin/datastore/{store}/status` |
+| 62 | `pbs_datastore_config_get` | query | `GET /admin/datastore/{store}/config` |
 
 ### 6.9 PBS — backups/snapshots & files (7)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 60 | `pbs_backup_list` | query | `GET /admin/datastore/{store}/snapshot` |
-| 61 | `pbs_backup_get` | query | `GET /admin/datastore/{store}/snapshot/{backup-id}` (group) |
-| 62 | `pbs_backup_notes_get` | query | `GET /admin/datastore/{store}/backup/{backup-id}/{backup-type}/notes` |
-| 63 | `pbs_backup_files_list` | query | `GET /admin/datastore/{store}/backup/{backup-type}/{backup-id}/{snapshot}` |
-| 64 | `pbs_backup_restore_file` | mutation | `POST /admin/datastore/{store}/backup/{backup-type}/{backup-id}/{snapshot}/restore` (single file) |
-| 65 | `pbs_backup_vm_restore` | mutation | `POST /admin/datastore/{store}/backup/{backup-type}/{backup-id}/{snapshot}/restore` (VM) |
-| 66 | `pbs_backup_forget` | mutation | `DELETE /admin/datastore/{store}/snapshots/{backup-type}/{backup-id}/{backup-time}` |
+| 63 | `pbs_backup_list` | query | `GET /admin/datastore/{store}/snapshot` |
+| 64 | `pbs_backup_get` | query | `GET /admin/datastore/{store}/snapshot/{backup-id}` (group) |
+| 65 | `pbs_backup_notes_get` | query | `GET /admin/datastore/{store}/backup/{backup-id}/{backup-type}/notes` |
+| 66 | `pbs_backup_files_list` | query | `GET /admin/datastore/{store}/backup/{backup-type}/{backup-id}/{snapshot}` |
+| 67 | `pbs_backup_restore_file` | mutation | `POST /admin/datastore/{store}/backup/{backup-type}/{backup-id}/{snapshot}/restore` (single file) |
+| 68 | `pbs_backup_vm_restore` | mutation | `POST /admin/datastore/{store}/backup/{backup-type}/{backup-id}/{snapshot}/restore` (VM) |
+| 69 | `pbs_backup_forget` | mutation | `DELETE /admin/datastore/{store}/snapshots/{backup-type}/{backup-id}/{backup-time}` |
 
 ### 6.10 PBS — verify, GC, prune, sync, tasks & version (10)
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 67 | `pbs_verify_status` | query | `GET /nodes/localhost/tasks/{upid}/status` |
-| 68 | `pbs_prune_status` | query | `GET /nodes/localhost/tasks/{upid}/status` |
-| 69 | `pbs_task_status` | query | `GET /nodes/localhost/tasks/{upid}/status` |
-| 70 | `pbs_task_log` | query | `GET /nodes/localhost/tasks/{upid}/log` |
-| 71 | `pbs_version` | query | `GET /version` |
-| 72 | `pbs_verify_start` | mutation | `POST /admin/datastore/{store}/verify` |
-| 73 | `pbs_gc_start` | mutation | `POST /admin/datastore/{store}/gc` |
-| 74 | `pbs_prune_start` | mutation | `POST /admin/datastore/{store}/prune` |
-| 75 | `pbs_sync_start` | mutation | `POST /admin/datastore/{store}/sync` |
-| 76 | `pbs_task_stop` | mutation | `DELETE /nodes/localhost/tasks/{upid}` |
+| 70 | `pbs_verify_status` | query | `GET /nodes/localhost/tasks/{upid}/status` |
+| 71 | `pbs_prune_status` | query | `GET /nodes/localhost/tasks/{upid}/status` |
+| 72 | `pbs_task_status` | query | `GET /nodes/localhost/tasks/{upid}/status` |
+| 73 | `pbs_task_log` | query | `GET /nodes/localhost/tasks/{upid}/log` |
+| 74 | `pbs_version` | query | `GET /version` |
+| 75 | `pbs_verify_start` | mutation | `POST /admin/datastore/{store}/verify` |
+| 76 | `pbs_gc_start` | mutation | `POST /admin/datastore/{store}/gc` |
+| 77 | `pbs_prune_start` | mutation | `POST /admin/datastore/{store}/prune` |
+| 78 | `pbs_sync_start` | mutation | `POST /admin/datastore/{store}/sync` |
+| 79 | `pbs_task_stop` | mutation | `DELETE /nodes/localhost/tasks/{upid}` |
 
-**Total: 76 tools** with `ENABLE_MUTATIONS=true` (system 2, PVE 54, PBS 20).
+**Total: 79 tools** with `ENABLE_MUTATIONS=true` (system 2, PVE 57, PBS 20).
 With `ENABLE_MUTATIONS` unset (default `false`), only the read-only surface is
-registered: **35 tools** (system 2, PVE 21, PBS 12).
+registered: **36 tools** (system 2, PVE 22, PBS 12).
 
 > **Mutation gate:** every `mutation`-typed row above is registered only when
 > `ENABLE_MUTATIONS=true` (§2.5); when unset, only the `query` rows are exposed.
@@ -1198,7 +1201,7 @@ complements, never replaces, them.
    `Deps.EnableMutations` in `adapter/mcp`, honored during tool registration).
    The milestone default surface is read-only + system (`ping`/`status`).
 6. **Exact tool list:** the tool registry in §6 is the agreed, implemented
-   surface (76 tools with mutations enabled, 35 read-only by default); it may be
+   surface (79 tools with mutations enabled, 36 read-only by default); it may be
    trimmed/extended in later features (e.g. more PVE config options).
 7. **API-token only** (no ticket/CSRF flow) — matches the stated requirement.
 8. **Tokens from config, not per-call** — confirmed in §2.4; revisit only if a
@@ -1248,13 +1251,13 @@ with its own branch/PR, following the TDD workflow (§8.5).
 
 ## Integration tests
 
-This section defines the **live-cluster integration test plan** for `mcp-proxmox`. It complements (and does not replace) the hermetic unit/coverage/mutation gates (§8). It runs against a **real Proxmox VE cluster** and a **real Proxmox Backup Server (PBS)**, driving every one of the **76 tools** (§6) through the actual MCP stdio server with `ENABLE_MUTATIONS=true`. Every mutation is executed only against a brand-new, dedicated, throwaway resource; **no pre-existing resource is ever touched**.
+This section defines the **live-cluster integration test plan** for `mcp-proxmox`. It complements (and does not replace) the hermetic unit/coverage/mutation gates (§8). It runs against a **real Proxmox VE cluster** and a **real Proxmox Backup Server (PBS)**, driving every one of the **79 tools** (§6) through the actual MCP stdio server with `ENABLE_MUTATIONS=true`. Every mutation is executed only against a brand-new, dedicated, throwaway resource; **no pre-existing resource is ever touched**.
 
 > **Relationship to known-broken PBS tools (§11).** Seven PBS tools are currently broken against a real PBS. For these, the integration test **doubles as the fix-verification**: a failing run confirms the defect is still present, and a passing run proves the fix (the corrected endpoint is stated in the assertion). They are flagged ⚠️.
 
 ### I.1 Overview & isolation guarantee
 
-**Isolation is the top priority of this plan.** All state-mutating tools operate **only** on a single brand-new dedicated throwaway VM named `int-test-<uuid>`, plus the additional dedicated throwaway objects required to cover the full 76-tool surface (a clone VM, two restore-target VMs, one LXC container, one backup job, one HA resource — all `int-test-<uuid>-*` prefixed). The plan **MUST NOT**:
+**Isolation is the top priority of this plan.** All state-mutating tools operate **only** on a single brand-new dedicated throwaway VM named `int-test-<uuid>`, plus the additional dedicated throwaway objects required to cover the full 79-tool surface (a clone VM, two restore-target VMs, one LXC container, one backup job, one HA resource — all `int-test-<uuid>-*` prefixed). The plan **MUST NOT**:
 
 - use, start, stop, reboot, reset, suspend, resize, migrate, clone, snapshot, roll back, back up, restore, or **delete** any **existing** VM, LXC, or HA resource;
 - alter, update, or delete any **existing** storage, datastore, backup job, backup group, snapshot, or node;
@@ -1269,7 +1272,7 @@ Every created object carries the `int-test-<uuid>` name/tag so it is identifiabl
 | `int-test-<uuid>-clone` VM | `pve_vm_clone` (Phase 6) | `pve_vm_delete` (Phase 9) |
 | `int-test-<uuid>-restore` VM | `pve_vm_restore` (Phase 6) | `pve_vm_delete` (Phase 9) |
 | `int-test-<uuid>-pbsrestore` VM | `pbs_backup_vm_restore` (Phase 6) | `pve_vm_delete` (Phase 9) |
-| `int-test-<uuid>-lxc` container | out-of-band `pct create` (Phase 7) | `pve_lxc_delete` (Phase 9) |
+| `int-test-<uuid>-lxc` container | `pve_lxc_create` (Phase 7) | `pve_lxc_delete` (Phase 9) |
 | `int-test-<uuid>-lxc-snap` LXC snapshot | `pve_lxc_snapshot_create` (Phase 7) | `pve_lxc_snapshot_delete` (Phase 9) |
 | `int-test-<uuid>-job` backup job | `pve_backup_job_create` (Phase 2) | `pve_backup_job_delete` (Phase 9) |
 | `vm:<int-test-vmid>` HA resource | `pve_ha_add` (Phase 2) | `pve_ha_remove` (Phase 9) |
@@ -1282,12 +1285,12 @@ Every created object carries the `int-test-<uuid>` name/tag so it is identifiabl
 | PVE cluster | Real Proxmox VE cluster reachable at `PVE_ENDPOINT` (e.g. `https://pve.example.com:8006`), **≥ 2 nodes** (`NODE_A`, `NODE_B`) so `pve_vm_migrate` is testable |
 | PVE token | `PVE_TOKEN` — an API token (`user@realm!tokenid=uuid`) with full privileges (create/delete VMs & CTs, resize/migrate, vzdump, HA, config) on the **dedicated** nodes; TLS on, custom CA via `PVE_CA_CERT_PATH` if self-signed |
 | PBS | `PBS_ENDPOINT` (e.g. `https://pbs.example.com:8007`) + `PBS_TOKEN` (`user@pbs!tokenid:secret`); a writable datastore (`store`) the token can list/verify/prune/gc |
-| Mutations | `ENABLE_MUTATIONS=true` (otherwise only 35 read-only tools are registered — this plan needs all 76) |
+| Mutations | `ENABLE_MUTATIONS=true` (otherwise only 36 read-only tools are registered — this plan needs all 79) |
 | Logging | `LOG_LEVEL=info` (and optionally `trace`) so task/polling behavior is inspectable; `LOG_FILENAME` default is fine |
 | Timeout | `HTTP_TIMEOUT` should be raised (e.g. `5m`) for long-running backups/restores/GC |
 | Storage | An available disk storage (e.g. `local-lvm`) for the VM disks and a **backup storage** reachable by PVE (`pve_storage_list` in Phase 0) that feeds the PBS datastore |
 | Network | An available bridge (e.g. `vmbr0`) for `net0` |
-| Tooling | The MCP client / runner to drive the stdio server, plus SSH/shell access to `NODE_A` (for the out-of-band `pct` LXC create and the out-of-band PBS file-restore-path `rm` cleanup) |
+| Tooling | The MCP client / runner to drive the stdio server, plus SSH/shell access to `NODE_A` (for the out-of-band PBS file-restore-path `rm` cleanup) |
 
 **Recommendations (safety):** prefer a **test-only PVE cluster / PBS datastore** if available; otherwise point the token at an **isolated node** and a **dedicated scratch PBS datastore** so that the datastore-wide destructive PBS tools (`pbs_gc_start`, `pbs_prune_start`) only affect throwaway data. Reserve a small VMID range (e.g. 9000–9050) exclusively for `int-test` resources.
 
@@ -1305,9 +1308,9 @@ Every object created by the run uses the prefix **`int-test-<uuid>`** where `<uu
 
 The cleanup phase (`I.7`) discovers leftover objects **by this prefix only**, so it can never match a production resource.
 
-### I.4 Scope & coverage accounting (all 76 tools)
+### I.4 Scope & coverage accounting (all 79 tools)
 
-System 2 + PVE read 21 + PVE write 33 + PBS read 12 + PBS write 8 = **76 tools**, all covered. Tools marked ⚠️ are the known-broken PBS tools from §11 (the run verifies the §11 fixes). Each phase table row lists: **Tool · Phase · Input (on int-test objects) · Expected · PASS/FAIL assertion**.
+System 2 + PVE read 22 + PVE write 35 + PBS read 12 + PBS write 8 = **79 tools**, all covered. Tools marked ⚠️ are the known-broken PBS tools from §11 (the run verifies the §11 fixes). Each phase table row lists: **Tool · Phase · Input (on int-test objects) · Expected · PASS/FAIL assertion**.
 
 > **Node tracking after migration.** `pve_vm_migrate` (Phase 3) moves the VM from `NODE_A` to `NODE_B`. From that point every VM tool in later phases must pass `node=NODE_B`. The matrix says `node=host` and the runner substitutes the current host (`NODE_A` before Phase 3, `NODE_B` after).
 
@@ -1413,26 +1416,29 @@ Order matters: **start → reboot → reset → suspend → resume → shutdown 
 
 #### Phase 7 — LXC tool set (dedicated int-test container)
 
-There is **no `pve_lxc_create` tool** in the registry (SPEC §6.5), so a single dedicated container `int-test-<uuid>-lxc` is created **out-of-band** via `pct create <LXC_VMID> <template> --hostname int-test-<uuid>-lxc` on `NODE_A`. All 14 LXC tools then run against it only.
+Phase 7 now exercises the **full in-band LXC provisioning cycle**: the container template is downloaded with `pve_storage_download_url`, verified present via `pve_storage_content_list`, and the container itself is created with `pve_lxc_create` (SPEC §6.5/§6.6). All LXC tools then run against the single dedicated container `int-test-<uuid>-lxc` on `NODE_A`.
 
 | # | Tool | Input | Expected | PASS assertion |
 |---|---|---|---|---|
-| 56 | `pve_lxc_list` | `node=NODE_A` | CT list | `int-test-<uuid>-lxc` present |
-| 57 | `pve_lxc_get` | `node=NODE_A, vmid=<LXC_VMID>` | CT config | `hostname == int-test-<uuid>-lxc` |
-| 58 | `pve_lxc_status` | `node=NODE_A, vmid=<LXC_VMID>` | CT status | `status == stopped` |
-| 59 | `pve_lxc_set` | `node=NODE_A, vmid=<LXC_VMID>, config={ "description": "int-test", "onboot": "0" }` | success | `IsError == false`; re-`pve_lxc_get` shows the values |
-| 60 | `pve_lxc_snapshot_create` | `node=NODE_A, vmid=<LXC_VMID>, snapname=int-test-<uuid>-lxc-snap` | `{ "upid": ... }` | task OK |
-| 61 | `pve_lxc_snapshot_list` | `node=NODE_A, vmid=<LXC_VMID>` | snapshot list | contains `int-test-<uuid>-lxc-snap` |
-| 62 | `pve_lxc_snapshot_rollback` | `node=NODE_A, vmid=<LXC_VMID>, snapname=int-test-<uuid>-lxc-snap` | `{ "upid": ... }` | `IsError == false`; task OK |
-| 63 | `pve_lxc_start` | `node=NODE_A, vmid=<LXC_VMID>` | `{ "upid": ... }` | status `running` |
-| 64 | `pve_lxc_reboot` | `node=NODE_A, vmid=<LXC_VMID>` | `{ "upid": ... }` | `IsError == false`; status `running` |
-| 65 | `pve_lxc_shutdown` | `node=NODE_A, vmid=<LXC_VMID>, timeout=30` | `{ "upid": ... }` | status `stopped` |
-| 66 | `pve_lxc_stop` | `node=NODE_A, vmid=<LXC_VMID>` | `{ "upid": ... }` | `IsError == false`; status `stopped` |
-| 67 | `pve_lxc_clone` | `node=NODE_A, vmid=<LXC_VMID>, newid=<LXC_CLONE_VMID>, hostname=int-test-<uuid>-lxc-clone` | `{ "upid": ... }` | task OK; `pve_lxc_list` shows the clone |
-| 68 | `pve_lxc_snapshot_delete` | `node=NODE_A, vmid=<LXC_VMID>, snapname=int-test-<uuid>-lxc-snap` | `{ "upid": ... }` | `IsError == false`; snapshot gone from list |
-| 69 | `pve_lxc_delete` | `node=NODE_A, vmid=<LXC_CLONE_VMID>, purge=true` | `{ "upid": ... }` | clone container removed |
+| 56 | `pve_storage_download_url` | `node=NODE_A, storage=<disk-storage>, content=vztmpl, filename=debian-12-standard_12.7-1_amd64.tar.zst, url=…, verify_certificates=false` | `{ "upid": ... }` | task UPID returned; poll `pve_task_status` to `OK` |
+| 57 | `pve_storage_content_list` | `node=NODE_A, storage=<disk-storage>, content=vztmpl` | content list | contains the downloaded `debian-12-standard_12.7-1_amd64.tar.zst` volid; capture `ostemplate=<disk-storage>:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst` |
+| 58 | `pve_lxc_create` | `node=NODE_A, vmid=<LXC_VMID>, ostemplate=<volid>, hostname=int-test-<uuid>-lxc, storage=…, rootfs=…, cores=1, memory=512, net0=…, unprivileged=true` | `{ "vmid": <LXC_VMID> }` | returned VMID equals the reserved `<LXC_VMID>` |
+| 59 | `pve_lxc_list` | `node=NODE_A` | CT list | `int-test-<uuid>-lxc` present |
+| 60 | `pve_lxc_get` | `node=NODE_A, vmid=<LXC_VMID>` | CT config | `hostname == int-test-<uuid>-lxc` |
+| 61 | `pve_lxc_status` | `node=NODE_A, vmid=<LXC_VMID>` | CT status | `status == stopped` |
+| 62 | `pve_lxc_set` | `node=NODE_A, vmid=<LXC_VMID>, config={ "description": "int-test", "onboot": "0" }` | success | `IsError == false`; re-`pve_lxc_get` shows the values |
+| 63 | `pve_lxc_snapshot_create` | `node=NODE_A, vmid=<LXC_VMID>, snapname=int-test-<uuid>-lxc-snap` | `{ "upid": ... }` | task OK |
+| 64 | `pve_lxc_snapshot_list` | `node=NODE_A, vmid=<LXC_VMID>` | snapshot list | contains `int-test-<uuid>-lxc-snap` |
+| 65 | `pve_lxc_snapshot_rollback` | `node=NODE_A, vmid=<LXC_VMID>, snapname=int-test-<uuid>-lxc-snap` | `{ "upid": ... }` | `IsError == false`; task OK |
+| 66 | `pve_lxc_start` | `node=NODE_A, vmid=<LXC_VMID>` | `{ "upid": ... }` | status `running` |
+| 67 | `pve_lxc_reboot` | `node=NODE_A, vmid=<LXC_VMID>` | `{ "upid": ... }` | `IsError == false`; status `running` |
+| 68 | `pve_lxc_shutdown` | `node=NODE_A, vmid=<LXC_VMID>, timeout=30` | `{ "upid": ... }` | status `stopped` |
+| 69 | `pve_lxc_stop` | `node=NODE_A, vmid=<LXC_VMID>` | `{ "upid": ... }` | `IsError == false`; status `stopped` |
+| 70 | `pve_lxc_clone` | `node=NODE_A, vmid=<LXC_VMID>, newid=<LXC_CLONE_VMID>, hostname=int-test-<uuid>-lxc-clone` | `{ "upid": ... }` | task OK; `pve_lxc_list` shows the clone |
+| 71 | `pve_lxc_snapshot_delete` | `node=NODE_A, vmid=<LXC_VMID>, snapname=int-test-<uuid>-lxc-snap` | `{ "upid": ... }` | `IsError == false`; snapshot gone from list |
+| 72 | `pve_lxc_delete` | `node=NODE_A, vmid=<LXC_CLONE_VMID>, purge=true` | `{ "upid": ... }` | clone container removed |
 
-> **Assumption:** the clone (`LXC_CLONE_VMID`) is deleted here (69); the source `int-test-<uuid>-lxc` container is deleted in Phase 9 so `pve_lxc_delete` is exercised once in each phase boundary. If the operator prefers a single LXC delete, merge 69 into Phase 9 and skip one — coverage of `pve_lxc_delete` is what matters.
+> **Assumption:** the clone (`LXC_CLONE_VMID`) is deleted here (72); the source `int-test-<uuid>-lxc` container is deleted in Phase 9 so `pve_lxc_delete` is exercised once in each phase boundary. If the operator prefers a single LXC delete, merge 72 into Phase 9 and skip one — coverage of `pve_lxc_delete` is what matters.
 
 #### Phase 8 — PBS jobs: verify / GC / prune / sync / task-stop (mutation + status)
 
@@ -1440,15 +1446,15 @@ There is **no `pve_lxc_create` tool** in the registry (SPEC §6.5), so a single 
 
 | # | Tool | Input | Expected | PASS assertion |
 |---|---|---|---|---|
-| 70 | `pbs_verify_start` | `store=<store>` | `{ "upid": ... }` | UPID returned (verify job started on the datastore) |
-| 71 | `pbs_verify_status` ⚠️ | `upid=<verify UPID>` | task status | **fix-verification (§11.3):** no 404 — `GET /nodes/{node}/tasks/{upid}/status`; returns `status`/`UPID` |
-| 72 | `pbs_task_status` ⚠️ | `upid=<verify UPID>` | task status | no 404 — `/nodes/{node}/tasks/{upid}/status`; status present |
-| 73 | `pbs_task_log` ⚠️ | `upid=<verify UPID>, limit=50` | log lines | no 404 — `/nodes/{node}/tasks/{upid}/log`; non-empty log |
-| 74 | `pbs_task_stop` | `upid=<verify UPID>` | success | no 404 — `DELETE /nodes/{node}/tasks/{upid}`; task cancelled (or already stopped) |
-| 75 | `pbs_prune_start` | `store=<store>` | `{ "upid": ... }` | UPID returned |
-| 76 | `pbs_prune_status` ⚠️ | `upid=<prune UPID>` | task status | no 404 — `/nodes/{node}/tasks/{upid}/status` |
-| 77 | `pbs_gc_start` | `store=<store>` | `{ "upid": ... }` | UPID returned |
-| 78 | `pbs_sync_start` | `store=<store>, remote=<configured remote>` | `{ "upid": ... }` or documented APIError | PASS = request reaches `POST /admin/datastore/{store}/sync` (a **semantic** error about an unconfigured remote is acceptable; a 404 is a FAIL) |
+| 73 | `pbs_verify_start` | `store=<store>` | `{ "upid": ... }` | UPID returned (verify job started on the datastore) |
+| 74 | `pbs_verify_status` ⚠️ | `upid=<verify UPID>` | task status | **fix-verification (§11.3):** no 404 — `GET /nodes/{node}/tasks/{upid}/status`; returns `status`/`UPID` |
+| 75 | `pbs_task_status` ⚠️ | `upid=<verify UPID>` | task status | no 404 — `/nodes/{node}/tasks/{upid}/status`; status present |
+| 76 | `pbs_task_log` ⚠️ | `upid=<verify UPID>, limit=50` | log lines | no 404 — `/nodes/{node}/tasks/{upid}/log`; non-empty log |
+| 77 | `pbs_task_stop` | `upid=<verify UPID>` | success | no 404 — `DELETE /nodes/{node}/tasks/{upid}`; task cancelled (or already stopped) |
+| 78 | `pbs_prune_start` | `store=<store>` | `{ "upid": ... }` | UPID returned |
+| 79 | `pbs_prune_status` ⚠️ | `upid=<prune UPID>` | task status | no 404 — `/nodes/{node}/tasks/{upid}/status` |
+| 80 | `pbs_gc_start` | `store=<store>` | `{ "upid": ... }` | UPID returned |
+| 81 | `pbs_sync_start` | `store=<store>, remote=<configured remote>` | `{ "upid": ... }` or documented APIError | PASS = request reaches `POST /admin/datastore/{store}/sync` (a **semantic** error about an unconfigured remote is acceptable; a 404 is a FAIL) |
 
 > **Destructive note (safety):** `pbs_gc_start` (removes unreferenced datastore chunks) and `pbs_prune_start` (removes snapshots per retention) are **datastore-wide**. On a shared datastore they are **smoke-tested only** (start → UPID returned → verify the int-test backup group is still listed by `pbs_backup_get`). On a dedicated scratch datastore they are run to completion and the datastore is discarded afterwards.
 
@@ -1458,20 +1464,20 @@ Removes every `int-test-*` object, oldest/most-nested first, then verifies nothi
 
 | # | Tool | Input | Expected | PASS assertion |
 |---|---|---|---|---|
-| 79 | `pve_vm_snapshot_delete` | `node=NODE_B, vmid=INT_TEST_VMID, snapname=int-test-<uuid>-snap1` | `{ "upid": ... }` | task OK; snapshot gone |
-| 80 | `pve_vm_delete` | `node=NODE_B, vmid=<PBSRESTORE_VMID>, purge=true` | `{ "upid": ... }` | restore-target VM removed |
-| 81 | `pve_vm_delete` | `node=NODE_B, vmid=<RESTORE_VMID>, purge=true` | `{ "upid": ... }` | restore-target VM removed |
-| 82 | `pve_vm_delete` | `node=NODE_B, vmid=<CLONE_VMID>, purge=true` | `{ "upid": ... }` | clone VM removed |
-| 83 | `pve_vm_delete` | `node=NODE_B, vmid=INT_TEST_VMID, purge=true` | `{ "upid": ... }` | **main int-test VM removed** (final step 5) |
-| 84 | `pve_lxc_delete` | `node=NODE_A, vmid=<LXC_VMID>, purge=true` | `{ "upid": ... }` | int-test LXC removed |
-| 85 | `pve_backup_job_delete` | `id=int-test-<uuid>-job` | `{ "deleted": true }` | job gone from `pve_backup_job_list` |
-| 86 | `pve_ha_remove` | `sid=vm:<INT_TEST_VMID>` | success | HA resource gone from cluster |
-| 87 | `pbs_backup_forget` | `store=<store>, backup_type=vm, backup_id=<INT_TEST_VMID>, backup_time=<epoch of int-test snapshot>` | success | the int-test backup snapshot removed from the group |
-| 88 | (out-of-band) rm | remove `/int-test-<uuid>/` on PBS | removed | file-restore target removed |
-| 89 | `pve_cluster_resources` | — | resource list | **no** `int-test-*` resource remains |
-| 90 | `pve_vm_list` / `pve_lxc_list` | `node=NODE_A` and `node=NODE_B` | lists | no `int-test-*` VM/CT on either node |
-| 91 | `pve_backup_job_list` | — | job list | no `int-test-*` job |
-| 92 | `pbs_backup_list` ⚠️ | `store=<store>` | snapshot list | no `vm/<INT_TEST_VMID>` group remains |
+| 82 | `pve_vm_snapshot_delete` | `node=NODE_B, vmid=INT_TEST_VMID, snapname=int-test-<uuid>-snap1` | `{ "upid": ... }` | task OK; snapshot gone |
+| 83 | `pve_vm_delete` | `node=NODE_B, vmid=<PBSRESTORE_VMID>, purge=true` | `{ "upid": ... }` | restore-target VM removed |
+| 84 | `pve_vm_delete` | `node=NODE_B, vmid=<RESTORE_VMID>, purge=true` | `{ "upid": ... }` | restore-target VM removed |
+| 85 | `pve_vm_delete` | `node=NODE_B, vmid=<CLONE_VMID>, purge=true` | `{ "upid": ... }` | clone VM removed |
+| 86 | `pve_vm_delete` | `node=NODE_B, vmid=INT_TEST_VMID, purge=true` | `{ "upid": ... }` | **main int-test VM removed** (final step 5) |
+| 87 | `pve_lxc_delete` | `node=NODE_A, vmid=<LXC_VMID>, purge=true` | `{ "upid": ... }` | int-test LXC removed |
+| 88 | `pve_backup_job_delete` | `id=int-test-<uuid>-job` | `{ "deleted": true }` | job gone from `pve_backup_job_list` |
+| 89 | `pve_ha_remove` | `sid=vm:<INT_TEST_VMID>` | success | HA resource gone from cluster |
+| 90 | `pbs_backup_forget` | `store=<store>, backup_type=vm, backup_id=<INT_TEST_VMID>, backup_time=<epoch of int-test snapshot>` | success | the int-test backup snapshot removed from the group |
+| 91 | (out-of-band) rm | remove `/int-test-<uuid>/` on PBS | removed | file-restore target removed |
+| 92 | `pve_cluster_resources` | — | resource list | **no** `int-test-*` resource remains |
+| 93 | `pve_vm_list` / `pve_lxc_list` | `node=NODE_A` and `node=NODE_B` | lists | no `int-test-*` VM/CT on either node |
+| 94 | `pve_backup_job_list` | — | job list | no `int-test-*` job |
+| 95 | `pbs_backup_list` ⚠️ | `store=<store>` | snapshot list | no `vm/<INT_TEST_VMID>` group remains |
 
 ### I.6 Ordering & dependencies
 
@@ -1491,12 +1497,12 @@ Removes every `int-test-*` object, oldest/most-nested first, then verifies nothi
 
 Explicit removal, nested/derived resources first, in this order:
 
-1. **VM snapshots** before the VM: `pve_vm_snapshot_delete` (79).
-2. **All dedicated VMs:** `pve_vm_delete` for the PBS-restore target (80), qmrestore target (81), clone (82), and the main `int-test` VM (83) — always with `purge=true`.
-3. **The dedicated LXC container:** `pve_lxc_delete` (84); its clone was already deleted in Phase 7 (69) and its snapshot in Phase 7 (68).
-4. **The backup job:** `pve_backup_job_delete` (85).
-5. **HA resource & int-test backup snapshot** via the new MCP tools: the HA resource `vm:<INT_TEST_VMID>` via `pve_ha_remove` (86); the **int-test backup snapshot** (only, not the whole group) via `pbs_backup_forget` (87). **Out-of-band removal** (no corresponding MCP tool exists): the `/int-test-<uuid>/` file-restore path (88).
-6. **Verification of zero leftovers:** re-run `pve_cluster_resources`, `pve_vm_list`/`pve_lxc_list` on both nodes, `pve_backup_job_list`, and `pbs_backup_list`, asserting **no** `int-test-*`/`vm/<INT_TEST_VMID>` remains (89–92). If any `int-test-*` object is found, remove it by its prefix before declaring the run clean.
+1. **VM snapshots** before the VM: `pve_vm_snapshot_delete` (82).
+2. **All dedicated VMs:** `pve_vm_delete` for the PBS-restore target (83), qmrestore target (84), clone (85), and the main `int-test` VM (86) — always with `purge=true`.
+3. **The dedicated LXC container:** `pve_lxc_delete` (87); its clone was already deleted in Phase 7 (72) and its snapshot in Phase 7 (71).
+4. **The backup job:** `pve_backup_job_delete` (88).
+5. **HA resource & int-test backup snapshot** via the new MCP tools: the HA resource `vm:<INT_TEST_VMID>` via `pve_ha_remove` (89); the **int-test backup snapshot** (only, not the whole group) via `pbs_backup_forget` (90). **Out-of-band removal** (no corresponding MCP tool exists): the `/int-test-<uuid>/` file-restore path (91).
+6. **Verification of zero leftovers:** re-run `pve_cluster_resources`, `pve_vm_list`/`pve_lxc_list` on both nodes, `pve_backup_job_list`, and `pbs_backup_list`, asserting **no** `int-test-*`/`vm/<INT_TEST_VMID>` remains (92–95). If any `int-test-*` object is found, remove it by its prefix before declaring the run clean.
 
 > A leftover check is **mandatory**, not advisory: because every object carries the `int-test-<uuid>` prefix, the sweep can unambiguously identify and remove only test objects and can never match production resources.
 
@@ -1515,8 +1521,8 @@ If a destructive step fails mid-way, the runner must:
 
 The integration run **passes** only when all of the following hold:
 
-1. **All read tools return valid structured output** — every one of the 21 PVE read tools, 12 PBS read tools, and 2 system tools returns well-formed JSON that validates against its output schema (no `IsError`, no empty/`null` data where an entity is expected).
-2. **All 33 PVE mutations and 8 PBS mutations complete against int-test objects only** — each returns the expected UPID/ID/success and the resulting state is confirmed (VM created→migrated→backed-up→snapshotted→lifecycled→deleted; clone/restore-targets cleaned up; LXC lifecycle completes; backup job created/updated/deleted).
+1. **All read tools return valid structured output** — every one of the 22 PVE read tools, 12 PBS read tools, and 2 system tools returns well-formed JSON that validates against its output schema (no `IsError`, no empty/`null` data where an entity is expected).
+2. **All 35 PVE mutations and 8 PBS mutations complete against int-test objects only** — each returns the expected UPID/ID/success and the resulting state is confirmed (VM created→migrated→backed-up→snapshotted→lifecycled→deleted; clone/restore-targets cleaned up; LXC template downloaded → container created → lifecycled → deleted; backup job created/updated/deleted).
 3. **All known-broken PBS tools now pass** ⚠️ — `pbs_backup_list`, `pbs_backup_get`, `pbs_backup_restore_file`, `pbs_backup_vm_restore`, `pbs_verify_status`, `pbs_prune_status`, `pbs_task_status`, `pbs_task_log` return **200/OK against the corrected endpoints** (per §11.2/§11.3; the legacy paths that returned 404 no longer do), and the pagination fix (§11.1) returns bounded pages on a populated datastore.
 4. **Zero leftover state** — after Phase 9 no `int-test-*` VM/CT/clone/restore-target/snapshot/backup-job remains, the HA resource is gone (removed via `pve_ha_remove`), the int-test backup snapshot is removed from its group (via `pbs_backup_forget`), and the file-restore target path is gone (removed out-of-band) on either node or the PBS datastore, and no pre-existing resource was altered (verified by comparing Phase 0 discovery against Phase 9 discovery).
 5. **Task-driven tools verified end-to-end** — every mutation that returns a UPID (`start`/`stop`/`shutdown`/`reboot`/`reset`/`suspend`/`resume`/`backup`/`migrate`/`clone`/`restore`/`snapshot_*`/PBS job starts) had its task polled to a terminal `OK` state via `pve_task_status`/`pbs_task_status` where applicable.

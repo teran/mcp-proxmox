@@ -47,6 +47,13 @@ type mockPVEGateway struct {
 	updateBackupJob  func(ctx context.Context, id string, req model.CreateBackupJobRequest) (string, error)
 	deleteBackupJob  func(ctx context.Context, id string) error
 
+	// LXC create + storage content (feat/lxc-templates).
+	createLXC          func(ctx context.Context, node string, req model.CreateLXCRequest) (int, error)
+	listStorageContent func(
+		ctx context.Context, node, storage string, opts port.StorageContentListOptions,
+	) ([]model.StorageContent, error)
+	downloadURL func(ctx context.Context, node, storage string, req model.StorageDownloadURLRequest) (string, error)
+
 	// VM/LXC snapshots (read-only).
 	listVMSnapshots  func(ctx context.Context, node string, vmid int) ([]model.Snapshot, error)
 	listLXCSnapshots func(ctx context.Context, node string, vmid int) ([]model.Snapshot, error)
@@ -321,6 +328,34 @@ func (m *mockPVEGateway) DeleteBackupJob(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+func (m *mockPVEGateway) CreateLXC(ctx context.Context, node string, req model.CreateLXCRequest) (int, error) {
+	if m.createLXC != nil {
+		return m.createLXC(ctx, node, req)
+	}
+
+	return 0, nil
+}
+
+func (m *mockPVEGateway) ListStorageContent(
+	ctx context.Context, node, storage string, opts port.StorageContentListOptions,
+) ([]model.StorageContent, error) {
+	if m.listStorageContent != nil {
+		return m.listStorageContent(ctx, node, storage, opts)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockPVEGateway) DownloadURL(
+	ctx context.Context, node, storage string, req model.StorageDownloadURLRequest,
+) (string, error) {
+	if m.downloadURL != nil {
+		return m.downloadURL(ctx, node, storage, req)
+	}
+
+	return "", errMockNotStubbed
 }
 
 func (m *mockPVEGateway) ListVMSnapshots(ctx context.Context, node string, vmid int) ([]model.Snapshot, error) {
