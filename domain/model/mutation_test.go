@@ -60,6 +60,22 @@ var mutationRoundTripCases = []struct {
 		name: "set-lxc-config",
 		in:   SetLXCConfigRequest{Config: map[string]string{"onboot": "0", "cores": "2"}},
 	},
+	{
+		name: "create-lxc",
+		in: CreateLXCRequest{
+			VMID: 203, OSTemplate: "local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst",
+			Hostname: "ct1", Storage: "local", RootFS: "local:8", Cores: 2, Memory: 1024, Swap: 512,
+			Net0: "name=eth0,bridge=vmbr0", Description: "prod ct", Tags: "ct;prod",
+			Unprivileged: true, Password: "s3cret", SSHPublicKeys: "ssh-ed25519 AAAA...",
+		},
+	},
+	{
+		name: "storage-download-url",
+		in: StorageDownloadURLRequest{
+			Content: "iso", Filename: "debian-12.iso",
+			URL: "https://example.com/debian-12.iso", VerifyCertificates: true,
+		},
+	},
 }
 
 func TestMutationRequestRoundTrip(t *testing.T) {
@@ -105,6 +121,34 @@ func TestMutationRequestOptionalOmitted(t *testing.T) {
 		// adapter never omits the key (the tool handler always supplies a map).
 		{"set-vm-config-empty", SetVMConfigRequest{}, `{"config":null}`},
 		{"set-lxc-config-empty", SetLXCConfigRequest{}, `{"config":null}`},
+		// ostemplate is required (no omitempty); everything else optional.
+		{
+			"create-lxc-minimal",
+			CreateLXCRequest{OSTemplate: "local:vztmpl/debian.tar.zst"},
+			`{"ostemplate":"local:vztmpl/debian.tar.zst"}`,
+		},
+		{
+			"create-lxc-full",
+			CreateLXCRequest{
+				VMID: 203, OSTemplate: "tpl", Hostname: "ct1", Storage: "local", RootFS: "local:8",
+				Cores: 2, Memory: 1024, Swap: 512, Net0: "name=eth0", Description: "d", Tags: "t",
+				Unprivileged: true, Password: "pw", SSHPublicKeys: "keys",
+			},
+			`{"vmid":203,"ostemplate":"tpl","hostname":"ct1","storage":"local","rootfs":"local:8",` +
+				`"cores":2,"memory":1024,"swap":512,"net0":"name=eth0","description":"d","tags":"t",` +
+				`"unprivileged":true,"password":"pw","ssh-public-keys":"keys"}`,
+		},
+		// content/filename/url are required (no omitempty); verify-certificates is optional.
+		{
+			"storage-download-url-verify-false",
+			StorageDownloadURLRequest{Content: "iso", Filename: "f.iso", URL: "https://x/f.iso"},
+			`{"content":"iso","filename":"f.iso","url":"https://x/f.iso"}`,
+		},
+		{
+			"storage-download-url-verify-true",
+			StorageDownloadURLRequest{Content: "iso", Filename: "f.iso", URL: "https://x/f.iso", VerifyCertificates: true},
+			`{"content":"iso","filename":"f.iso","url":"https://x/f.iso","verify-certificates":true}`,
+		},
 	}
 
 	for _, tt := range cases {

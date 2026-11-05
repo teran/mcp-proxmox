@@ -160,6 +160,14 @@ func (s *PVEService) GetStorageStatus(ctx context.Context, node, storage string)
 	return s.gw.GetStorageStatus(ctx, node, storage)
 }
 
+// ListStorageContent returns the content of a storage on a node (ISO/VZTMPL
+// images, VM/CT disks), filtered by opts.
+func (s *PVEService) ListStorageContent(
+	ctx context.Context, node, storage string, opts port.StorageContentListOptions,
+) ([]model.StorageContent, error) {
+	return s.gw.ListStorageContent(ctx, node, storage, opts)
+}
+
 // ListNetwork returns the network interfaces of a node.
 func (s *PVEService) ListNetwork(ctx context.Context, node string) ([]model.NetworkInterface, error) {
 	return s.gw.ListNetwork(ctx, node)
@@ -188,6 +196,19 @@ func (s *PVEService) GetPVEVersion(ctx context.Context) (*model.PVEVersion, erro
 // CreateVM creates a QEMU VM on a node and returns its new VMID.
 func (s *PVEService) CreateVM(ctx context.Context, node string, req model.CreateVMRequest) (int, error) {
 	return s.gw.CreateVM(ctx, node, req)
+}
+
+// CreateLXC creates an LXC container on a node and returns its new VMID.
+func (s *PVEService) CreateLXC(ctx context.Context, node string, req model.CreateLXCRequest) (int, error) {
+	return s.gw.CreateLXC(ctx, node, req)
+}
+
+// DownloadURL downloads a file from a URL into a storage on a node and returns
+// the resulting task UPID.
+func (s *PVEService) DownloadURL(
+	ctx context.Context, node, storage string, req model.StorageDownloadURLRequest,
+) (string, error) {
+	return s.gw.DownloadURL(ctx, node, storage, req)
 }
 
 // ResizeVM resizes a VM disk on a node.

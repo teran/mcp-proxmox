@@ -156,9 +156,8 @@ func TestPVEService_ReadStorageAndNetwork(t *testing.T) {
 	})
 }
 
-// TestPVEService_ReadTasksAndVersion exercises the task-log and version read
-// use cases.
-func TestPVEService_ReadTasksAndVersion(t *testing.T) {
+// TestPVEService_Tasks exercises the task-log read use cases.
+func TestPVEService_Tasks(t *testing.T) {
 	t.Run("ListTasks", func(t *testing.T) {
 		gotOpts := port.TaskListOptions{}
 		gateway := &mockPVEGateway{listTasks: func(_ context.Context, _ string, opts port.TaskListOptions) ([]model.Task, error) {
@@ -194,7 +193,11 @@ func TestPVEService_ReadTasksAndVersion(t *testing.T) {
 		assert.Len(t, got, 1)
 		assert.Equal(t, 50, gotLimit)
 	})
+}
 
+// TestPVEService_ReadVersion exercises the version and storage-content read use
+// cases.
+func TestPVEService_ReadVersion(t *testing.T) {
 	t.Run("GetPVEVersion", func(t *testing.T) {
 		gateway := &mockPVEGateway{getPVEVersion: func(_ context.Context) (*model.PVEVersion, error) {
 			return &model.PVEVersion{Version: "8.2.2"}, nil
@@ -202,6 +205,70 @@ func TestPVEService_ReadTasksAndVersion(t *testing.T) {
 		got, err := (&PVEService{gw: gateway}).GetPVEVersion(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, "8.2.2", got.Version)
+	})
+
+	t.Run("ListStorageContent", func(t *testing.T) {
+		gotNode := ""
+		gotStorage := ""
+		gotOpts := port.StorageContentListOptions{}
+		gateway := &mockPVEGateway{listStorageContent: func(
+			_ context.Context, node, storage string, opts port.StorageContentListOptions,
+		) ([]model.StorageContent, error) {
+			gotNode = node
+			gotStorage = storage
+			gotOpts = opts
+
+			return []model.StorageContent{{VolID: "local:iso/a.iso", Content: "iso"}}, nil
+		}}
+		opts := port.StorageContentListOptions{Content: "iso", VMID: 200}
+		got, err := (&PVEService{gw: gateway}).ListStorageContent(context.Background(), "pve1", "local", opts)
+		require.NoError(t, err)
+		assert.Len(t, got, 1)
+		assert.Equal(t, "pve1", gotNode)
+		assert.Equal(t, "local", gotStorage)
+		assert.Equal(t, opts, gotOpts)
+	})
+
+	t.Run("DownloadURL", func(t *testing.T) {
+		gotNode := ""
+		gotStorage := ""
+		gotReq := model.StorageDownloadURLRequest{}
+		gateway := &mockPVEGateway{downloadURL: func(
+			_ context.Context, node, storage string, req model.StorageDownloadURLRequest,
+		) (string, error) {
+			gotNode = node
+			gotStorage = storage
+			gotReq = req
+
+			return "UPID:...", nil
+		}}
+		req := model.StorageDownloadURLRequest{Content: "iso", Filename: "a.iso", URL: "https://x/a.iso"}
+		upid, err := (&PVEService{gw: gateway}).DownloadURL(context.Background(), "pve1", "local", req)
+		require.NoError(t, err)
+		assert.Equal(t, "UPID:...", upid)
+		assert.Equal(t, "pve1", gotNode)
+		assert.Equal(t, "local", gotStorage)
+		assert.Equal(t, req, gotReq)
+	})
+}
+
+// TestPVEService_CreateLXC exercises the CreateLXC mutation use case.
+func TestPVEService_CreateLXC(t *testing.T) {
+	t.Run("CreateLXC", func(t *testing.T) {
+		gotNode := ""
+		gotReq := model.CreateLXCRequest{}
+		gateway := &mockPVEGateway{createLXC: func(_ context.Context, node string, req model.CreateLXCRequest) (int, error) {
+			gotNode = node
+			gotReq = req
+
+			return 203, nil
+		}}
+		req := model.CreateLXCRequest{VMID: 203, OSTemplate: "local:vztmpl/tpl"}
+		vmid, err := (&PVEService{gw: gateway}).CreateLXC(context.Background(), "pve1", req)
+		require.NoError(t, err)
+		assert.Equal(t, 203, vmid)
+		assert.Equal(t, "pve1", gotNode)
+		assert.Equal(t, req, gotReq)
 	})
 }
 
@@ -516,6 +583,21 @@ var pveErrorPropagationCases = []struct {
 	{"DeleteBackupJob", func(s *PVEService) error {
 		return s.DeleteBackupJob(context.Background(), "id")
 	}},
+	{"CreateLXC", func(s *PVEService) error {
+		_, e := s.CreateLXC(context.Background(), "n", model.CreateLXCRequest{})
+
+		return e
+	}},
+	{"ListStorageContent", func(s *PVEService) error {
+		_, e := s.ListStorageContent(context.Background(), "n", "s", port.StorageContentListOptions{})
+
+		return e
+	}},
+	{"DownloadURL", func(s *PVEService) error {
+		_, e := s.DownloadURL(context.Background(), "n", "s", model.StorageDownloadURLRequest{})
+
+		return e
+	}},
 }
 
 // newFailingPVEGateway returns a gateway whose every method returns sentinel.
@@ -573,6 +655,17 @@ func setMutationFailures(gateway *mockPVEGateway, sentinel error) {
 		return "", sentinel
 	}
 	gateway.deleteBackupJob = func(_ context.Context, _ string) error { return sentinel }
+	gateway.createLXC = func(_ context.Context, _ string, _ model.CreateLXCRequest) (int, error) { return 0, sentinel }
+	gateway.listStorageContent = func(
+		_ context.Context, _, _ string, _ port.StorageContentListOptions,
+	) ([]model.StorageContent, error) {
+		return nil, sentinel
+	}
+	gateway.downloadURL = func(
+		_ context.Context, _, _ string, _ model.StorageDownloadURLRequest,
+	) (string, error) {
+		return "", sentinel
+	}
 }
 
 // TestPVEService_ErrorPropagation verifies that gateway errors propagate

@@ -34,6 +34,32 @@ type storageIn struct {
 	Storage string `json:"storage" jsonschema:"Storage name"`
 }
 
+// storageContentListIn is the input of pve_storage_content_list.
+type storageContentListIn struct {
+	Node    string `json:"node" jsonschema:"PVE node name"`
+	Storage string `json:"storage" jsonschema:"Storage name"`
+	Content string `json:"content,omitempty" jsonschema:"Comma-separated content types (e.g. vztmpl,iso)"`
+	VMID    int    `json:"vmid,omitempty" jsonschema:"Filter by VMID"`
+}
+
+// storageDownloadURLIn is the input of pve_storage_download_url.
+type storageDownloadURLIn struct {
+	Node               string `json:"node" jsonschema:"PVE node name"`
+	Storage            string `json:"storage" jsonschema:"Storage name"`
+	Content            string `json:"content" jsonschema:"Content type to store the file as (e.g. iso, vztmpl)"`
+	Filename           string `json:"filename" jsonschema:"Destination filename in the storage"`
+	URL                string `json:"url" jsonschema:"Source URL to download"`
+	VerifyCertificates bool   `json:"verify_certificates,omitempty" jsonschema:"Verify TLS certificates of the source URL"`
+}
+
+// createLXCIn is the input of pve_lxc_create (a node plus the LXC container
+// config).
+type createLXCIn struct {
+	model.CreateLXCRequest
+
+	Node string `json:"node" jsonschema:"PVE node name"`
+}
+
 // taskListIn filters pve_task_list.
 type taskListIn struct {
 	Node       string `json:"node" jsonschema:"PVE node name"`
@@ -325,6 +351,7 @@ func registerPVETools(s *mcpSDK.Server, app *application.App, log toolLogger, en
 		surface = append(surface, registerPVEMutationTools8(s, app, log)...)
 		surface = append(surface, registerPVEMutationTools9(s, app, log)...)
 		surface = append(surface, registerPVEMutationTools10(s, app, log)...)
+		surface = append(surface, registerPVEMutationTools11(s, app, log)...)
 	}
 
 	return surface
@@ -444,6 +471,15 @@ func registerPVEQueryTools2(s *mcpSDK.Server, app *application.App, log toolLogg
 			"Provide node and storage. Returns the storage's status and usage. Read-only.",
 			log, func(ctx context.Context, in storageIn) (any, error) {
 				return app.PVE.GetStorageStatus(ctx, in.Node, in.Storage)
+			}),
+		roTool(s, "pve_storage_content_list", "List PVE storage content",
+			"List the content of a storage on a PVE node (ISO/VZTMPL images, VM/CT disks).",
+			"Provide node and storage. Optionally filter by content type(s) (comma-separated, e.g."+
+				" vztmpl,iso) and vmid. Returns the storage content entries. Read-only and idempotent.",
+			log, func(ctx context.Context, in storageContentListIn) (any, error) {
+				opts := port.StorageContentListOptions{Content: in.Content, VMID: in.VMID}
+
+				return app.PVE.ListStorageContent(ctx, in.Node, in.Storage, opts)
 			}),
 		roTool(s, "pve_network_list", "List PVE network interfaces",
 			"List the network interfaces of a PVE node.",
@@ -1005,6 +1041,45 @@ func registerPVEMutationTools10(s *mcpSDK.Server, app *application.App, log tool
 				"Idempotent.",
 			log, true, func(ctx context.Context, in lxcSetIn) (any, error) {
 				return nil, app.PVE.SetLXCConfig(ctx, in.Node, in.VMID, model.SetLXCConfigRequest{Config: in.Config})
+			}),
+	}
+}
+
+func registerPVEMutationTools11(s *mcpSDK.Server, app *application.App, log toolLogger) []ToolSurface {
+	return []ToolSurface{
+		mutTool(s, "pve_storage_download_url", "Download file to PVE storage",
+			"Download a file from a URL into a PVE storage (e.g. an ISO or container template).",
+			"Provide node, storage, the content type (e.g. iso, vztmpl), the destination filename and"+
+				"the source URL. Optionally set verify_certificates to enforce TLS verification of the"+
+				"source. Starts an async PVE task; returns the task UPID to poll with pve_task_status."+
+				"Not idempotent: each call starts a new download.",
+			log, false, func(ctx context.Context, in storageDownloadURLIn) (any, error) {
+				upid, err := app.PVE.DownloadURL(ctx, in.Node, in.Storage, model.StorageDownloadURLRequest{
+					Content:            in.Content,
+					Filename:           in.Filename,
+					URL:                in.URL,
+					VerifyCertificates: in.VerifyCertificates,
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				return map[string]any{"upid": upid}, nil
+			}),
+
+		mutTool(s, "pve_lxc_create", "Create LXC container",
+			"Create an LXC container from a template on a PVE node.",
+			"Provide node and the container template (ostemplate). Optionally set vmid, hostname,"+
+				"storage, rootfs, cores, memory, swap, net0, description, tags, unprivileged, password and"+
+				"ssh_public_keys. Returns the new container VMID. Not idempotent: re-issuing the same"+
+				"create provisions a second container, so verify with pve_lxc_list.",
+			log, false, func(ctx context.Context, in createLXCIn) (any, error) {
+				vmid, err := app.PVE.CreateLXC(ctx, in.Node, in.CreateLXCRequest)
+				if err != nil {
+					return nil, err
+				}
+
+				return map[string]any{"vmid": vmid}, nil
 			}),
 	}
 }

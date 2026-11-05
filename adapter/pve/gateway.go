@@ -203,18 +203,38 @@ func (g *Gateway) doOnceWithForm(ctx context.Context, method, path string, form 
 // mutually exclusive: read requests pass query parameters, mutation requests
 // pass a form-encoded body. See doOnce / doOnceWithForm.
 func (g *Gateway) doOnceReq(ctx context.Context, method, path string, query, form url.Values, out any) error {
+	body, err := g.doOnceBody(ctx, method, path, query, form)
+	if err != nil {
+		return err
+	}
+
+	return g.decode(body, out)
+}
+
+// doOnceRaw performs a single HTTP request (no retry) and returns the raw
+// response body instead of decoding the standard {"data": ...} envelope. It is
+// used by response shapes that do not fit the envelope decode (e.g. the
+// download-url endpoint, which may return {"upid": ...}).
+func (g *Gateway) doOnceRaw(ctx context.Context, method, path string, form url.Values) ([]byte, error) {
+	return g.doOnceBody(ctx, method, path, nil, form)
+}
+
+// doOnceBody performs a single HTTP request (no retry) and returns the raw
+// response body. It shares the request/error-mapping logic with doOnceReq but
+// skips the {"data": ...} decode. The token is never logged (SPEC.md §5.4).
+func (g *Gateway) doOnceBody(ctx context.Context, method, path string, query, form url.Values) ([]byte, error) {
 	if g.cfg.Endpoint == "" {
-		return &UpstreamError{Op: "config", Err: errors.New("pve: empty endpoint")}
+		return nil, &UpstreamError{Op: "config", Err: errors.New("pve: empty endpoint")}
 	}
 	if g.tlsErr != nil {
-		return &UpstreamError{Op: "config", Err: g.tlsErr}
+		return nil, &UpstreamError{Op: "config", Err: g.tlsErr}
 	}
 
 	// Token source failure is a misconfiguration surfaced before any request is
 	// sent (SPEC.md §7.4) and is reported in the ErrUnauthorized family.
 	header, err := g.cfg.TokenSource.AuthorizationHeader(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: pve: token source: %w", port.ErrUnauthorized, err)
+		return nil, fmt.Errorf("%w: pve: token source: %w", port.ErrUnauthorized, err)
 	}
 
 	requestURL := strings.TrimRight(g.cfg.Endpoint, "/") + apiPrefix + path
@@ -237,7 +257,7 @@ func (g *Gateway) doOnceReq(ctx context.Context, method, path string, query, for
 
 	resp, err := req.Execute(method, requestURL)
 	if err != nil {
-		return &UpstreamError{Op: "transport", Err: err}
+		return nil, &UpstreamError{Op: "transport", Err: err}
 	}
 	body := resp.Bytes()
 
@@ -258,10 +278,10 @@ func (g *Gateway) doOnceReq(ctx context.Context, method, path string, query, for
 		// and the requirement is to log no response bodies (SPEC.md §5.4).
 		g.logger.Tracef(ctx, "pve error response %d", resp.StatusCode())
 
-		return g.mapHTTPError(resp.StatusCode(), body)
+		return nil, g.mapHTTPError(resp.StatusCode(), body)
 	}
 
-	return g.decode(body, out)
+	return body, nil
 }
 
 // decode parses the {"data": ...} envelope into out, mapping empty/null data for
@@ -600,6 +620,93 @@ func (g *Gateway) GetStorageStatus(ctx context.Context, node, storage string) (*
 	return &out, nil
 }
 
+// ListStorageContent returns the content of a storage on a node
+// (GET /nodes/{node}/storage/{storage}/content) filtered by opts. It is
+// read-only (idempotent) and retried via the standard do path.
+func (g *Gateway) ListStorageContent(
+	ctx context.Context, node, storage string, opts port.StorageContentListOptions,
+) ([]model.StorageContent, error) {
+	var out []model.StorageContent
+	path := nodePath(node) + "/storage/" + url.PathEscape(storage) + "/content"
+	if err := g.do(ctx, http.MethodGet, path, buildStorageContentQuery(opts), &out); err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+// buildStorageContentQuery maps the storage-content filters into a URL query
+// string. It returns an empty (non-nil) url.Values when no filter is set, which
+// the gateway renders as no query string at all.
+func buildStorageContentQuery(opts port.StorageContentListOptions) url.Values {
+	query := url.Values{}
+	if opts.Content != "" {
+		query.Set("content", opts.Content)
+	}
+	if opts.VMID != 0 {
+		query.Set("vmid", strconv.Itoa(opts.VMID))
+	}
+
+	return query
+}
+
+// DownloadURL downloads a file from a URL into a storage on a node via
+// POST /nodes/{node}/storage/{storage}/download-url. The response is a task
+// UPID. PVE returns it in two shapes — {"data":"UPID:..."} or {"upid":"UPID:..."}
+// — which upidFromDownloadResponse handles leniently. It is a mutation, so it is
+// never retried (doOnceRaw).
+func (g *Gateway) DownloadURL(
+	ctx context.Context, node, storage string, req model.StorageDownloadURLRequest,
+) (string, error) {
+	path := nodePath(node) + "/storage/" + url.PathEscape(storage) + "/download-url"
+	body, err := g.doOnceRaw(ctx, http.MethodPost, path, buildDownloadURLForm(req))
+	if err != nil {
+		return "", err
+	}
+
+	return upidFromDownloadResponse(body)
+}
+
+// buildDownloadURLForm maps a StorageDownloadURLRequest into the form-encoded
+// mutation body. content/filename/url are always sent; verify-certificates is
+// set to "1" only when true so PVE's default applies otherwise.
+func buildDownloadURLForm(req model.StorageDownloadURLRequest) url.Values {
+	form := url.Values{}
+	form.Set("content", req.Content)
+	form.Set("filename", req.Filename)
+	form.Set("url", req.URL)
+	if req.VerifyCertificates {
+		form.Set("verify-certificates", "1")
+	}
+
+	return form
+}
+
+// upidFromDownloadResponse resolves the task UPID from a download-url response
+// body. PVE returns it either as the standard envelope {"data":"UPID:..."} or as
+// the flat {"upid":"UPID:..."} (which the standard envelope decode would treat
+// as empty data). It returns an EmptyDataError when neither shape is present.
+func upidFromDownloadResponse(body []byte) (string, error) {
+	var env struct {
+		Data json.RawMessage `json:"data"`
+		UPID string          `json:"upid"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return "", &UpstreamError{Op: "decode", Err: err}
+	}
+	if env.UPID != "" {
+		return env.UPID, nil
+	}
+	if len(env.Data) > 0 && string(env.Data) != "null" {
+		var upid string
+		if err := json.Unmarshal(env.Data, &upid); err == nil && upid != "" {
+			return upid, nil
+		}
+	}
+
+	return "", &EmptyDataError{Op: "data"}
+}
+
 // ListNetwork returns the network interfaces of a node.
 func (g *Gateway) ListNetwork(ctx context.Context, node string) ([]model.NetworkInterface, error) {
 	var out []model.NetworkInterface
@@ -710,6 +817,71 @@ func (g *Gateway) CreateVM(ctx context.Context, node string, req model.CreateVMR
 	}
 
 	return vmIDFromCreateResponse(raw, req.VMID), nil
+}
+
+// CreateLXC creates an LXC container via POST /nodes/{node}/lxc. The response
+// `data` is the new VMID, in the same two shapes CreateVM handles (a plain
+// number/string, or a task UPID for the async vzcreate path), so the shared
+// vmIDFromCreateResponse is reused. It is a mutation, so it is never retried
+// (doMutation).
+func (g *Gateway) CreateLXC(ctx context.Context, node string, req model.CreateLXCRequest) (int, error) {
+	form := buildCreateLXCForm(req)
+	var raw json.RawMessage
+	if err := g.doMutation(ctx, http.MethodPost, nodePath(node)+"/lxc", form, &raw); err != nil {
+		return 0, err
+	}
+
+	return vmIDFromCreateResponse(raw, req.VMID), nil
+}
+
+// buildCreateLXCForm maps a CreateLXCRequest into the form-encoded mutation
+// body, omitting fields that were left at their zero value so the PVE defaults
+// apply. ostemplate is always sent; unprivileged is set to "1" only when true.
+// password and ssh-public-keys are sent verbatim (never logged).
+func buildCreateLXCForm(req model.CreateLXCRequest) url.Values {
+	form := url.Values{}
+	if req.VMID != 0 {
+		form.Set("vmid", strconv.Itoa(req.VMID))
+	}
+	form.Set("ostemplate", req.OSTemplate)
+	if req.Hostname != "" {
+		form.Set("hostname", req.Hostname)
+	}
+	if req.Storage != "" {
+		form.Set("storage", req.Storage)
+	}
+	if req.RootFS != "" {
+		form.Set("rootfs", req.RootFS)
+	}
+	if req.Cores != 0 {
+		form.Set("cores", strconv.Itoa(req.Cores))
+	}
+	if req.Memory != 0 {
+		form.Set("memory", strconv.Itoa(req.Memory))
+	}
+	if req.Swap != 0 {
+		form.Set("swap", strconv.Itoa(req.Swap))
+	}
+	if req.Net0 != "" {
+		form.Set("net0", req.Net0)
+	}
+	if req.Description != "" {
+		form.Set("description", req.Description)
+	}
+	if req.Tags != "" {
+		form.Set("tags", req.Tags)
+	}
+	if req.Unprivileged {
+		form.Set("unprivileged", "1")
+	}
+	if req.Password != "" {
+		form.Set("password", req.Password)
+	}
+	if req.SSHPublicKeys != "" {
+		form.Set("ssh-public-keys", req.SSHPublicKeys)
+	}
+
+	return form
 }
 
 // vmIDFromCreateResponse resolves the created VMID from the create response
