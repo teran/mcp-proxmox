@@ -3,6 +3,8 @@ package pbs
 import (
 	"context"
 	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -120,4 +122,76 @@ func TestGateway_PBSReadOnlyErrorBranches(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, entries)
 	})
+}
+
+// TestGateway_ListBackups_PaginationQuery verifies the pagination options are
+// translated into the limit/start/end query parameters, and that zero-valued
+// options are omitted.
+func TestGateway_ListBackups_PaginationQuery(t *testing.T) {
+	cases := []struct {
+		name      string
+		opts      port.PBSBackupListOptions
+		wantLimit string
+		wantStart string
+		wantEnd   string
+	}{
+		{"limit only", port.PBSBackupListOptions{Limit: 5}, "5", "", ""},
+		{"limit start end", port.PBSBackupListOptions{Limit: 5, Start: 1700000000, End: 1700000100}, "5", "1700000000", "1700000100"},
+		{"none", port.PBSBackupListOptions{}, "", "", ""},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := &reqCapture{}
+			srv := mockServer(t, 200, `{"data":[]}`, rec)
+			g, _ := newTestGateway(t, srv)
+
+			_, err := g.ListBackups(context.Background(), "backup", tt.opts)
+			require.NoError(t, err)
+
+			q, err := url.ParseQuery(rec.query)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantLimit, q.Get("limit"))
+			assert.Equal(t, tt.wantStart, q.Get("start"))
+			assert.Equal(t, tt.wantEnd, q.Get("end"))
+		})
+	}
+}
+
+// TestGateway_ListBackups_TrimsToLimit verifies the client-side safety trim: when
+// the upstream returns more snapshots than opts.Limit, the result is trimmed to
+// exactly Limit elements.
+func TestGateway_ListBackups_TrimsToLimit(t *testing.T) {
+	rec := &reqCapture{}
+	body := `{"data":[` + strings.Repeat(`{"backup-id":"vm/100/x","backup-time":1,"backup-type":"vm"},`, 9) +
+		`{"backup-id":"vm/100/x","backup-time":10,"backup-type":"vm"}]}`
+	srv := mockServer(t, 200, body, rec)
+	g, _ := newTestGateway(t, srv)
+
+	out, err := g.ListBackups(context.Background(), "backup", port.PBSBackupListOptions{Limit: 5})
+	require.NoError(t, err)
+	require.Len(t, out, 5, "result must be trimmed to opts.Limit")
+	assert.Equal(t, "limit=5", rec.query)
+}
+
+// TestGateway_GetBackup_ForwardsOpts verifies GetBackup passes the pagination
+// options through to the underlying listing while still filtering by backup-id.
+func TestGateway_GetBackup_ForwardsOpts(t *testing.T) {
+	rec := &reqCapture{}
+	body := `{"data":[{"backup-id":"vm/100/x","backup-time":1,"backup-type":"vm"},` +
+		`{"backup-id":"vm/101/y","backup-time":2,"backup-type":"vm"}]}`
+	srv := mockServer(t, 200, body, rec)
+	g, _ := newTestGateway(t, srv)
+
+	out, err := g.GetBackup(context.Background(), "backup", "vm/100/x",
+		port.PBSBackupListOptions{Limit: 3, Start: 100, End: 200})
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	assert.Equal(t, "vm/100/x", out[0].BackupID)
+
+	q, err := url.ParseQuery(rec.query)
+	require.NoError(t, err)
+	assert.Equal(t, "3", q.Get("limit"))
+	assert.Equal(t, "100", q.Get("start"))
+	assert.Equal(t, "200", q.Get("end"))
 }

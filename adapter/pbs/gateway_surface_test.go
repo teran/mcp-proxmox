@@ -127,7 +127,7 @@ func TestGateway_Backup_Success(t *testing.T) {
 			body: `{"data":[{"backup-id":"vm/100/2024","backup-time":1704067200,"backup-type":"vm"}]}`,
 			path: "/api2/json/admin/datastore/backup/snapshots",
 			call: func(g *Gateway) error {
-				bs, err := g.ListBackups(context.Background(), "backup")
+				bs, err := g.ListBackups(context.Background(), "backup", port.PBSBackupListOptions{})
 				if assert.NoError(t, err) {
 					require.Len(t, bs, 1)
 					assert.Equal(t, "vm/100/2024", bs[0].BackupID)
@@ -144,7 +144,7 @@ func TestGateway_Backup_Success(t *testing.T) {
 				`"backup-time":1704067300,"backup-type":"ct","size":2048}]}`,
 			path: "/api2/json/admin/datastore/backup/snapshots",
 			call: func(g *Gateway) error {
-				bs, err := g.GetBackup(context.Background(), "backup", "vm/100/2024")
+				bs, err := g.GetBackup(context.Background(), "backup", "vm/100/2024", port.PBSBackupListOptions{})
 				if assert.NoError(t, err) {
 					require.Len(t, bs, 1)
 					assert.Equal(t, "vm/100/2024", bs[0].BackupID)
@@ -236,7 +236,7 @@ func TestGateway_GetBackupFiltersByBackupID(t *testing.T) {
 	srv := mockServer(t, 200, body, rec)
 	g, _ := newTestGateway(t, srv)
 
-	bs, err := g.GetBackup(context.Background(), "backup", "vm/100/2024")
+	bs, err := g.GetBackup(context.Background(), "backup", "vm/100/2024", port.PBSBackupListOptions{})
 	require.NoError(t, err)
 	require.Len(t, bs, 2, "only the two vm/100 snapshots should match")
 	for _, b := range bs {
@@ -245,7 +245,7 @@ func TestGateway_GetBackupFiltersByBackupID(t *testing.T) {
 	assert.Equal(t, "/api2/json/admin/datastore/backup/snapshots", rec.path)
 
 	// No match -> empty (non-nil) slice, no error.
-	none, err := g.GetBackup(context.Background(), "backup", "does-not-exist")
+	none, err := g.GetBackup(context.Background(), "backup", "does-not-exist", port.PBSBackupListOptions{})
 	require.NoError(t, err)
 	assert.Empty(t, none)
 	assert.NotNil(t, none, "should return a non-nil empty slice")
@@ -348,12 +348,12 @@ func TestGateway_EmptyDataForLists(t *testing.T) {
 			return e
 		}},
 		{"ListBackups", func(g *Gateway) error {
-			_, e := g.ListBackups(context.Background(), "backup")
+			_, e := g.ListBackups(context.Background(), "backup", port.PBSBackupListOptions{})
 
 			return e
 		}},
 		{"GetBackup", func(g *Gateway) error {
-			_, e := g.GetBackup(context.Background(), "backup", "vm/100/2024")
+			_, e := g.GetBackup(context.Background(), "backup", "vm/100/2024", port.PBSBackupListOptions{})
 
 			return e
 		}},
@@ -385,12 +385,12 @@ func TestGateway_AllMethodErrorBranches(t *testing.T) {
 			return e
 		}},
 		{"ListBackups", func(g *Gateway) error {
-			_, e := g.ListBackups(context.Background(), "s")
+			_, e := g.ListBackups(context.Background(), "s", port.PBSBackupListOptions{})
 
 			return e
 		}},
 		{"GetBackup", func(g *Gateway) error {
-			_, e := g.GetBackup(context.Background(), "s", "snap")
+			_, e := g.GetBackup(context.Background(), "s", "snap", port.PBSBackupListOptions{})
 
 			return e
 		}},

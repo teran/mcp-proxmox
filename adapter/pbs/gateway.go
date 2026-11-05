@@ -384,6 +384,11 @@ func (g *Gateway) GetDatastoreStatus(ctx context.Context, store string) (*model.
 		return nil, err
 	}
 
+	// PBS does not echo the store name in the status response body (it is
+	// carried only in the request path), so populate it from the argument to
+	// make the result self-describing.
+	out.Store = store
+
 	return &out, nil
 }
 
@@ -400,23 +405,54 @@ func (g *Gateway) GetDatastoreConfig(ctx context.Context, store string) (*model.
 	return &out, nil
 }
 
-// ListBackups returns the backup snapshots in a datastore.
-func (g *Gateway) ListBackups(ctx context.Context, store string) ([]model.Backup, error) {
+// ListBackups returns the backup snapshots in a datastore via
+// GET /admin/datastore/{store}/snapshots, filtered by opts. The pagination
+// options (limit/start/end) are sent as query parameters; as a safety net the
+// result is also trimmed client-side to opts.Limit when the upstream returns
+// more snapshots than requested.
+func (g *Gateway) ListBackups(ctx context.Context, store string, opts port.PBSBackupListOptions) ([]model.Backup, error) {
+	path := "/admin/datastore/" + url.PathEscape(store) + "/snapshots"
+	if q := buildBackupListQuery(opts); len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+
 	var out []model.Backup
-	if err := g.do(ctx, http.MethodGet, "/admin/datastore/"+url.PathEscape(store)+"/snapshots", &out); err != nil {
+	if err := g.do(ctx, http.MethodGet, path, &out); err != nil {
 		return nil, err
+	}
+
+	// Client-side safety trim: never return more than the caller asked for.
+	if opts.Limit > 0 && len(out) > opts.Limit {
+		out = out[:opts.Limit]
 	}
 
 	return out, nil
 }
 
+// buildBackupListQuery maps the PBS backup-list pagination options into a URL
+// query string. Zero-valued options are omitted so PBS defaults apply.
+func buildBackupListQuery(opts port.PBSBackupListOptions) url.Values {
+	query := url.Values{}
+	if opts.Limit > 0 {
+		query.Set("limit", strconv.Itoa(opts.Limit))
+	}
+	if opts.Start != 0 {
+		query.Set("start", strconv.FormatInt(opts.Start, 10))
+	}
+	if opts.End != 0 {
+		query.Set("end", strconv.FormatInt(opts.End, 10))
+	}
+
+	return query
+}
+
 // GetBackup returns all backup snapshots in the datastore whose backup-id
 // matches backupID. PBS exposes no single-snapshot GET (the per-snapshot path
 // does not exist); snapshots are listed via GET /admin/datastore/{store}/snapshots
-// and filtered by backup-id, which is the real grouping key (e.g. a VMID).
-// Returns an empty slice (no error) when no snapshot matches.
-func (g *Gateway) GetBackup(ctx context.Context, store, backupID string) ([]model.Backup, error) {
-	all, err := g.ListBackups(ctx, store)
+// (forwarding opts) and filtered by backup-id, which is the real grouping key
+// (e.g. a VMID). Returns an empty slice (no error) when no snapshot matches.
+func (g *Gateway) GetBackup(ctx context.Context, store, backupID string, opts port.PBSBackupListOptions) ([]model.Backup, error) {
+	all, err := g.ListBackups(ctx, store, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -473,19 +509,66 @@ func (g *Gateway) GetPBSVersion(ctx context.Context) (*model.PBSVersion, error) 
 	return &out, nil
 }
 
-// backupFilesPath builds the PBS backup file-list path prefix for a store,
-// backup type, backup ID and snapshot. Each segment is path-escaped so values
-// containing reserved path characters cannot inject extra segments.
-//
-// NOTE: this legacy path shape (…/backups/{type}/{id}/{snapshot}) does not
-// exist in the PBS API and is only used by the restore mutations. The read-only
-// ListBackupFiles uses GET /admin/datastore/{store}/files with backup-type /
-// backup-id / backup-time query parameters instead.
-func backupFilesPath(store, backupType, backupID, snapshot string) string {
-	return "/admin/datastore/" + url.PathEscape(store) +
-		"/backups/" + url.PathEscape(backupType) +
-		"/" + url.PathEscape(backupID) +
-		"/" + url.PathEscape(snapshot)
+// RestoreFile restores a single file out of a backup snapshot via
+// POST /admin/datastore/{store}/files. The source `path` inside the backup is
+// written to the `target` path on the PBS filesystem; the snapshot is
+// identified by backup-type/backup-id/backup-time (epoch) form parameters. The
+// endpoint returns no task UPID.
+func (g *Gateway) RestoreFile(
+	ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSFileRestoreRequest,
+) error {
+	form := url.Values{}
+	form.Set("backup-type", backupType)
+	form.Set("backup-id", backupID)
+	form.Set("backup-time", strconv.FormatInt(backupTime, 10))
+	form.Set("path", req.Path)
+	form.Set("target", req.Target)
+
+	return g.doMutation(ctx, http.MethodPost, "/admin/datastore/"+url.PathEscape(store)+"/files", form, nil)
+}
+
+// RestoreVMBackup restores a VM backup snapshot into a PVE datastore via
+// POST /admin/datastore/{store}/restore and returns the task UPID. The snapshot
+// is identified by backup-type/backup-id/backup-time (epoch) form parameters.
+// Target is the PVE storage; VMID is either a numeric ID or the string "next".
+// The optional password/fingerprint authenticate to the target PVE node and are
+// sent in the form body — they are never logged.
+func (g *Gateway) RestoreVMBackup(
+	ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSVMRestoreRequest,
+) (string, error) {
+	form := url.Values{}
+	form.Set("backup-type", backupType)
+	form.Set("backup-id", backupID)
+	form.Set("backup-time", strconv.FormatInt(backupTime, 10))
+	form.Set("target", req.Target)
+	if req.VMID != "" {
+		form.Set("vmid", req.VMID)
+	}
+	if req.Host != "" {
+		form.Set("host", req.Host)
+	}
+	if req.Password != "" {
+		form.Set("password", req.Password)
+	}
+	if req.Fingerprint != "" {
+		form.Set("fingerprint", req.Fingerprint)
+	}
+	if req.Pool != "" {
+		form.Set("pool", req.Pool)
+	}
+	if req.Verbose {
+		form.Set("verbose", "1")
+	}
+	if req.Reload {
+		form.Set("reload", "1")
+	}
+	var upid string
+	restorePath := "/admin/datastore/" + url.PathEscape(store) + "/restore"
+	if err := g.doMutation(ctx, http.MethodPost, restorePath, form, &upid); err != nil {
+		return "", err
+	}
+
+	return upid, nil
 }
 
 // ListBackupFiles lists the files inside a backup snapshot via
@@ -593,60 +676,6 @@ func encodeUPIDSegment(s string) string {
 	}
 
 	return b.String()
-}
-
-// RestoreFile restores a single file out of a backup snapshot via
-// POST /admin/datastore/{store}/backups/{type}/{id}/{snapshot}/files. The
-// source `path` inside the backup is written to the `target` path on the PBS
-// filesystem; the endpoint returns no task UPID.
-func (g *Gateway) RestoreFile(
-	ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest,
-) error {
-	form := url.Values{}
-	form.Set("path", req.Path)
-	form.Set("target", req.Target)
-
-	return g.doMutation(ctx, http.MethodPost, backupFilesPath(store, backupType, backupID, snapshot)+"/files", form, nil)
-}
-
-// RestoreVMBackup restores a VM backup snapshot into a PVE datastore via
-// POST /admin/datastore/{store}/backups/{type}/{id}/{snapshot}/restore and
-// returns the task UPID. Target is the PVE storage; VMID is either a numeric ID
-// or the string "next". The optional password/fingerprint authenticate to the
-// target PVE node and are sent in the form body — they are never logged.
-func (g *Gateway) RestoreVMBackup(
-	ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest,
-) (string, error) {
-	form := url.Values{}
-	form.Set("target", req.Target)
-	if req.VMID != "" {
-		form.Set("vmid", req.VMID)
-	}
-	if req.Host != "" {
-		form.Set("host", req.Host)
-	}
-	if req.Password != "" {
-		form.Set("password", req.Password)
-	}
-	if req.Fingerprint != "" {
-		form.Set("fingerprint", req.Fingerprint)
-	}
-	if req.Pool != "" {
-		form.Set("pool", req.Pool)
-	}
-	if req.Verbose {
-		form.Set("verbose", "1")
-	}
-	if req.Reload {
-		form.Set("reload", "1")
-	}
-	var upid string
-	restorePath := backupFilesPath(store, backupType, backupID, snapshot) + "/restore"
-	if err := g.doMutation(ctx, http.MethodPost, restorePath, form, &upid); err != nil {
-		return "", err
-	}
-
-	return upid, nil
 }
 
 // doMutation executes a single mutation request (never retried — mutations are

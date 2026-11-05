@@ -54,6 +54,36 @@ func TestVMConfigDecodeStringNumericFields(t *testing.T) {
 	}
 }
 
+// TestVMConfigDecodeFlatForm verifies VMConfig decodes the flat (non-nested)
+// form that the real PVE GET /nodes/{node}/qemu/{vmid}/config emits: device
+// keys (scsi0/ide2/net0) sit at the root alongside description/onboot and are
+// aggregated into the Disks/Storage/Networks maps.
+func TestVMConfigDecodeFlatForm(t *testing.T) {
+	const flatJSON = `{"scsi0":"local:32","ide2":"local:iso.iso","net0":"virtio=AA:BB",` +
+		`"description":"my vm","onboot":0}`
+
+	var cfg VMConfig
+	if err := json.Unmarshal([]byte(flatJSON), &cfg); err != nil {
+		t.Fatalf("unmarshal flat config: %v", err)
+	}
+
+	if cfg.Disks["scsi0"] != "local:32" {
+		t.Errorf("Disks[scsi0] = %q, want local:32", cfg.Disks["scsi0"])
+	}
+	if cfg.Storage["ide2"] != "local:iso.iso" {
+		t.Errorf("Storage[ide2] = %q, want local:iso.iso", cfg.Storage["ide2"])
+	}
+	if cfg.Networks["net0"] != "virtio=AA:BB" {
+		t.Errorf("Networks[net0] = %q, want virtio=AA:BB", cfg.Networks["net0"])
+	}
+	if cfg.Description != "my vm" {
+		t.Errorf("Description = %q, want my vm", cfg.Description)
+	}
+	if cfg.OnBoot != FlexInt(0) {
+		t.Errorf("OnBoot = %d, want 0", cfg.OnBoot)
+	}
+}
+
 // TestLXCConfigDecodeStringNumericFields verifies that LXCConfig decodes
 // numeric config fields that Proxmox VE emits as JSON strings.
 func TestLXCConfigDecodeStringNumericFields(t *testing.T) {

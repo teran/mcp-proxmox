@@ -458,15 +458,17 @@ func backupJobIDFromData(raw json.RawMessage) string {
 }
 
 // UpdateBackupJob updates a vzdump backup job via PUT /cluster/backup/{id}. The
-// response `data` is the job's ID. id is URL-escaped so it is safe inside the
-// path.
+// response `data` is the job's ID, but PVE may also return empty or `{}` data
+// on success (the job is still updated). The raw `data` is captured and the job
+// ID extracted leniently, so a success with no ID does not error — mirroring
+// CreateBackupJob. id is URL-escaped so it is safe inside the path.
 func (g *Gateway) UpdateBackupJob(ctx context.Context, id string, req model.CreateBackupJobRequest) (string, error) {
-	var out string
-	if err := g.doMutation(ctx, http.MethodPut, "/cluster/backup/"+url.PathEscape(id), backupJobForm(req), &out); err != nil {
+	var raw json.RawMessage
+	if err := g.doMutation(ctx, http.MethodPut, "/cluster/backup/"+url.PathEscape(id), backupJobForm(req), &raw); err != nil {
 		return "", err
 	}
 
-	return out, nil
+	return backupJobIDFromData(raw), nil
 }
 
 // DeleteBackupJob deletes a vzdump backup job via DELETE /cluster/backup/{id}.
@@ -669,7 +671,8 @@ func (g *Gateway) DownloadURL(
 
 // buildDownloadURLForm maps a StorageDownloadURLRequest into the form-encoded
 // mutation body. content/filename/url are always sent; verify-certificates is
-// set to "1" only when true so PVE's default applies otherwise.
+// ALWAYS sent too — "1" when true and "0" when false — so the caller can
+// explicitly override PVE's default rather than silently omitting it.
 func buildDownloadURLForm(req model.StorageDownloadURLRequest) url.Values {
 	form := url.Values{}
 	form.Set("content", req.Content)
@@ -677,6 +680,8 @@ func buildDownloadURLForm(req model.StorageDownloadURLRequest) url.Values {
 	form.Set("url", req.URL)
 	if req.VerifyCertificates {
 		form.Set("verify-certificates", "1")
+	} else {
+		form.Set("verify-certificates", "0")
 	}
 
 	return form

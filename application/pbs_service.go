@@ -29,14 +29,17 @@ func (s *PBSService) GetDatastoreConfig(ctx context.Context, store string) (*mod
 	return s.gw.GetDatastoreConfig(ctx, store)
 }
 
-// ListBackups returns the backup snapshots in a datastore.
-func (s *PBSService) ListBackups(ctx context.Context, store string) ([]model.Backup, error) {
-	return s.gw.ListBackups(ctx, store)
+// ListBackups returns the backup snapshots in a datastore, filtered by opts.
+func (s *PBSService) ListBackups(ctx context.Context, store string, opts port.PBSBackupListOptions) ([]model.Backup, error) {
+	return s.gw.ListBackups(ctx, store, opts)
 }
 
-// GetBackup returns all backup snapshots in the datastore matching backupID.
-func (s *PBSService) GetBackup(ctx context.Context, store, backupID string) ([]model.Backup, error) {
-	return s.gw.GetBackup(ctx, store, backupID)
+// GetBackup returns all backup snapshots in the datastore matching backupID,
+// filtered by opts.
+func (s *PBSService) GetBackup(
+	ctx context.Context, store, backupID string, opts port.PBSBackupListOptions,
+) ([]model.Backup, error) {
+	return s.gw.GetBackup(ctx, store, backupID, opts)
 }
 
 // GetBackupNotes returns the notes of a backup group.
@@ -77,19 +80,21 @@ func (s *PBSService) GetTaskLog(ctx context.Context, upid string, limit int) ([]
 	return s.gw.GetTaskLog(ctx, upid, limit)
 }
 
-// RestoreFile restores a single file out of a PBS backup snapshot.
+// RestoreFile restores a single file out of a PBS backup snapshot. backupTime
+// is the snapshot's Unix epoch (seconds) from the backup listing.
 func (s *PBSService) RestoreFile(
-	ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest,
+	ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSFileRestoreRequest,
 ) error {
-	return s.gw.RestoreFile(ctx, store, backupType, backupID, snapshot, req)
+	return s.gw.RestoreFile(ctx, store, backupType, backupID, backupTime, req)
 }
 
 // RestoreVMBackup restores a PBS VM backup snapshot into a PVE datastore and
-// returns the task UPID.
+// returns the task UPID. backupTime is the snapshot's Unix epoch (seconds) from
+// the backup listing.
 func (s *PBSService) RestoreVMBackup(
-	ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest,
+	ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSVMRestoreRequest,
 ) (string, error) {
-	return s.gw.RestoreVMBackup(ctx, store, backupType, backupID, snapshot, req)
+	return s.gw.RestoreVMBackup(ctx, store, backupType, backupID, backupTime, req)
 }
 
 // StartVerify starts a verify job on a datastore and returns its UPID.

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/teran/mcp-proxmox/domain/model"
+	"github.com/teran/mcp-proxmox/domain/port"
 )
 
 func TestPBSService_ReadDatastores(t *testing.T) {
@@ -39,24 +40,45 @@ func TestPBSService_ReadDatastores(t *testing.T) {
 		assert.Equal(t, "/backup", got.Path)
 		assert.Equal(t, "filesystem", got.Backend)
 	})
+}
 
+// TestPBSService_BackupOptionsForwarding verifies the pagination options
+// (limit/start/end) are passed through to the PBS gateway for both the
+// backup-list and backup-get use cases.
+func TestPBSService_BackupOptionsForwarding(t *testing.T) {
 	t.Run("ListBackups", func(t *testing.T) {
-		gateway := &mockPBSGateway{listBackups: func(_ context.Context, _ string) ([]model.Backup, error) {
+		gotOpts := port.PBSBackupListOptions{}
+		gateway := &mockPBSGateway{listBackups: func(
+			_ context.Context, _ string, opts port.PBSBackupListOptions,
+		) ([]model.Backup, error) {
+			gotOpts = opts
+
 			return []model.Backup{{BackupID: "vm/100/..."}}, nil
 		}}
-		got, err := (&PBSService{gw: gateway}).ListBackups(context.Background(), "backup")
+		got, err := (&PBSService{gw: gateway}).ListBackups(
+			context.Background(), "backup", port.PBSBackupListOptions{Limit: 5, Start: 1700000000},
+		)
 		require.NoError(t, err)
 		assert.Len(t, got, 1)
+		assert.Equal(t, port.PBSBackupListOptions{Limit: 5, Start: 1700000000}, gotOpts, "opts must be passed through")
 	})
 
 	t.Run("GetBackup", func(t *testing.T) {
-		gateway := &mockPBSGateway{getBackup: func(_ context.Context, _, backupID string) ([]model.Backup, error) {
+		gotOpts := port.PBSBackupListOptions{}
+		gateway := &mockPBSGateway{getBackup: func(
+			_ context.Context, _, backupID string, opts port.PBSBackupListOptions,
+		) ([]model.Backup, error) {
+			gotOpts = opts
+
 			return []model.Backup{{BackupID: backupID}}, nil
 		}}
-		got, err := (&PBSService{gw: gateway}).GetBackup(context.Background(), "backup", "vm/100/...")
+		got, err := (&PBSService{gw: gateway}).GetBackup(
+			context.Background(), "backup", "vm/100/...", port.PBSBackupListOptions{End: 1700000100},
+		)
 		require.NoError(t, err)
 		require.Len(t, got, 1)
 		assert.Equal(t, "vm/100/...", got[0].BackupID)
+		assert.Equal(t, port.PBSBackupListOptions{End: 1700000100}, gotOpts, "opts must be passed through")
 	})
 }
 
@@ -201,12 +223,12 @@ var pbsErrorPropagationCases = []struct {
 		return e
 	}},
 	{"ListBackups", func(s *PBSService) error {
-		_, e := s.ListBackups(context.Background(), "s")
+		_, e := s.ListBackups(context.Background(), "s", port.PBSBackupListOptions{})
 
 		return e
 	}},
 	{"GetBackup", func(s *PBSService) error {
-		_, e := s.GetBackup(context.Background(), "s", "id")
+		_, e := s.GetBackup(context.Background(), "s", "id", port.PBSBackupListOptions{})
 
 		return e
 	}},
@@ -264,8 +286,12 @@ func newFailingPBSGateway(sentinel error) *mockPBSGateway {
 	gateway.listDatastores = func(_ context.Context) ([]model.Datastore, error) { return nil, sentinel }
 	gateway.getDatastoreStats = func(_ context.Context, _ string) (*model.DatastoreStatus, error) { return nil, sentinel }
 	gateway.getDatastoreConfig = func(_ context.Context, _ string) (*model.DatastoreConfig, error) { return nil, sentinel }
-	gateway.listBackups = func(_ context.Context, _ string) ([]model.Backup, error) { return nil, sentinel }
-	gateway.getBackup = func(_ context.Context, _, _ string) ([]model.Backup, error) { return nil, sentinel }
+	gateway.listBackups = func(_ context.Context, _ string, _ port.PBSBackupListOptions) ([]model.Backup, error) {
+		return nil, sentinel
+	}
+	gateway.getBackup = func(_ context.Context, _, _ string, _ port.PBSBackupListOptions) ([]model.Backup, error) {
+		return nil, sentinel
+	}
 	gateway.getBackupNotes = func(_ context.Context, _, _, _ string) (*model.BackupNotes, error) {
 		return nil, sentinel
 	}

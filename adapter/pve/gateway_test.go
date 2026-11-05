@@ -305,6 +305,31 @@ func TestGateway_GetVMConfig_StringNumericFields(t *testing.T) {
 	assert.Equal(t, "/api2/json/nodes/pve1/qemu/100/config", rec.path)
 }
 
+// TestGateway_GetVMConfig_FlatForm verifies GetVMConfig decodes a real PVE
+// config response that carries flat device keys (scsi0/ide2/net0) plus
+// description/onboot at the root, aggregating them into the model's maps.
+func TestGateway_GetVMConfig_FlatForm(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, 200,
+		`{"data":{"scsi0":"local:32","ide2":"local:iso.iso","net0":"virtio=AA:BB",`+
+			`"description":"my vm","onboot":0,"vmid":100,"name":"web"}}`,
+		rec)
+	g, _ := newTestGateway(t, srv)
+
+	cfg, err := g.GetVMConfig(context.Background(), "pve1", 100)
+	skipIfStub(t, err)
+	require.NoError(t, err)
+
+	assert.Equal(t, 100, cfg.VMID)
+	assert.Equal(t, "web", cfg.Name)
+	assert.Equal(t, "local:32", cfg.Disks["scsi0"])
+	assert.Equal(t, "local:iso.iso", cfg.Storage["ide2"])
+	assert.Equal(t, "virtio=AA:BB", cfg.Networks["net0"])
+	assert.Equal(t, "my vm", cfg.Description)
+	assert.Equal(t, model.FlexInt(0), cfg.OnBoot)
+	assert.Equal(t, "/api2/json/nodes/pve1/qemu/100/config", rec.path)
+}
+
 // TestGateway_HTTPErrorMapping verifies the HTTP->sentinel mapping for the
 // read-only surface (SPEC.md §7.3).
 func TestGateway_HTTPErrorMapping(t *testing.T) {

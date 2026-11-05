@@ -6,6 +6,14 @@ import (
 	"github.com/teran/mcp-proxmox/domain/model"
 )
 
+// PBSBackupListOptions filters GET /admin/datastore/{store}/snapshots (the
+// backup listing). See SPEC.md §11.1.
+type PBSBackupListOptions struct {
+	Limit int   `json:"limit,omitempty"` // cap the number of returned snapshots
+	Start int64 `json:"start,omitempty"` // unix timestamp (seconds) lower bound
+	End   int64 `json:"end,omitempty"`   // unix timestamp (seconds) upper bound
+}
+
 // PBSGateway is the secondary port implemented by adapter/pbs. It models the
 // Proxmox Backup Server REST API (/api2/json): the read-only (query) surface
 // plus the mutation surface (verify/gc/prune/sync-start), which the MCP adapter
@@ -17,12 +25,14 @@ type PBSGateway interface {
 	GetDatastoreConfig(ctx context.Context, store string) (*model.DatastoreConfig, error)
 
 	// Backups / snapshots & notes.
-	ListBackups(ctx context.Context, store string) ([]model.Backup, error)
+	// ListBackups returns the backup snapshots in a datastore, filtered by the
+	// pagination options (limit/start/end).
+	ListBackups(ctx context.Context, store string, opts PBSBackupListOptions) ([]model.Backup, error)
 	// GetBackup returns all snapshots in the datastore whose backup-id matches
 	// backupID (the real grouping key, e.g. a VMID). PBS has no single-snapshot
 	// GET; snapshots are listed and filtered by backup-id. Returns an empty
 	// slice (no error) when nothing matches.
-	GetBackup(ctx context.Context, store, backupID string) ([]model.Backup, error)
+	GetBackup(ctx context.Context, store, backupID string, opts PBSBackupListOptions) ([]model.Backup, error)
 	// GetBackupNotes returns the notes of a backup group identified by
 	// backup-id and backup-type (vm|ct|host).
 	GetBackupNotes(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error)
@@ -49,13 +59,19 @@ type PBSGateway interface {
 	GetPruneStatus(ctx context.Context, upid string) (*model.PBSTask, error)
 
 	// RestoreFile restores a single file out of a backup snapshot to a target
-	// path on the PBS filesystem. It is a mutation (gated by EnableMutations),
-	// never retried, and returns no task UPID.
-	RestoreFile(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error
-	// RestoreVMBackup restores a VM backup snapshot into a PVE datastore. It is a
-	// mutation (gated by EnableMutations), never retried, and returns the task
-	// UPID to poll with GetTaskStatus / GetTaskLog.
-	RestoreVMBackup(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest) (string, error)
+	// path on the PBS filesystem. The snapshot is identified by backupTime —
+	// its Unix epoch (seconds) as returned by the backup listing. It is a
+	// mutation (gated by EnableMutations), never retried, and returns no task
+	// UPID.
+	RestoreFile(ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSFileRestoreRequest) error
+	// RestoreVMBackup restores a VM backup snapshot into a PVE datastore. The
+	// snapshot is identified by backupTime — its Unix epoch (seconds) as
+	// returned by the backup listing. It is a mutation (gated by
+	// EnableMutations), never retried, and returns the task UPID to poll with
+	// GetTaskStatus / GetTaskLog.
+	RestoreVMBackup(
+		ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSVMRestoreRequest,
+	) (string, error)
 
 	// Mutations (gated by EnableMutations). These are never retried and return
 	// the task UPID taken from the response `data` field.

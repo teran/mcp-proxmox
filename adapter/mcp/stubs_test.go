@@ -738,8 +738,8 @@ type stubPBSGateway struct {
 	listDatastores     func(ctx context.Context) ([]model.Datastore, error)
 	getDatastoreStats  func(ctx context.Context, store string) (*model.DatastoreStatus, error)
 	getDatastoreConfig func(ctx context.Context, store string) (*model.DatastoreConfig, error)
-	listBackups        func(ctx context.Context, store string) ([]model.Backup, error)
-	getBackup          func(ctx context.Context, store, backupID string) ([]model.Backup, error)
+	listBackups        func(ctx context.Context, store string, opts port.PBSBackupListOptions) ([]model.Backup, error)
+	getBackup          func(ctx context.Context, store, backupID string, opts port.PBSBackupListOptions) ([]model.Backup, error)
 	getBackupNotes     func(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error)
 	getVerifyStatus    func(ctx context.Context, upid string) (*model.PBSTask, error)
 	getPruneStatus     func(ctx context.Context, upid string) (*model.PBSTask, error)
@@ -752,13 +752,15 @@ type stubPBSGateway struct {
 	listBackupFiles func(
 		ctx context.Context, store, backupType, backupID string, backupTime int64, path string,
 	) ([]model.PBSFile, error)
-	getTaskStatus   func(ctx context.Context, upid string) (*model.PBSTask, error)
-	getTaskLog      func(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error)
-	stopTask        func(ctx context.Context, upid string) error
-	forgetBackup    func(ctx context.Context, store, backupType, backupID string, backupTime int64) error
-	restoreFile     func(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error
+	getTaskStatus func(ctx context.Context, upid string) (*model.PBSTask, error)
+	getTaskLog    func(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error)
+	stopTask      func(ctx context.Context, upid string) error
+	forgetBackup  func(ctx context.Context, store, backupType, backupID string, backupTime int64) error
+	restoreFile   func(
+		ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSFileRestoreRequest,
+	) error
 	restoreVMBackup func(
-		ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest,
+		ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSVMRestoreRequest,
 	) (string, error)
 }
 
@@ -797,23 +799,25 @@ func (s *stubPBSGateway) GetDatastoreConfig(ctx context.Context, store string) (
 	return &model.DatastoreConfig{Path: "/backup"}, nil
 }
 
-func (s *stubPBSGateway) ListBackups(ctx context.Context, store string) ([]model.Backup, error) {
+func (s *stubPBSGateway) ListBackups(ctx context.Context, store string, opts port.PBSBackupListOptions) ([]model.Backup, error) {
 	if s.fail() {
 		return nil, s.err
 	}
 	if s.listBackups != nil {
-		return s.listBackups(ctx, store)
+		return s.listBackups(ctx, store, opts)
 	}
 
 	return []model.Backup{{BackupID: "vm/100/..."}}, nil
 }
 
-func (s *stubPBSGateway) GetBackup(ctx context.Context, store, backupID string) ([]model.Backup, error) {
+func (s *stubPBSGateway) GetBackup(
+	ctx context.Context, store, backupID string, opts port.PBSBackupListOptions,
+) ([]model.Backup, error) {
 	if s.fail() {
 		return nil, s.err
 	}
 	if s.getBackup != nil {
-		return s.getBackup(ctx, store, backupID)
+		return s.getBackup(ctx, store, backupID, opts)
 	}
 
 	return []model.Backup{{BackupID: backupID}}, nil
@@ -967,26 +971,26 @@ func (s *stubPBSGateway) GetTaskLog(ctx context.Context, upid string, limit int)
 }
 
 func (s *stubPBSGateway) RestoreFile(
-	ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest,
+	ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSFileRestoreRequest,
 ) error {
 	if s.fail() {
 		return s.err
 	}
 	if s.restoreFile != nil {
-		return s.restoreFile(ctx, store, backupType, backupID, snapshot, req)
+		return s.restoreFile(ctx, store, backupType, backupID, backupTime, req)
 	}
 
 	return nil
 }
 
 func (s *stubPBSGateway) RestoreVMBackup(
-	ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest,
+	ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSVMRestoreRequest,
 ) (string, error) {
 	if s.fail() {
 		return "", s.err
 	}
 	if s.restoreVMBackup != nil {
-		return s.restoreVMBackup(ctx, store, backupType, backupID, snapshot, req)
+		return s.restoreVMBackup(ctx, store, backupType, backupID, backupTime, req)
 	}
 
 	return "UPID:pbs:restore:...", nil

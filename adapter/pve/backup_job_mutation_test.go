@@ -106,6 +106,27 @@ func TestGateway_UpdateBackupJob_Success(t *testing.T) {
 	assert.Equal(t, "suspend", rec.form.Get("mode"))
 }
 
+// TestGateway_UpdateBackupJob_EmptyDataNoError verifies UpdateBackupJob tolerates
+// a PVE response whose `data` is empty (`null`) or an empty object `{}` — PVE
+// reports a successful job update with no echoed job ID, mirroring
+// CreateBackupJob. These must NOT surface an EmptyDataError (the current bug).
+func TestGateway_UpdateBackupJob_EmptyDataNoError(t *testing.T) {
+	for _, body := range []string{`{"data":null}`, `{}`} {
+		t.Run(body, func(t *testing.T) {
+			rec := &reqCapture{}
+			srv := mockServer(t, 200, body, rec)
+			g, _ := newTestGateway(t, srv)
+
+			_, err := g.UpdateBackupJob(context.Background(), "backup-100", model.CreateBackupJobRequest{
+				Storage: "nfs-backup", Schedule: "00 3 * * 1",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, http.MethodPut, rec.method)
+			assert.Equal(t, "/api2/json/cluster/backup/backup-100", rec.path)
+		})
+	}
+}
+
 // TestGateway_BackupJobIDPathEscaped verifies a job id containing characters
 // that are unsafe in a URL path is escaped with url.PathEscape for both update
 // and delete.

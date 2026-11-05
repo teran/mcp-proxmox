@@ -96,6 +96,24 @@ func TestGateway_GetDatastoreConfig_ErrorBranches(t *testing.T) {
 	})
 }
 
+// TestGateway_GetDatastoreStatus_PopulatesStoreFromArg verifies GetDatastoreStatus
+// fills out.Store from the store argument even when the status response body does
+// not carry a `store` field (PVE/PBS may omit it). Currently the gateway returns
+// Store == "" (bug B5); the fix sets out.Store = store.
+func TestGateway_GetDatastoreStatus_PopulatesStoreFromArg(t *testing.T) {
+	rec := &reqCapture{}
+	// Status response WITHOUT the `store` field.
+	srv := mockServer(t, 200, `{"data":{"total":2000,"used":500,"avail":1500}}`, rec)
+	g, _ := newTestGateway(t, srv)
+
+	st, err := g.GetDatastoreStatus(context.Background(), "backup")
+	require.NoError(t, err)
+	require.NotNil(t, st)
+	assert.Equal(t, "backup", st.Store, "Store must be populated from the argument")
+	assert.Equal(t, int64(2000), st.Total)
+	assert.Equal(t, "/api2/json/admin/datastore/backup/status", rec.path)
+}
+
 // TestGateway_Decode_EmptyBody verifies that a 2xx response with an empty body
 // surfaces an explicit UpstreamError naming the empty response body rather than
 // the raw "unexpected end of JSON input".
