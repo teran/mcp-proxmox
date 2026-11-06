@@ -406,56 +406,61 @@ func (g *Gateway) GetDatastoreConfig(ctx context.Context, store string) (*model.
 }
 
 // ListBackups returns the backup snapshots in a datastore via
-// GET /admin/datastore/{store}/snapshots, filtered by opts. The pagination
-// options (limit/start/end) are sent as query parameters; as a safety net the
-// result is also trimmed client-side to opts.Limit when the upstream returns
-// more snapshots than requested.
+// GET /admin/datastore/{store}/snapshots, filtered by opts. PBS 4.2 rejects the
+// limit/start/end query parameters on this endpoint (it has no server-side
+// pagination for it), so they are never sent and are instead applied purely
+// client-side: limit trims the result and start/end filter by BackupTime
+// (SPEC.md §11.1).
 func (g *Gateway) ListBackups(ctx context.Context, store string, opts port.PBSBackupListOptions) ([]model.Backup, error) {
 	path := "/admin/datastore/" + url.PathEscape(store) + "/snapshots"
-	if q := buildBackupListQuery(opts); len(q) > 0 {
-		path += "?" + q.Encode()
-	}
 
 	var out []model.Backup
 	if err := g.do(ctx, http.MethodGet, path, &out); err != nil {
 		return nil, err
 	}
 
-	// Client-side safety trim: never return more than the caller asked for.
-	if opts.Limit > 0 && len(out) > opts.Limit {
-		out = out[:opts.Limit]
-	}
-
-	return out, nil
+	return filterBackups(out, opts), nil
 }
 
-// buildBackupListQuery maps the PBS backup-list pagination options into a URL
-// query string. Zero-valued options are omitted so PBS defaults apply.
-func buildBackupListQuery(opts port.PBSBackupListOptions) url.Values {
-	query := url.Values{}
-	if opts.Limit > 0 {
-		query.Set("limit", strconv.Itoa(opts.Limit))
+// filterBackups applies the backup-list options client-side: an inclusive
+// [Start, End] filter on BackupTime (Unix epoch) and a Limit trim. PBS 4.2 does
+// not support these on the snapshots endpoint, so they are applied locally.
+func filterBackups(out []model.Backup, opts port.PBSBackupListOptions) []model.Backup {
+	filtered := out[:0:0]
+	for _, b := range out {
+		if opts.Start != 0 && b.BackupTime < opts.Start {
+			continue
+		}
+		if opts.End != 0 && b.BackupTime > opts.End {
+			continue
+		}
+		filtered = append(filtered, b)
 	}
-	if opts.Start != 0 {
-		query.Set("start", strconv.FormatInt(opts.Start, 10))
-	}
-	if opts.End != 0 {
-		query.Set("end", strconv.FormatInt(opts.End, 10))
+	if opts.Limit > 0 && len(filtered) > opts.Limit {
+		filtered = filtered[:opts.Limit]
 	}
 
-	return query
+	return filtered
 }
 
 // GetBackup returns all backup snapshots in the datastore whose backup-id
 // matches backupID. PBS exposes no single-snapshot GET (the per-snapshot path
 // does not exist); snapshots are listed via GET /admin/datastore/{store}/snapshots
-// (forwarding opts) and filtered by backup-id, which is the real grouping key
-// (e.g. a VMID). Returns an empty slice (no error) when no snapshot matches.
+// with the `backup-id` forwarded as a query parameter so PBS filters server-side
+// (rather than pulling the whole list), plus a client-side backup-id filter as a
+// safety net for upstreams that ignore the query. limit/start/end are never sent
+// to PBS 4.2 (SPEC.md §11.1); they are applied client-side via filterBackups.
+// Returns an empty slice (no error) when no snapshot matches.
 func (g *Gateway) GetBackup(ctx context.Context, store, backupID string, opts port.PBSBackupListOptions) ([]model.Backup, error) {
-	all, err := g.ListBackups(ctx, store, opts)
-	if err != nil {
+	q := url.Values{}
+	q.Set("backup-id", backupID)
+	path := "/admin/datastore/" + url.PathEscape(store) + "/snapshots?" + q.Encode()
+
+	var all []model.Backup
+	if err := g.do(ctx, http.MethodGet, path, &all); err != nil {
 		return nil, err
 	}
+
 	out := make([]model.Backup, 0, len(all))
 	for _, b := range all {
 		if b.BackupID == backupID {
@@ -463,7 +468,7 @@ func (g *Gateway) GetBackup(ctx context.Context, store, backupID string, opts po
 		}
 	}
 
-	return out, nil
+	return filterBackups(out, opts), nil
 }
 
 // GetBackupNotes returns the notes of a backup group from
@@ -530,9 +535,10 @@ func (g *Gateway) RestoreFile(
 // RestoreVMBackup restores a VM backup snapshot into a PVE datastore via
 // POST /admin/datastore/{store}/restore and returns the task UPID. The snapshot
 // is identified by backup-type/backup-id/backup-time (epoch) form parameters.
-// Target is the PVE storage; VMID is either a numeric ID or the string "next".
-// The optional password/fingerprint authenticate to the target PVE node and are
-// sent in the form body — they are never logged.
+// Target is the PVE storage and is sent under the `storage` wire key (PBS
+// restore expects `storage`, not `target`); VMID is either a numeric ID or the
+// string "next". The optional password/fingerprint authenticate to the target
+// PVE node and are sent in the form body — they are never logged.
 func (g *Gateway) RestoreVMBackup(
 	ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSVMRestoreRequest,
 ) (string, error) {
@@ -540,7 +546,7 @@ func (g *Gateway) RestoreVMBackup(
 	form.Set("backup-type", backupType)
 	form.Set("backup-id", backupID)
 	form.Set("backup-time", strconv.FormatInt(backupTime, 10))
-	form.Set("target", req.Target)
+	form.Set("storage", req.Target)
 	if req.VMID != "" {
 		form.Set("vmid", req.VMID)
 	}

@@ -2,7 +2,9 @@ package pve
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -169,6 +171,43 @@ func TestGateway_DeleteBackupJob_Success(t *testing.T) {
 	assert.Equal(t, "PVEAPIToken=user@pam!tokenid=secret", rec.auth)
 }
 
+// TestGateway_DeleteBackupJob_EmptyBodyNoError is the RED reproducer for the
+// Defect 1 `pve_backup_job_delete` HTTP 500-on-success. A real PVE deletes the
+// job and replies with a 200 and an EMPTY body (no JSON envelope at all), which
+// the envelope decode (json.Unmarshal) cannot parse. DeleteBackupJob must treat
+// ANY 2xx as success (raw body, no envelope decode), so an empty body, a null
+// data and an empty object must ALL succeed with no error. Today the empty body
+// case fails with UpstreamError{Op:"decode"}.
+func TestGateway_DeleteBackupJob_EmptyBodyNoError(t *testing.T) {
+	for _, body := range []string{``, `{"data":null}`, `{}`} {
+		t.Run(strings.ReplaceAll(body, "\"", "q"), func(t *testing.T) {
+			rec := &reqCapture{}
+			srv := mockServer(t, 200, body, rec)
+			g, _ := newTestGateway(t, srv)
+
+			err := g.DeleteBackupJob(context.Background(), "backup-100")
+			require.NoError(t, err, "DeleteBackupJob must treat body %q as success", body)
+
+			assert.Equal(t, http.MethodDelete, rec.method)
+			assert.Equal(t, "/api2/json/cluster/backup/backup-100", rec.path)
+			assert.Equal(t, "PVEAPIToken=user@pam!tokenid=secret", rec.auth)
+		})
+	}
+}
+
+// TestGateway_DeleteBackupJob_NotFound verifies a 404 for an unknown job maps
+// to the ErrNotFound sentinel (not an upstream error).
+func TestGateway_DeleteBackupJob_NotFound(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, http.StatusNotFound, `{"data":null}`, rec)
+	g, _ := newTestGateway(t, srv)
+
+	err := g.DeleteBackupJob(context.Background(), "backup-999")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, port.ErrNotFound)
+	assert.Equal(t, 1, rec.count)
+}
+
 // TestGateway_BackupJobErrorMapping verifies backup-job mutation failures map
 // through the error family and are never retried (mutations are not replayed):
 // 401 -> ErrUnauthorized, 5xx -> UpstreamError with a single request.
@@ -213,4 +252,31 @@ func TestGateway_BackupJobErrorMapping(t *testing.T) {
 		assert.ErrorAs(t, err, &ue)
 		assert.Equal(t, 1, rec.count, "mutations must not be retried")
 	})
+}
+
+// TestGateway_BackupJobIDFromData covers the lenient extraction of a backup-job
+// ID from a create/update response `data`. A real PVE returns the ID in several
+// shapes — a bare JSON string, an object with an `id` key, an object wrapping a
+// nested `data.id`, or nothing at all (`null`, `{}`, empty). backupJobIDFromData
+// must resolve the ID from each form, returning "" when none is present.
+func TestGateway_BackupJobIDFromData(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"bare string", `"backup-100"`, "backup-100"},
+		{"object with id", `{"id":"backup-100"}`, "backup-100"},
+		{"nested data id", `{"data":{"id":"x"}}`, "x"},
+		{"null", `null`, ""},
+		{"empty object", `{}`, ""},
+		{"empty string", `""`, ""},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			got := backupJobIDFromData(json.RawMessage(tt.raw))
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

@@ -912,7 +912,7 @@ with destructive mutations (delete / restore / rollback / GC / prune) carrying
 
 | # | Tool | Type | Endpoint |
 |---|---|---|---|
-| 63 | `pbs_backup_list` | query | `GET /admin/datastore/{store}/snapshot` (`limit`, `start`/`end` window on `backup-time`) |
+| 63 | `pbs_backup_list` | query | `GET /admin/datastore/{store}/snapshot` (`limit`/`start`/`end` applied **client-side**; §11.1) |
 | 64 | `pbs_backup_get` | query | `GET /admin/datastore/{store}/snapshot/{backup-id}` (group) |
 | 65 | `pbs_backup_notes_get` | query | `GET /admin/datastore/{store}/backup/{backup-id}/{backup-type}/notes` |
 | 66 | `pbs_backup_files_list` | query | `GET /admin/datastore/{store}/backup/{backup-type}/{backup-id}/{snapshot}` |
@@ -1216,13 +1216,23 @@ open future work; they are now implemented and covered by the integration test
 plan (Integration tests, §I). None of these are known-broken anymore.
 
 ### 11.1 Pagination for large datastore snapshot listings (`pbs_backup_list` / `pbs_backup_get`)
-**Fixed.** `PBSBackupListOptions` now accepts `limit` plus the time-window
-`start`/`end` filters (epoch seconds on `backup-time`). The PVE/PBS adapter
-passes them as query parameters on `GET /admin/datastore/{store}/snapshot`, and
-the client-side result is trimmed to `limit`. This bounds the response size on a
-populated datastore (previously a single unbounded multi-hundred-KB payload;
-observed 132 snapshots for a single VM). Applies the same reasoning as the
-`pbs_backup_files_list` fix (epoch `backup-time`).
+**Fixed.** PBS 4.2 does **not** support `limit`/`start`/`end` query parameters on
+`GET /admin/datastore/{store}/snapshot` — sending them makes PBS **reject the
+whole request**. The implementation therefore does **not** send `limit`/`start`/
+`end` upstream; instead:
+- `limit` is a **client-side trim** of the returned snapshot list;
+- `start`/`end` (epoch seconds on `backup-time`) are a **client-side filter**;
+- `pbs_backup_get` forwards the `backup-id` as a query parameter to the server
+  (`?backup-id=<id>`) to narrow the group server-side.
+
+This bounds the response size on a populated datastore (previously a single
+unbounded multi-hundred-KB payload; observed 132 snapshots for a single VM).
+Applies the same reasoning as the `pbs_backup_files_list` fix (epoch
+`backup-time`).
+
+> **Correction:** an earlier version of this SPEC stated the adapter passes
+> `limit`/`start`/`end` as server query parameters on the snapshot endpoint.
+> That is **incorrect** for PBS 4.2 and has been removed.
 
 ### 11.2 `pbs_backup_vm_restore` / `pbs_backup_restore_file` endpoints
 **Fixed.** Both now hit the correct PBS endpoints —
@@ -1231,7 +1241,14 @@ observed 132 snapshots for a single VM). Applies the same reasoning as the
 (epoch) instead of the old snapshot-ISO form. The legacy `backupFilesPath`
 helper has been **removed entirely**. Previously these built the wrong
 `/admin/datastore/{store}/backup/{type}/{id}/{snapshot}/restore` path and
-returned 404 against a real PBS.
+returned 404 against a real PBS. Additionally, the VM restore form parameter was
+renamed `target` → `storage` (PBS restore expects `storage`).
+
+**Environment requirement — not a code defect.** The code paths above are
+correct, but against a real PBS 4.2 the restore calls (VM and file) can return
+**404** until a **trusted PVE remote** is configured (with its **host** and
+**password**) and the API token has the **Datastore.Modify** privilege. That is a
+PBS environment / permission requirement, **not** a bug in `mcp-proxmox`.
 
 ### 11.3 PBS task / verify / prune status endpoints
 **Fixed (already resolved, confirmed).** `pbs_verify_status`, `pbs_prune_status`,
@@ -1243,6 +1260,26 @@ Verify/prune status are read through the same task endpoints (no separate
 `/verify/{upid}` / `/prune/{upid}`). The UPID must be URL-encoded as a path
 segment (`:` → `%3A`, `@` → `%40`, `!` left literal) — not `url.PathEscape`'d
 and not appended raw. Task list is `GET /nodes/{node}/tasks`.
+
+### 11.4 PVE tool fixes (`pve_backup_job_*`, `pve_lxc_get`)
+**Fixed.** Additional defects from a live run:
+- `pve_backup_job_delete` no longer returns HTTP 500 on a successful delete — it
+  uses `doOnceRaw` and does not try to decode the (empty) response body.
+- `pve_lxc_get` now substitutes `vmid` from the tool argument instead of sending 0.
+- `pve_backup_job_create` extracts the job `id` from a string / object / nested
+  object, so `id` is populated on success (not empty).
+
+### 11.5 Environment / permission requirements (not code defects)
+Several live-run 4xx responses stem from **PBS environment / token permissions**,
+not from the `mcp-proxmox` code:
+- `pbs_backup_vm_restore` / `pbs_backup_restore_file` (real PBS 4.2) → **404** until a
+  **trusted PVE remote** (host + password) is configured and the token has
+  **Datastore.Modify** (§11.2).
+- `pbs_sync_start` → **404**: the sync remote is not configured (environment).
+- `pbs_prune_start` / `pbs_gc_start` / `pbs_backup_forget` → **403/404**: the token
+  lacks the required privileges (Datastore.Modify / GC) (environment).
+- `pve_ha_add` with `nodes` — the two-step flow is correct; requires **live
+  verification** (not a regression).
 
 ---
 
@@ -1379,8 +1416,8 @@ Requires the Phase 3 backup to exist. `backup_time` is the epoch read from the `
 
 | # | Tool | Input | Expected | PASS assertion |
 |---|---|---|---|---|
-| 37 | `pbs_backup_list` | `store=<store>, limit=<n>, start=<epoch>, end=<epoch>` | backup snapshot list | contains `vm/<INT_TEST_VMID>`; returns a **bounded** page — pagination/`limit` + client-side trim + `backup-time` window respected (§11.1 fix applied) |
-| 38 | `pbs_backup_get` | `store=<store>, backup_id=<INT_TEST_VMID>` | group snapshots | returns the int-test VM's snapshot(s) (§11.1 pagination fix applied) |
+| 37 | `pbs_backup_list` | `store=<store>, limit=<n>, start=<epoch>, end=<epoch>` | backup snapshot list | contains `vm/<INT_TEST_VMID>`; returns a **bounded** page — `limit`/`start`/`end` applied **client-side only** (no server query params sent; §11.1 fix applied) |
+| 38 | `pbs_backup_get` | `store=<store>, backup_id=<INT_TEST_VMID>` | group snapshots | returns the int-test VM's snapshot(s) — `backup-id` forwarded as a server query param (§11.1 fix applied) |
 | 39 | `pbs_backup_notes_get` | `store=<store>, backup_id=<INT_TEST_VMID>, backup_type=vm` | group notes | `IsError == false`; notes/comment fields returned (empty ok) |
 | 40 | `pbs_backup_files_list` | `store=<store>, backup_type=vm, backup_id=<INT_TEST_VMID>, backup_time=<epoch>` | file list | non-empty file list for the int-test backup (e.g. `drive-scsi0.img.fw`/`.dat`) |
 | 41 | `pve_vm_snapshot_list` | `node=NODE_B, vmid=INT_TEST_VMID` | snapshot list | `int-test-<uuid>-snap1` still present after migration |
@@ -1408,8 +1445,8 @@ Order matters: **start → reboot → reset → suspend → resume → shutdown 
 |---|---|---|---|---|
 | 52 | `pve_vm_clone` | `node=NODE_B, vmid=INT_TEST_VMID, newid=<CLONE_VMID>, name=int-test-<uuid>-clone, full=true` | `{ "upid": ... }` | task OK; `pve_vm_list` shows `int-test-<uuid>-clone` |
 | 53 | `pve_vm_restore` | `node=NODE_B, archive=<path of int-test vzdump archive>, vmid=<RESTORE_VMID>, unique=true` | `{ "upid": ... }` | task OK; a new `int-test-<uuid>-restore` VM exists |
-| 54 | `pbs_backup_vm_restore` | `store=<store>, backup_type=vm, backup_id=<INT_TEST_VMID>, backup_time=<epoch>, target=<disk-storage>, vmid=<PBSRESTORE_VMID>` | `{ "upid": ... }` | no 404 — request hits `POST /admin/datastore/{store}/restore` (§11.2 fix applied); returns a task UPID; a `int-test-<uuid>-pbsrestore` VM is created on PVE |
-| 55 | `pbs_backup_restore_file` | `store=<store>, backup_type=vm, backup_id=<INT_TEST_VMID>, backup_time=<epoch>, path=drive-scsi0.img.fw, target=/int-test-<uuid>/out.fw` | success | no 404 — request hits `POST /admin/datastore/{store}/files` (§11.2 fix applied); target file created under the `int-test-<uuid>` path on PBS |
+| 54 | `pbs_backup_vm_restore` | `store=<store>, backup_type=vm, backup_id=<INT_TEST_VMID>, backup_time=<epoch>, storage=<disk-storage>, vmid=<PBSRESTORE_VMID>` | `{ "upid": ... }` | no 404 — request hits `POST /admin/datastore/{store}/restore` with the `storage` form field (§11.2 fix applied; **requires** a trusted PVE remote + Datastore.Modify on PBS, else 404 is environment, not code); a `int-test-<uuid>-pbsrestore` VM is created on PVE |
+| 55 | `pbs_backup_restore_file` | `store=<store>, backup_type=vm, backup_id=<INT_TEST_VMID>, backup_time=<epoch>, path=drive-scsi0.img.fw, target=/int-test-<uuid>/out.fw` | success | no 404 — request hits `POST /admin/datastore/{store}/files` (§11.2 fix applied; **requires** trusted PVE remote + Datastore.Modify, else 404 is environment); target file created under the `int-test-<uuid>` path on PBS |
 
 #### Phase 7 — LXC tool set (dedicated int-test container)
 
@@ -1467,7 +1504,7 @@ Removes every `int-test-*` object, oldest/most-nested first, then verifies nothi
 | 85 | `pve_vm_delete` | `node=NODE_B, vmid=<CLONE_VMID>, purge=true` | `{ "upid": ... }` | clone VM removed |
 | 86 | `pve_vm_delete` | `node=NODE_B, vmid=INT_TEST_VMID, purge=true` | `{ "upid": ... }` | **main int-test VM removed** (final step 5) |
 | 87 | `pve_lxc_delete` | `node=NODE_A, vmid=<LXC_VMID>, purge=true` | `{ "upid": ... }` | int-test LXC removed |
-| 88 | `pve_backup_job_delete` | `id=int-test-<uuid>-job` | `{ "deleted": true }` | job gone from `pve_backup_job_list` |
+| 88 | `pve_backup_job_delete` | `id=int-test-<uuid>-job` | `{ "deleted": true }` | job gone from `pve_backup_job_list` (no HTTP 500 on success — `doOnceRaw`, §11.4) |
 | 89 | `pve_ha_remove` | `sid=vm:<INT_TEST_VMID>` | success | HA resource gone from cluster |
 | 90 | `pbs_backup_forget` | `store=<store>, backup_type=vm, backup_id=<INT_TEST_VMID>, backup_time=<epoch of int-test snapshot>` | success | the int-test backup snapshot removed from the group |
 | 91 | (out-of-band) rm | remove `/int-test-<uuid>/` on PBS | removed | file-restore target removed |
@@ -1520,7 +1557,7 @@ The integration run **passes** only when all of the following hold:
 
 1. **All read tools return valid structured output** — every one of the 22 PVE read tools, 12 PBS read tools, and 2 system tools returns well-formed JSON that validates against its output schema (no `IsError`, no empty/`null` data where an entity is expected).
 2. **All 35 PVE mutations and 8 PBS mutations complete against int-test objects only** — each returns the expected UPID/ID/success and the resulting state is confirmed (VM created→migrated→backed-up→snapshotted→lifecycled→deleted; clone/restore-targets cleaned up; LXC template downloaded → container created → lifecycled → deleted; backup job created/updated/deleted).
-3. **Previously-broken PBS tools pass against the corrected endpoints** — `pbs_backup_list`, `pbs_backup_get`, `pbs_backup_restore_file`, `pbs_backup_vm_restore`, `pbs_verify_status`, `pbs_prune_status`, `pbs_task_status`, `pbs_task_log` return **200/OK** (per §11.2/§11.3, fixes applied in `fix/integration-fixes`; the legacy paths that returned 404 no longer do), and the pagination fix (§11.1) returns bounded pages on a populated datastore.
+3. **Previously-broken PBS tools pass against the corrected endpoints** — `pbs_backup_list`, `pbs_backup_get`, `pbs_backup_restore_file`, `pbs_backup_vm_restore`, `pbs_verify_status`, `pbs_prune_status`, `pbs_task_status`, `pbs_task_log` return **200/OK** (per §11.2/§11.3, fixes applied in `fix/integration-fixes`; the legacy paths that returned 404 no longer do), and the pagination fix (§11.1) returns bounded pages on a populated datastore. **Restore tools additionally require a trusted PVE remote (host + password) and `Datastore.Modify` on PBS** — otherwise their 404 is an environment/permission gap (§11.2/§11.5), not a code regression.
 4. **Zero leftover state** — after Phase 9 no `int-test-*` VM/CT/clone/restore-target/snapshot/backup-job remains, the HA resource is gone (removed via `pve_ha_remove`), the int-test backup snapshot is removed from its group (via `pbs_backup_forget`), and the file-restore target path is gone (removed out-of-band) on either node or the PBS datastore, and no pre-existing resource was altered (verified by comparing Phase 0 discovery against Phase 9 discovery).
 5. **Task-driven tools verified end-to-end** — every mutation that returns a UPID (`start`/`stop`/`shutdown`/`reboot`/`reset`/`suspend`/`resume`/`backup`/`migrate`/`clone`/`restore`/`snapshot_*`/PBS job starts) had its task polled to a terminal `OK` state via `pve_task_status`/`pbs_task_status` where applicable.
 

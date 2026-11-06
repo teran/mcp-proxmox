@@ -142,7 +142,8 @@ func TestGateway_Backup_Success(t *testing.T) {
 			body: `{"data":[{"backup-id":"vm/100/2024","backup-time":1704067200,` +
 				`"backup-type":"vm","owner":"root@pam","size":1024},{"backup-id":"ct/200/2024",` +
 				`"backup-time":1704067300,"backup-type":"ct","size":2048}]}`,
-			path: "/api2/json/admin/datastore/backup/snapshots",
+			path:  "/api2/json/admin/datastore/backup/snapshots",
+			query: "backup-id=vm%2F100%2F2024",
 			call: func(g *Gateway) error {
 				bs, err := g.GetBackup(context.Background(), "backup", "vm/100/2024", port.PBSBackupListOptions{})
 				if assert.NoError(t, err) {

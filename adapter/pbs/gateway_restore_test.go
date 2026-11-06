@@ -54,7 +54,11 @@ func TestGateway_RestoreVMBackup_Success(t *testing.T) {
 	assert.Equal(t, "vm", rec.form.Get("backup-type"))
 	assert.Equal(t, "100", rec.form.Get("backup-id"))
 	assert.Equal(t, "1700000000", rec.form.Get("backup-time"))
-	assert.Equal(t, "local", rec.form.Get("target"))
+	// The PBS restore endpoint expects the destination datastore under the
+	// `storage` form key, not `target` (the model field stays Target, but the
+	// wire parameter must be `storage`).
+	assert.Equal(t, "local", rec.form.Get("storage"))
+	assert.Empty(t, rec.form.Get("target"), "the wire parameter must be `storage`, not `target`")
 	assert.Equal(t, "next", rec.form.Get("vmid"))
 	assert.Equal(t, "pve1", rec.form.Get("host"))
 	assert.Equal(t, "secret", rec.form.Get("password"))

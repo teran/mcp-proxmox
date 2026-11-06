@@ -443,18 +443,41 @@ func (g *Gateway) CreateBackupJob(ctx context.Context, req model.CreateBackupJob
 }
 
 // backupJobIDFromData extracts the backup-job ID from a create/update response
-// `data`. PVE returns the job ID as a JSON string, or nothing at all (empty or
-// `{}` data) on success.
+// `data`. PVE returns the job ID in several shapes — a bare JSON string
+// (`"backup-100"`), an object with an `id` key (`{"id":"backup-100"}`), an
+// object wrapping a nested `data.id` (`{"data":{"id":"x"}}`), or nothing at all
+// (`null`, `{}`, empty). It resolves the ID from each form, returning "" when
+// none is present (a success with no echoed ID is not an error).
 func backupJobIDFromData(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
 	}
+
+	// Form 1: bare JSON string.
 	var id string
-	if err := json.Unmarshal(raw, &id); err != nil {
-		return ""
+	if err := json.Unmarshal(raw, &id); err == nil && id != "" {
+		return id
 	}
 
-	return id
+	// Form 2: object with an `id` key.
+	var obj struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &obj); err == nil && obj.ID != "" {
+		return obj.ID
+	}
+
+	// Form 3: nested envelope {"data":{"id":"x"}}.
+	var nested struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &nested); err == nil {
+		return nested.Data.ID
+	}
+
+	return ""
 }
 
 // UpdateBackupJob updates a vzdump backup job via PUT /cluster/backup/{id}. The
@@ -472,11 +495,14 @@ func (g *Gateway) UpdateBackupJob(ctx context.Context, id string, req model.Crea
 }
 
 // DeleteBackupJob deletes a vzdump backup job via DELETE /cluster/backup/{id}.
-// id is URL-escaped so it is safe inside the path. Mutations are never retried:
-// use the single-attempt doOnce path (doMutation sends a form body, which this
-// DELETE does not use).
+// id is URL-escaped so it is safe inside the path. Mutations are never retried.
+// PVE may reply to a successful delete with an empty 2xx body (no JSON
+// envelope), so the raw body path is used: any 2xx is a success and the body is
+// not decoded.
 func (g *Gateway) DeleteBackupJob(ctx context.Context, id string) error {
-	return g.doOnce(ctx, http.MethodDelete, "/cluster/backup/"+url.PathEscape(id), nil, nil)
+	_, err := g.doOnceRaw(ctx, http.MethodDelete, "/cluster/backup/"+url.PathEscape(id), nil)
+
+	return err
 }
 
 // backupJobForm builds the form-encoded mutation body for create/update of a
@@ -582,6 +608,11 @@ func (g *Gateway) GetLXCConfig(ctx context.Context, node string, vmid int) (*mod
 	if err := g.do(ctx, http.MethodGet, lxcPath(node, vmid)+"/config", nil, &out); err != nil {
 		return nil, err
 	}
+
+	// PVE does not echo the VMID in the container config response body (it is
+	// carried only in the request path), so populate it from the argument to
+	// make the result self-describing — mirroring GetVMConfig.
+	out.VMID = vmid
 
 	return &out, nil
 }
