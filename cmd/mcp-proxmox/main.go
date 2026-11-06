@@ -32,7 +32,7 @@ import (
 )
 
 // Build metadata. These are injected at build time via ldflags (see
-// .goreleaser.yml / .forgejo/workflows/ci.yml):
+// .goreleaser.yml / .github/workflows/ci.yml and .github/workflows/release.yml):
 //
 //	-X main.appName=... -X main.appVersion=... -X main.appCommitHash=... -X main.appTimestamp=...
 //
