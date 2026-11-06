@@ -53,6 +53,53 @@ func TestGateway_CreateBackupJob_Success(t *testing.T) {
 	assert.Equal(t, "pve1", rec.form.Get("node"))
 }
 
+// TestGateway_CreateBackupJob_ExplicitIDEmptyResponse is the regression test for
+// Defect 1 `pve_backup_job_create`. PVE does NOT echo an explicitly-provided job
+// ID back in the POST /cluster/backup response body — it replies with empty data
+// (e.g. `{"data":null}` or `{"data":""}`) while the job is still created.
+// CreateBackupJob must return the caller-supplied ID verbatim rather than
+// extracting "" from the empty response data. Before the fix this returned ""
+// even with ID: "backup-200".
+func TestGateway_CreateBackupJob_ExplicitIDEmptyResponse(t *testing.T) {
+	for _, body := range []string{`{"data":null}`, `{"data":""}`} {
+		t.Run(strings.ReplaceAll(body, "\"", "q"), func(t *testing.T) {
+			rec := &reqCapture{}
+			srv := mockServer(t, 200, body, rec)
+			g, _ := newTestGateway(t, srv)
+
+			id, err := g.CreateBackupJob(context.Background(), model.CreateBackupJobRequest{
+				ID: "backup-200", Storage: "local", Schedule: "00 2 * * 1",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, "backup-200", id, "explicit ID must be returned verbatim even with empty data in the PVE response")
+
+			assert.Equal(t, http.MethodPost, rec.method)
+			assert.Equal(t, "/api2/json/cluster/backup", rec.path)
+			assert.Equal(t, "backup-200", rec.form.Get("id"))
+		})
+	}
+}
+
+// TestGateway_CreateBackupJob_NoIDFallsBackToResponse verifies that when the
+// caller supplies no ID (ID=""), CreateBackupJob falls back to extracting the job
+// ID from the response `data` via backupJobIDFromData. A real PVE echoes the
+// generated ID as a bare JSON string in `data`.
+func TestGateway_CreateBackupJob_NoIDFallsBackToResponse(t *testing.T) {
+	rec := &reqCapture{}
+	srv := mockServer(t, 200, `{"data":"backup-300"}`, rec)
+	g, _ := newTestGateway(t, srv)
+
+	id, err := g.CreateBackupJob(context.Background(), model.CreateBackupJobRequest{
+		Storage: "local", Schedule: "00 2 * * 1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "backup-300", id, "ID must fall back to the value echoed in the response data")
+
+	assert.Equal(t, http.MethodPost, rec.method)
+	assert.Equal(t, "/api2/json/cluster/backup", rec.path)
+	assert.Empty(t, rec.form.Get("id"))
+}
+
 // TestGateway_CreateBackupJob_Disabled verifies an explicit Enabled=false is
 // sent as enabled=0 (a non-nil pointer overrides the default-kept behaviour).
 func TestGateway_CreateBackupJob_Disabled(t *testing.T) {

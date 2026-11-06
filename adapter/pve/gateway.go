@@ -439,6 +439,14 @@ func (g *Gateway) CreateBackupJob(ctx context.Context, req model.CreateBackupJob
 		return "", err
 	}
 
+	// PVE does not echo an explicitly-provided job ID back in the response body
+	// (the POST /cluster/backup create is asynchronous and returns empty data).
+	// The caller already supplied the ID, so prefer it; otherwise fall back to
+	// whatever the response echoes.
+	if req.ID != "" {
+		return req.ID, nil
+	}
+
 	return backupJobIDFromData(raw), nil
 }
 
