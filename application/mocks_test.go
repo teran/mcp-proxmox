@@ -570,8 +570,8 @@ type mockPBSGateway struct {
 	listDatastores     func(ctx context.Context) ([]model.Datastore, error)
 	getDatastoreStats  func(ctx context.Context, store string) (*model.DatastoreStatus, error)
 	getDatastoreConfig func(ctx context.Context, store string) (*model.DatastoreConfig, error)
-	listBackups        func(ctx context.Context, store string) ([]model.Backup, error)
-	getBackup          func(ctx context.Context, store, backupID string) ([]model.Backup, error)
+	listBackups        func(ctx context.Context, store string, opts port.PBSBackupListOptions) ([]model.Backup, error)
+	getBackup          func(ctx context.Context, store, backupID string, opts port.PBSBackupListOptions) ([]model.Backup, error)
 	getBackupNotes     func(ctx context.Context, store, backupID, backupType string) (*model.BackupNotes, error)
 	getVerifyStatus    func(ctx context.Context, upid string) (*model.PBSTask, error)
 	getPruneStatus     func(ctx context.Context, upid string) (*model.PBSTask, error)
@@ -591,9 +591,11 @@ type mockPBSGateway struct {
 	getTaskLog    func(ctx context.Context, upid string, limit int) ([]model.TaskLogEntry, error)
 
 	// Restore (gated).
-	restoreFile     func(ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest) error
+	restoreFile func(
+		ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSFileRestoreRequest,
+	) error
 	restoreVMBackup func(
-		ctx context.Context, store, backupType, backupID, snapshot string,
+		ctx context.Context, store, backupType, backupID string, backupTime int64,
 		req model.PBSVMRestoreRequest,
 	) (string, error)
 }
@@ -622,17 +624,19 @@ func (m *mockPBSGateway) GetDatastoreConfig(ctx context.Context, store string) (
 	return nil, errMockNotStubbed
 }
 
-func (m *mockPBSGateway) ListBackups(ctx context.Context, store string) ([]model.Backup, error) {
+func (m *mockPBSGateway) ListBackups(ctx context.Context, store string, opts port.PBSBackupListOptions) ([]model.Backup, error) {
 	if m.listBackups != nil {
-		return m.listBackups(ctx, store)
+		return m.listBackups(ctx, store, opts)
 	}
 
 	return nil, errMockNotStubbed
 }
 
-func (m *mockPBSGateway) GetBackup(ctx context.Context, store, backupID string) ([]model.Backup, error) {
+func (m *mockPBSGateway) GetBackup(
+	ctx context.Context, store, backupID string, opts port.PBSBackupListOptions,
+) ([]model.Backup, error) {
 	if m.getBackup != nil {
-		return m.getBackup(ctx, store, backupID)
+		return m.getBackup(ctx, store, backupID, opts)
 	}
 
 	return nil, errMockNotStubbed
@@ -747,20 +751,20 @@ func (m *mockPBSGateway) GetTaskLog(ctx context.Context, upid string, limit int)
 }
 
 func (m *mockPBSGateway) RestoreFile(
-	ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSFileRestoreRequest,
+	ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSFileRestoreRequest,
 ) error {
 	if m.restoreFile != nil {
-		return m.restoreFile(ctx, store, backupType, backupID, snapshot, req)
+		return m.restoreFile(ctx, store, backupType, backupID, backupTime, req)
 	}
 
 	return nil
 }
 
 func (m *mockPBSGateway) RestoreVMBackup(
-	ctx context.Context, store, backupType, backupID, snapshot string, req model.PBSVMRestoreRequest,
+	ctx context.Context, store, backupType, backupID string, backupTime int64, req model.PBSVMRestoreRequest,
 ) (string, error) {
 	if m.restoreVMBackup != nil {
-		return m.restoreVMBackup(ctx, store, backupType, backupID, snapshot, req)
+		return m.restoreVMBackup(ctx, store, backupType, backupID, backupTime, req)
 	}
 
 	return "", nil

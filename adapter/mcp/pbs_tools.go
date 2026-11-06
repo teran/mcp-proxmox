@@ -7,17 +7,31 @@ import (
 
 	"github.com/teran/mcp-proxmox/application"
 	"github.com/teran/mcp-proxmox/domain/model"
+	"github.com/teran/mcp-proxmox/domain/port"
 )
 
-// storeIn identifies a datastore (pbs_datastore_status / pbs_backup_list).
+// storeIn identifies a datastore (pbs_datastore_status).
 type storeIn struct {
 	Store string `json:"store" jsonschema:"PBS datastore name"`
 }
 
-// backupIn identifies a backup group in a datastore (pbs_backup_get).
-type backupIn struct {
+// pbsBackupListIn is the input of pbs_backup_list: a datastore plus optional
+// pagination (limit/start/end).
+type pbsBackupListIn struct {
+	Store string `json:"store" jsonschema:"PBS datastore name"`
+	Limit int    `json:"limit,omitempty" jsonschema:"Maximum number of snapshots to return"`
+	Start int64  `json:"start,omitempty" jsonschema:"Only snapshots at/after this Unix epoch (seconds)"`
+	End   int64  `json:"end,omitempty" jsonschema:"Only snapshots at/before this Unix epoch (seconds)"`
+}
+
+// pbsBackupGetIn is the input of pbs_backup_get: a datastore, a backup
+// ID / group ID, plus optional pagination (limit/start/end).
+type pbsBackupGetIn struct {
 	Store    string `json:"store" jsonschema:"PBS datastore name"`
 	BackupID string `json:"backup_id" jsonschema:"Backup ID / group ID (e.g. a VMID)"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"Maximum number of snapshots to return"`
+	Start    int64  `json:"start,omitempty" jsonschema:"Only snapshots at/after this Unix epoch (seconds)"`
+	End      int64  `json:"end,omitempty" jsonschema:"Only snapshots at/before this Unix epoch (seconds)"`
 }
 
 // backupNotesIn identifies a backup group for notes lookup (pbs_backup_notes_get).
@@ -82,7 +96,7 @@ type pbsFileRestoreIn struct {
 	Store      string `json:"store" jsonschema:"PBS datastore name"`
 	BackupType string `json:"backup_type" jsonschema:"Backup type: vm | ct | host"`
 	BackupID   string `json:"backup_id" jsonschema:"Backup ID / group ID (e.g. a VMID)"`
-	Snapshot   string `json:"snapshot" jsonschema:"Backup snapshot identifier (ISO-8601 timestamp from the backup listing)"`
+	BackupTime int64  `json:"backup_time" jsonschema:"Backup snapshot Unix epoch (seconds) from the backup listing"`
 	Path       string `json:"path" jsonschema:"Source file path within the backup to restore"`
 	Target     string `json:"target" jsonschema:"Destination path on the PBS filesystem"`
 }
@@ -92,7 +106,7 @@ type pbsVMRestoreIn struct {
 	Store       string `json:"store" jsonschema:"PBS datastore name"`
 	BackupType  string `json:"backup_type" jsonschema:"Backup type: vm | ct | host"`
 	BackupID    string `json:"backup_id" jsonschema:"Backup ID / group ID (e.g. a VMID)"`
-	Snapshot    string `json:"snapshot" jsonschema:"Backup snapshot identifier (ISO-8601 timestamp from the backup listing)"`
+	BackupTime  int64  `json:"backup_time" jsonschema:"Backup snapshot Unix epoch (seconds) from the backup listing"`
 	Target      string `json:"target" jsonschema:"PVE storage to restore into"`
 	VMID        string `json:"vmid,omitempty" jsonschema:"Target VM ID, or 'next' to let PVE pick the next free ID"`
 	Host        string `json:"host,omitempty" jsonschema:"PVE node hostname/IP to restore to"`
@@ -145,15 +159,25 @@ func registerPBSQueryTools0(s *mcpSDK.Server, app *application.App, log toolLogg
 		// --- backups / snapshots & notes ---
 		roTool(s, "pbs_backup_list", "List PBS backup snapshots",
 			"List the backup snapshots in a PBS datastore.",
-			"Provide the datastore name. Returns all backup snapshots in it. Read-only and idempotent.",
-			log, func(ctx context.Context, in storeIn) (any, error) {
-				return app.PBS.ListBackups(ctx, in.Store)
+			"Provide the datastore name, optionally narrowed by limit/start/end. Returns all backup"+
+				" snapshots in it. Read-only and idempotent.",
+			log, func(ctx context.Context, in pbsBackupListIn) (any, error) {
+				return app.PBS.ListBackups(ctx, in.Store, port.PBSBackupListOptions{
+					Limit: in.Limit,
+					Start: in.Start,
+					End:   in.End,
+				})
 			}),
 		roTool(s, "pbs_backup_get", "Get PBS backup group",
 			"Get all backup snapshots in a PBS datastore for a given backup ID / group ID (e.g. a VMID).",
-			"Provide the datastore name and a backup ID (group ID, e.g. a VMID). Returns the matching snapshots. Read-only.",
-			log, func(ctx context.Context, in backupIn) (any, error) {
-				return app.PBS.GetBackup(ctx, in.Store, in.BackupID)
+			"Provide the datastore name and a backup ID (group ID, e.g. a VMID), optionally narrowed by"+
+				" limit/start/end. Returns the matching snapshots. Read-only.",
+			log, func(ctx context.Context, in pbsBackupGetIn) (any, error) {
+				return app.PBS.GetBackup(ctx, in.Store, in.BackupID, port.PBSBackupListOptions{
+					Limit: in.Limit,
+					Start: in.Start,
+					End:   in.End,
+				})
 			}),
 		roTool(s, "pbs_backup_notes_get", "Get PBS backup group notes",
 			"Get the notes and comment of a PBS backup group (requires backup ID and backup type vm|ct|host).",
@@ -306,24 +330,25 @@ func registerPBSMutationTools1(s *mcpSDK.Server, app *application.App, log toolL
 			}),
 		mutTool(s, "pbs_backup_restore_file", "Restore single file from PBS backup",
 			"Restore a single file out of a PBS backup snapshot to a target path on the PBS filesystem.",
-			"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier,"+
-				"the source path inside the backup and the target path on the PBS filesystem. Destructive:"+
-				"overwrites the target path on the PBS filesystem. Returns no task UPID. Not idempotent.",
+			"Provide the datastore name, backup type (vm|ct|host), backup ID, the backup_time (the"+
+				" snapshot's Unix epoch in seconds from the backup listing), the source path inside the"+
+				" backup and the target path on the PBS filesystem. Destructive: overwrites the target path"+
+				" on the PBS filesystem. Returns no task UPID. Not idempotent.",
 			log, false, func(ctx context.Context, in pbsFileRestoreIn) (any, error) {
-				return nil, app.PBS.RestoreFile(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, model.PBSFileRestoreRequest{
+				return nil, app.PBS.RestoreFile(ctx, in.Store, in.BackupType, in.BackupID, in.BackupTime, model.PBSFileRestoreRequest{
 					Path:   in.Path,
 					Target: in.Target,
 				})
 			}, true),
 		mutTool(s, "pbs_backup_vm_restore", "Restore PBS VM backup",
 			"Restore a PBS VM backup snapshot into a PVE datastore.",
-			"Provide the datastore name, backup type (vm|ct|host), backup ID, the snapshot identifier,"+
-				"the target PVE storage, and optionally a VM ID (or 'next'), host, password, fingerprint,"+
-				"pool, verbose and reload. Destructive: restores/overwrites VM state on the target PVE"+
-				"storage. Returns the task UPID to poll with pbs_task_status. Not idempotent: each call"+
-				"starts a new restore.",
+			"Provide the datastore name, backup type (vm|ct|host), backup ID, the backup_time (the"+
+				" snapshot's Unix epoch in seconds from the backup listing), the target PVE storage, and"+
+				" optionally a VM ID (or 'next'), host, password, fingerprint, pool, verbose and reload."+
+				" Destructive: restores/overwrites VM state on the target PVE storage. Returns the task UPID"+
+				" to poll with pbs_task_status. Not idempotent: each call starts a new restore.",
 			log, false, func(ctx context.Context, in pbsVMRestoreIn) (any, error) {
-				upid, err := app.PBS.RestoreVMBackup(ctx, in.Store, in.BackupType, in.BackupID, in.Snapshot, model.PBSVMRestoreRequest{
+				upid, err := app.PBS.RestoreVMBackup(ctx, in.Store, in.BackupType, in.BackupID, in.BackupTime, model.PBSVMRestoreRequest{
 					Target:      in.Target,
 					VMID:        in.VMID,
 					Host:        in.Host,

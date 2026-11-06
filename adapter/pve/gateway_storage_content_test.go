@@ -148,19 +148,34 @@ func TestGateway_DownloadURL_SuccessUpidForm(t *testing.T) {
 	assert.Equal(t, "UPID:pve:download-url:...2", upid)
 }
 
-// TestGateway_DownloadURL_VerifyCertificatesOmitted verifies verify-certificates
-// is omitted from the form when false.
-func TestGateway_DownloadURL_VerifyCertificatesOmitted(t *testing.T) {
-	rec := &reqCapture{}
-	srv := mockServer(t, 200, `{"data":"UPID:..."}`, rec)
-	g, _ := newTestGateway(t, srv)
+// TestGateway_DownloadURL_VerifyCertificatesAlwaysSent verifies
+// verify-certificates is ALWAYS sent in the form: "1" when true and "0" when
+// false (an explicit false must reach PVE rather than being omitted so the
+// caller can override PVE's default).
+func TestGateway_DownloadURL_VerifyCertificatesAlwaysSent(t *testing.T) {
+	cases := []struct {
+		name string
+		val  bool
+		want string
+	}{
+		{"true sends 1", true, "1"},
+		{"false sends 0", false, "0"},
+	}
 
-	_, err := g.DownloadURL(context.Background(), "pve1", "local", model.StorageDownloadURLRequest{
-		Content: "iso", Filename: "a.iso", URL: "https://example.com/a.iso",
-		VerifyCertificates: false,
-	})
-	require.NoError(t, err)
-	assert.Empty(t, rec.form.Get("verify-certificates"))
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := &reqCapture{}
+			srv := mockServer(t, 200, `{"data":"UPID:..."}`, rec)
+			g, _ := newTestGateway(t, srv)
+
+			_, err := g.DownloadURL(context.Background(), "pve1", "local", model.StorageDownloadURLRequest{
+				Content: "iso", Filename: "a.iso", URL: "https://example.com/a.iso",
+				VerifyCertificates: tt.val,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, rec.form.Get("verify-certificates"))
+		})
+	}
 }
 
 // TestGateway_DownloadURL_Unauthorized verifies 401 maps to ErrUnauthorized

@@ -70,11 +70,11 @@ var jsonRoundTripCases = []struct {
 			VMID: 100, Name: "web", Cores: 2, Sockets: 1, Memory: 1024, Balloon: 512,
 			OSType: "l26", Boot: "order=scsi0", Template: 0, Agent: "enabled",
 			Networks: map[string]string{"net0": "virtio=AA:BB:CC"}, Disks: map[string]string{"scsi0": "local:32"},
-			Storage: map[string]string{"ide2": "local:iso.iso"}, Tags: "web",
+			Storage: map[string]string{"ide2": "local:iso.iso"}, Tags: "web", Description: "prod web",
 		},
 		want: `{"vmid":100,"name":"web","cores":2,"sockets":1,"memory":1024,"balloon":512,"ostype":"l26",` +
-			`"boot":"order=scsi0","agent":"enabled","net":{"net0":"virtio=AA:BB:CC"},"scsi":{"scsi0":"local:32"},` +
-			`"ide":{"ide2":"local:iso.iso"},"tags":"web"}`,
+			`"boot":"order=scsi0","onboot":0,"agent":"enabled","net0":"virtio=AA:BB:CC",` +
+			`"scsi0":"local:32","ide2":"local:iso.iso","tags":"web","description":"prod web"}`,
 	},
 	{
 		name: "vm-status",

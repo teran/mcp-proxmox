@@ -120,6 +120,41 @@ func TestGateway_GetVMConfig_VMIDFromPath(t *testing.T) {
 	assert.Equal(t, "PVEAPIToken=user@pam!tokenid=secret", rec.auth)
 }
 
+// TestGateway_GetLXCConfig_VMIDFromPath is the RED reproducer for the
+// `pve_lxc_get` vmid defect: a real PVE GET /nodes/{node}/lxc/{vmid}/config
+// response does NOT echo `vmid` (it is carried only in the request path), so the
+// gateway must populate LXCConfig.VMID from the request argument — exactly as
+// GetVMConfig already does. Today GetLXCConfig returns VMID 0. When the body
+// DOES carry a vmid, the request argument must win (the response is always about
+// the requested container).
+func TestGateway_GetLXCConfig_VMIDFromPath(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"no vmid in body", `{"data":{"hostname":"ct1","cores":2,"memory":512}}`},
+		{"vmid in body overridden", `{"data":{"vmid":999,"hostname":"ct1","cores":2,"memory":512}}`},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := &reqCapture{}
+			srv := mockServer(t, 200, tt.body, rec)
+			g, _ := newTestGateway(t, srv)
+
+			cfg, err := g.GetLXCConfig(context.Background(), "pve1", 200)
+			require.NoError(t, err)
+			assert.Equal(t, 200, cfg.VMID,
+				"vmid must be populated from the request path argument (200), not the (possibly absent) body value")
+			assert.Equal(t, "ct1", cfg.Hostname)
+
+			assert.Equal(t, http.MethodGet, rec.method)
+			assert.Equal(t, "/api2/json/nodes/pve1/lxc/200/config", rec.path)
+			assert.Equal(t, "PVEAPIToken=user@pam!tokenid=secret", rec.auth)
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Defect 5 — pve_backup_job_create returns "pve: empty data (op=data)" even though
 // the job IS created. PVE's create-vzdump-job returns empty / `{}` data on

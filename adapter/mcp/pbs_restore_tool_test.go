@@ -22,11 +22,11 @@ func TestPBSRestoreToolSuccess(t *testing.T) {
 	}{
 		{"pbs_backup_restore_file", map[string]any{
 			"store": "backup", "backup_type": "vm", "backup_id": "100",
-			"snapshot": "snap1", "path": "/etc/passwd", "target": "/restore/passwd",
+			"backup_time": 1700000000, "path": "/etc/passwd", "target": "/restore/passwd",
 		}, false}, // RestoreFile returns no output (matches pve_vm_resize convention)
 		{"pbs_backup_vm_restore", map[string]any{
 			"store": "backup", "backup_type": "vm", "backup_id": "100",
-			"snapshot": "snap1", "target": "local", "vmid": "next", "verbose": true,
+			"backup_time": 1700000000, "target": "local", "vmid": "next", "verbose": true,
 		}, true},
 	}
 
@@ -53,11 +53,11 @@ func TestPBSRestoreToolErrorPropagation(t *testing.T) {
 	}{
 		{"pbs_backup_restore_file", map[string]any{
 			"store": "backup", "backup_type": "vm", "backup_id": "100",
-			"snapshot": "snap1", "path": "/a", "target": "/b",
+			"backup_time": 1700000000, "path": "/a", "target": "/b",
 		}},
 		{"pbs_backup_vm_restore", map[string]any{
 			"store": "backup", "backup_type": "vm", "backup_id": "100",
-			"snapshot": "snap1", "target": "local",
+			"backup_time": 1700000000, "target": "local",
 		}},
 	}
 
