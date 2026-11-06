@@ -7,10 +7,13 @@ so a developer and a QA engineer can implement and test in parallel without
 re-deriving the design. Where the locked grill decisions refine `SPEC.md`, the
 grill decisions win (and `SPEC.md` has been updated to match).
 
-> **Milestone scope.** This blueprint fixes the **read-only (query) surface +
-> system tools (`ping`/`status`)** as the vertical slice. All mutations are gated
-> off (gate UX TBD). A developer implements the RO tools and gateway bodies; QA
-> writes the hermetic tests. Both work against the interfaces and layouts below.
+> **Scope.** This blueprint fixes the full tool surface: the **read-only (query)
+> surface + system tools (`ping`/`status`)** are always registered, while the
+> **mutation surface** (start/stop/create/delete/restore/prune/gc/verify/… ) is
+> implemented on the gateway interfaces and registered only when the
+> `ENABLE_MUTATIONS` gate is on (SPEC.md §2.5; default off). A developer
+> implements the tools and gateway bodies; QA writes the hermetic tests. Both
+> work against the interfaces and layouts below.
 
 ---
 
@@ -27,8 +30,8 @@ mcp-proxmox/
 │                                #   CtxLogger, sentinel errors, WithToken helpers
 ├── application/
 │   ├── app.go                   # App facade + WithPVE/WithPBS/New options
-│   ├── pve_service.go           # PVE use cases (read-only)
-│   ├── pbs_service.go           # PBS use cases (read-only)
+│   ├── pve_service.go           # PVE use cases (read + mutation)
+│   ├── pbs_service.go           # PBS use cases (read + mutation)
 │   └── system_service.go        # ping, status
 ├── adapter/
 │   ├── config/                  # envconfig loader + Config struct
@@ -86,7 +89,7 @@ Mirrors `mcp-regcloud`: `AppLogger` has `Debugf/Infof/Warnf/Errorf`. The optiona
 `session_id`/`request_id` via `logging.WithSession`. `port.NewCtxLogger(l)`
 wraps any `AppLogger` and falls back to the plain logger for test dummies.
 
-### 2.3 `port.PVEGateway` (read-only surface)
+### 2.3 `port.PVEGateway` (read-only + mutation surface)
 ```go
 type PVEGateway interface {
     // Nodes & cluster
@@ -116,10 +119,49 @@ type PVEGateway interface {
     GetTaskStatus(ctx, node, upid) (*model.TaskStatus, error)
     GetTaskLog(ctx, node, upid, limit) ([]model.TaskLogEntry, error)
     GetPVEVersion(ctx) (*model.PVEVersion, error)
+
+    // Mutations (gated by EnableMutations, SPEC.md §2.5). These are never
+    // retried. Lifecycle ops run as PVE tasks, so they return a Task whose UPID
+    // can be polled with GetTaskStatus / GetTaskLog.
+    CreateVM(ctx, node, req model.CreateVMRequest) (int, error)
+    CreateLXC(ctx, node, req model.CreateLXCRequest) (int, error)
+    DownloadURL(ctx, node, storage, req model.StorageDownloadURLRequest) (string, error)
+    ResizeVM(ctx, node, vmid, req model.ResizeVMRequest) error
+    MigrateVM(ctx, node, vmid, req model.MigrateVMRequest) error
+    AddHAResource(ctx, req model.HAResourceRequest) error
+    RemoveHAResource(ctx, sid) error
+    StartVMBackup(ctx, node, req model.VMBackupRequest) (*model.Task, error)
+    CreateBackupJob(ctx, req model.CreateBackupJobRequest) (string, error)
+    UpdateBackupJob(ctx, id, req model.CreateBackupJobRequest) (string, error)
+    DeleteBackupJob(ctx, id) error
+    StartVM(ctx, node, vmid) (*model.Task, error)
+    StopVM(ctx, node, vmid, skiplock) (*model.Task, error)
+    ShutdownVM(ctx, node, vmid, forceStop, timeout) (*model.Task, error)
+    RebootVM(ctx, node, vmid, timeout) (*model.Task, error)
+    ResetVM(ctx, node, vmid) (*model.Task, error)
+    SuspendVM(ctx, node, vmid, todisk) (*model.Task, error)
+    ResumeVM(ctx, node, vmid) (*model.Task, error)
+    DeleteVM(ctx, node, vmid, purge, destroyUnreferencedDisks) (*model.Task, error)
+    SetVMConfig(ctx, node, vmid, req model.SetVMConfigRequest) error
+    SetLXCConfig(ctx, node, vmid, req model.SetLXCConfigRequest) error
+    CloneVM(ctx, node, vmid, req model.CloneVMRequest) (*model.Task, error)
+    CreateVMSnapshot(ctx, node, vmid, req model.SnapshotCreateRequest) (*model.Task, error)
+    DeleteVMSnapshot(ctx, node, vmid, snapname) (*model.Task, error)
+    RollbackVMSnapshot(ctx, node, vmid, snapname) (*model.Task, error)
+    RestoreVM(ctx, node, req model.PVERestoreRequest) (*model.Task, error)
+    StartLXC(ctx, node, vmid) (*model.Task, error)
+    StopLXC(ctx, node, vmid, skiplock, forceStop) (*model.Task, error)
+    ShutdownLXC(ctx, node, vmid, forceStop, timeout) (*model.Task, error)
+    RebootLXC(ctx, node, vmid, timeout) (*model.Task, error)
+    DeleteLXC(ctx, node, vmid, purge, destroyUnreferencedDisks, force) (*model.Task, error)
+    CloneLXC(ctx, node, vmid, req model.CloneLXCRequest) (*model.Task, error)
+    CreateLXCSnapshot(ctx, node, vmid, req model.SnapshotCreateRequest) (*model.Task, error)
+    DeleteLXCSnapshot(ctx, node, vmid, snapname) (*model.Task, error)
+    RollbackLXCSnapshot(ctx, node, vmid, snapname) (*model.Task, error)
 }
 ```
 
-### 2.4 `port.PBSGateway` (read-only surface)
+### 2.4 `port.PBSGateway` (read-only + mutation surface)
 ```go
 type PBSGateway interface {
     ListDatastores(ctx) ([]model.Datastore, error)          // GET /admin/datastore
@@ -130,13 +172,25 @@ type PBSGateway interface {
     GetVerifyStatus(ctx, store, upid) (*model.VerifyStatus, error)
     GetPruneStatus(ctx, store, upid) (*model.PruneStatus, error)
     GetPBSVersion(ctx) (*model.PBSVersion, error)
+
+    // Mutations (gated by EnableMutations, SPEC.md §2.5). These are never
+    // retried. StartVerify/StartGC/StartPrune/StartSync return the task UPID
+    // taken from the response `data` field; RestoreFile returns no UPID.
+    StartVerify(ctx, store) (string, error)
+    StartGC(ctx, store) (string, error)
+    StartPrune(ctx, store) (string, error)
+    StartSync(ctx, store, req model.PBSSyncRequest) (string, error)
+    RestoreFile(ctx, store, backupType, backupID, backupTime, req model.PBSFileRestoreRequest) error
+    RestoreVMBackup(ctx, store, backupType, backupID, backupTime, req model.PBSVMRestoreRequest) (string, error)
+    StopTask(ctx, upid) error
+    ForgetBackup(ctx, store, backupType, backupID, backupTime) error
 }
 ```
 
-> **Mutations are intentionally NOT on the RO interfaces yet.** The mutation
-> methods (start/stop/create/migrate/delete/restore/forget/notes-set/verify-start/
-> prune-start) will be added to these interfaces when the gate is implemented —
-> that is an additive, non-breaking change, so the RO contract below stays stable.
+> **Mutations are on the interfaces**, gated by `EnableMutations` (SPEC.md §2.5).
+> They were added to these interfaces additively, so the read-only (RO) contract
+> below stays stable; the mutation methods are registered as tools only when the
+> `ENABLE_MUTATIONS` gate is on.
 
 ### 2.5 Sentinel errors (`domain/port/errors.go`)
 ```go
@@ -212,7 +266,7 @@ it as the gateway's `port.TokenSource`.
 
 ## 5. Mutation gate + remote/OAuth2 seams
 
-### 5.1 Mutation gate (TBD UX, clean seam)
+### 5.1 Mutation gate (`ENABLE_MUTATIONS`, clean seam)
 All mutations are **explicitly opt-in** via a single boolean seam that threads
 from the composition root into tool registration:
 
@@ -228,11 +282,14 @@ func RegisterTools(s *mcpSDK.Server, app *application.App, log toolLogger, enabl
 - `adapter/mcp/register.go` calls `registerPVETools(s, app, log, enableMutations)`
   and `registerPBSTools(...)`; each registers its **read-only tools always** and
   its **mutation tools only when `enableMutations` is true**.
-- `cmd/mcp-proxmox/main.go` sets `enableMutations := false` for this milestone
-  (read-only + system only). The final gating UX — env flag, config key, or CLI
-  flag — is TBD; the seam is `Deps.EnableMutations`, and no other code changes
-  when the UX is decided.
-- `pve_vm_migrate` is flagged as the **next mutation** to add behind this gate.
+- `cmd/mcp-proxmox/main.go` passes `cfg.EnableMutations` as
+  `deps.EnableMutations` (SPEC.md §2.5).
+- The gate is driven by the **`ENABLE_MUTATIONS`** env var (default `false`),
+  read by envconfig into `Config.EnableMutations` (`adapter/config/config.go`)
+  and threaded from the composition root into `adapter/mcp`.
+- The mutation surface — VM/LXC lifecycle (start/stop/shutdown/reboot/reset/
+  suspend/resume/delete/clone), snapshots, backup jobs, HA, and PBS verify/gc/
+  prune/sync/restore/forget — is registered only when the gate is on.
 
 ### 5.2 Remote / OAuth2 seam
 - **Token:** swap `StaticTokenSource` for an `OAuth2TokenSource`/header relay
@@ -270,13 +327,15 @@ All via logrus; core sees only `port.AppLogger`/`port.CtxLogger`.
 
 ---
 
-## 7. Tool registry (read-only + system for this milestone)
+## 7. Tool registry (read-only always + mutations gated)
 
 Registration helpers in `adapter/mcp`:
 
 - `roTool[In, Out](s, name, desc, log, fn)` — wraps `mcpSDK.AddTool` so every
   read-only handler is uniform: `fn(ctx, in) (Out, error)`; on error it logs
   `"<name>: %v"` via `toolLogger` and returns the error (MCP `IsError`).
+- `mutTool[In, Out](...)` — mirrors `roTool` for mutation handlers, registered
+  only when `enableMutations` is true (SPEC.md §2.5).
 - `emptyIn` — input struct for no-parameter tools.
 - Per-domain input structs with `json` + `jsonschema` tags.
 
@@ -290,7 +349,10 @@ Registration helpers in `adapter/mcp`:
 `pbs_backup_list`, `pbs_backup_get`, `pbs_backup_notes_get`, `pbs_verify_status`,
 `pbs_prune_status`, `pbs_version`.
 
-The full 46-tool registry (including gated mutations) remains in SPEC.md §6.
+The full tool registry (read-only tools always registered, mutations gated by
+`ENABLE_MUTATIONS`) remains in SPEC.md §6. `RegisteredToolSurface(app,
+enableMutations)` in `adapter/mcp/surface.go` mirrors the `tools/list` surface
+exposed by the server.
 
 ---
 
