@@ -771,3 +771,277 @@ func (m *mockPBSGateway) RestoreVMBackup(
 }
 
 var _ port.PBSGateway = (*mockPBSGateway)(nil)
+
+// mockCephGateway is a controllable port.CephGateway mock. Each method calls a
+// field function if set, otherwise returns a zero/empty result (getters) or
+// errMockNotStubbed, so an accidental unstubbed call fails loudly.
+type mockCephGateway struct {
+	getClusterStatus func(ctx context.Context) (*model.CephClusterStatus, error)
+	getClusterConfig func(ctx context.Context) ([]model.CephConfigEntry, error)
+	getClusterLog    func(ctx context.Context, limit int) ([]model.CephLogEntry, error)
+	getClusterMeta   func(ctx context.Context) (*model.CephClusterMetadata, error)
+	getNodeStatus    func(ctx context.Context, node string) (*model.CephNodeStatus, error)
+	getNodeConfig    func(ctx context.Context, node string) ([]model.CephConfigEntry, error)
+	getNodeConfigDB  func(ctx context.Context, node string) ([]model.CephConfigEntry, error)
+	getNodeFlags     func(ctx context.Context, node string) ([]model.CephFlag, error)
+	getNodeMeta      func(ctx context.Context, node string) (*model.CephNodeMetadata, error)
+	getNodeCrush     func(ctx context.Context, node string) (*model.CephCrushMap, error)
+	getNodeRules     func(ctx context.Context, node string) ([]model.CephCrushRule, error)
+	listPools        func(ctx context.Context, node string) ([]model.CephPool, error)
+	listOSDs         func(ctx context.Context, node string) ([]model.CephOSD, error)
+	listMons         func(ctx context.Context, node string) ([]model.CephMon, error)
+	listMgrs         func(ctx context.Context, node string) ([]model.CephMgr, error)
+
+	createCrushRule func(ctx context.Context, node string, req model.CephCrushRuleCreateRequest) (string, error)
+	deleteCrushRule func(ctx context.Context, node, name string) error
+	createPool      func(ctx context.Context, node string, req model.CephPoolCreateRequest) (string, error)
+	updatePool      func(ctx context.Context, node, name string, req model.CephPoolUpdateRequest) error
+	deletePool      func(ctx context.Context, node, name string) error
+	createOSD       func(ctx context.Context, node string, req model.CephOSDCreateRequest) (string, error)
+	deleteOSD       func(ctx context.Context, node string, osdid int) error
+	createMon       func(ctx context.Context, node string, req model.CephMonCreateRequest) (string, error)
+	deleteMon       func(ctx context.Context, node, monid string) error
+	createMgr       func(ctx context.Context, node string, req model.CephMgrCreateRequest) (string, error)
+	setFlags        func(ctx context.Context, node string, req model.CephFlagsSetRequest) error
+	setConfig       func(ctx context.Context, node string, req model.CephConfigSetRequest) error
+	initCeph        func(ctx context.Context, node string, req model.CephInitRequest) (string, error)
+	destroyCeph     func(ctx context.Context, node string, req model.CephDestroyRequest) error
+}
+
+func (m *mockCephGateway) GetClusterStatus(ctx context.Context) (*model.CephClusterStatus, error) {
+	if m.getClusterStatus != nil {
+		return m.getClusterStatus(ctx)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) GetClusterConfig(ctx context.Context) ([]model.CephConfigEntry, error) {
+	if m.getClusterConfig != nil {
+		return m.getClusterConfig(ctx)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) GetClusterLog(ctx context.Context, limit int) ([]model.CephLogEntry, error) {
+	if m.getClusterLog != nil {
+		return m.getClusterLog(ctx, limit)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) GetClusterMetadata(ctx context.Context) (*model.CephClusterMetadata, error) {
+	if m.getClusterMeta != nil {
+		return m.getClusterMeta(ctx)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) GetNodeStatus(ctx context.Context, node string) (*model.CephNodeStatus, error) {
+	if m.getNodeStatus != nil {
+		return m.getNodeStatus(ctx, node)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) GetNodeConfig(ctx context.Context, node string) ([]model.CephConfigEntry, error) {
+	if m.getNodeConfig != nil {
+		return m.getNodeConfig(ctx, node)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) GetNodeConfigDB(ctx context.Context, node string) ([]model.CephConfigEntry, error) {
+	if m.getNodeConfigDB != nil {
+		return m.getNodeConfigDB(ctx, node)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) GetNodeFlags(ctx context.Context, node string) ([]model.CephFlag, error) {
+	if m.getNodeFlags != nil {
+		return m.getNodeFlags(ctx, node)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) GetNodeMetadata(ctx context.Context, node string) (*model.CephNodeMetadata, error) {
+	if m.getNodeMeta != nil {
+		return m.getNodeMeta(ctx, node)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) GetNodeCrush(ctx context.Context, node string) (*model.CephCrushMap, error) {
+	if m.getNodeCrush != nil {
+		return m.getNodeCrush(ctx, node)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) GetNodeRules(ctx context.Context, node string) ([]model.CephCrushRule, error) {
+	if m.getNodeRules != nil {
+		return m.getNodeRules(ctx, node)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) ListPools(ctx context.Context, node string) ([]model.CephPool, error) {
+	if m.listPools != nil {
+		return m.listPools(ctx, node)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) ListOSDs(ctx context.Context, node string) ([]model.CephOSD, error) {
+	if m.listOSDs != nil {
+		return m.listOSDs(ctx, node)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) ListMons(ctx context.Context, node string) ([]model.CephMon, error) {
+	if m.listMons != nil {
+		return m.listMons(ctx, node)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) ListMgrs(ctx context.Context, node string) ([]model.CephMgr, error) {
+	if m.listMgrs != nil {
+		return m.listMgrs(ctx, node)
+	}
+
+	return nil, errMockNotStubbed
+}
+
+func (m *mockCephGateway) CreateCrushRule(
+	ctx context.Context, node string, req model.CephCrushRuleCreateRequest,
+) (string, error) {
+	if m.createCrushRule != nil {
+		return m.createCrushRule(ctx, node, req)
+	}
+
+	return "", nil
+}
+
+func (m *mockCephGateway) DeleteCrushRule(ctx context.Context, node, name string) error {
+	if m.deleteCrushRule != nil {
+		return m.deleteCrushRule(ctx, node, name)
+	}
+
+	return nil
+}
+
+func (m *mockCephGateway) CreatePool(ctx context.Context, node string, req model.CephPoolCreateRequest) (string, error) {
+	if m.createPool != nil {
+		return m.createPool(ctx, node, req)
+	}
+
+	return "", nil
+}
+
+func (m *mockCephGateway) UpdatePool(
+	ctx context.Context, node, name string, req model.CephPoolUpdateRequest,
+) error {
+	if m.updatePool != nil {
+		return m.updatePool(ctx, node, name, req)
+	}
+
+	return nil
+}
+
+func (m *mockCephGateway) DeletePool(ctx context.Context, node, name string) error {
+	if m.deletePool != nil {
+		return m.deletePool(ctx, node, name)
+	}
+
+	return nil
+}
+
+func (m *mockCephGateway) CreateOSD(ctx context.Context, node string, req model.CephOSDCreateRequest) (string, error) {
+	if m.createOSD != nil {
+		return m.createOSD(ctx, node, req)
+	}
+
+	return "", nil
+}
+
+func (m *mockCephGateway) DeleteOSD(ctx context.Context, node string, osdid int) error {
+	if m.deleteOSD != nil {
+		return m.deleteOSD(ctx, node, osdid)
+	}
+
+	return nil
+}
+
+func (m *mockCephGateway) CreateMon(ctx context.Context, node string, req model.CephMonCreateRequest) (string, error) {
+	if m.createMon != nil {
+		return m.createMon(ctx, node, req)
+	}
+
+	return "", nil
+}
+
+func (m *mockCephGateway) DeleteMon(ctx context.Context, node, monid string) error {
+	if m.deleteMon != nil {
+		return m.deleteMon(ctx, node, monid)
+	}
+
+	return nil
+}
+
+func (m *mockCephGateway) CreateMgr(ctx context.Context, node string, req model.CephMgrCreateRequest) (string, error) {
+	if m.createMgr != nil {
+		return m.createMgr(ctx, node, req)
+	}
+
+	return "", nil
+}
+
+func (m *mockCephGateway) SetFlags(ctx context.Context, node string, req model.CephFlagsSetRequest) error {
+	if m.setFlags != nil {
+		return m.setFlags(ctx, node, req)
+	}
+
+	return nil
+}
+
+func (m *mockCephGateway) SetConfig(ctx context.Context, node string, req model.CephConfigSetRequest) error {
+	if m.setConfig != nil {
+		return m.setConfig(ctx, node, req)
+	}
+
+	return nil
+}
+
+func (m *mockCephGateway) InitCeph(ctx context.Context, node string, req model.CephInitRequest) (string, error) {
+	if m.initCeph != nil {
+		return m.initCeph(ctx, node, req)
+	}
+
+	return "", nil
+}
+
+func (m *mockCephGateway) DestroyCeph(ctx context.Context, node string, req model.CephDestroyRequest) error {
+	if m.destroyCeph != nil {
+		return m.destroyCeph(ctx, node, req)
+	}
+
+	return nil
+}
+
+var _ port.CephGateway = (*mockCephGateway)(nil)

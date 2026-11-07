@@ -233,7 +233,7 @@ func TestPingAndStatusContent(t *testing.T) {
 	pm, ok := ping.StructuredContent.(map[string]any)
 	require.True(t, ok, "ping output should be a map")
 	assert.Equal(t, "ok", pm["status"])
-	assert.Equal(t, map[string]any{"pve": true, "pbs": true}, pm["backends"])
+	assert.Equal(t, map[string]any{"ceph": false, "pve": true, "pbs": true}, pm["backends"])
 
 	status := callTool(t, sess, "status", nil)
 	assert.False(t, status.IsError)

@@ -56,17 +56,18 @@ func TestRegisteredToolSurface_Composition(t *testing.T) {
 	tests := []struct {
 		name            string
 		pve             bool
+		ceph            bool
 		pbs             bool
 		enableMutations bool
 	}{
-		{"no backends, mutations off", false, false, false},
-		{"no backends, mutations on", false, false, true},
-		{"pve only, mutations off", true, false, false},
-		{"pve only, mutations on", true, false, true},
-		{"pbs only, mutations off", false, true, false},
-		{"pbs only, mutations on", false, true, true},
-		{"both, mutations off", true, true, false},
-		{"both, mutations on", true, true, true},
+		{"no backends, mutations off", false, false, false, false},
+		{"no backends, mutations on", false, false, false, true},
+		{"pve only, mutations off", true, true, false, false},
+		{"pve only, mutations on", true, true, false, true},
+		{"pbs only, mutations off", false, false, true, false},
+		{"pbs only, mutations on", false, false, true, true},
+		{"both, mutations off", true, true, true, false},
+		{"both, mutations on", true, true, true, true},
 	}
 
 	for _, tt := range tests {
@@ -75,12 +76,16 @@ func TestRegisteredToolSurface_Composition(t *testing.T) {
 			if tt.pve {
 				opts = append(opts, application.WithPVE(&stubPVEGateway{}))
 			}
+			if tt.ceph {
+				opts = append(opts, application.WithCeph(&stubCephGateway{}))
+			}
 			if tt.pbs {
 				opts = append(opts, application.WithPBS(&stubPBSGateway{}))
 			}
 			app := application.New(nopLogger{}, "v1.0.0", opts...)
 
-			assertSurfaceComposition(t, RegisteredToolSurface(app, tt.enableMutations), tt.pve, tt.pbs, tt.enableMutations)
+			assertSurfaceComposition(t, RegisteredToolSurface(app, tt.enableMutations),
+				tt.pve, tt.ceph, tt.pbs, tt.enableMutations)
 		})
 	}
 }
@@ -89,7 +94,7 @@ func TestRegisteredToolSurface_Composition(t *testing.T) {
 // composition matrix: system tools always present, backend tools iff enabled,
 // mutation tools iff enabled AND gated on, every entry AlwaysPresent, and
 // exactly the expected number of tools (no extras, no missing).
-func assertSurfaceComposition(t *testing.T, surface []ToolSurface, pve, pbs, enableMutations bool) {
+func assertSurfaceComposition(t *testing.T, surface []ToolSurface, pve, ceph, pbs, enableMutations bool) {
 	t.Helper()
 
 	names := make(map[string]bool, len(surface))
@@ -109,6 +114,9 @@ func assertSurfaceComposition(t *testing.T, surface []ToolSurface, pve, pbs, ena
 	for _, n := range pveROTools {
 		assert.Equal(t, pve, names[n], "pve read-only tool %s presence", n)
 	}
+	for _, n := range cephROTools {
+		assert.Equal(t, ceph, names[n], "ceph read-only tool %s presence", n)
+	}
 	for _, n := range pbsROTools {
 		assert.Equal(t, pbs, names[n], "pbs read-only tool %s presence", n)
 	}
@@ -117,15 +125,21 @@ func assertSurfaceComposition(t *testing.T, surface []ToolSurface, pve, pbs, ena
 	for _, n := range pveMutationTools {
 		assert.Equal(t, pve && enableMutations, names[n], "pve mutation tool %s presence", n)
 	}
+	for _, n := range cephMutationTools {
+		assert.Equal(t, ceph && enableMutations, names[n], "ceph mutation tool %s presence", n)
+	}
 	for _, n := range pbsMutationTools {
 		assert.Equal(t, pbs && enableMutations, names[n], "pbs mutation tool %s presence", n)
 	}
 
 	// No extras and no missing: the surface size must be exactly the union of
 	// system + enabled read-only + gated mutations.
-	want := 2 + len(pveROTools)*boolInt(pve) + len(pbsROTools)*boolInt(pbs)
+	want := 2 + len(pveROTools)*boolInt(pve) + len(cephROTools)*boolInt(ceph) + len(pbsROTools)*boolInt(pbs)
 	if pve && enableMutations {
 		want += len(pveMutationTools)
+	}
+	if ceph && enableMutations {
+		want += len(cephMutationTools)
 	}
 	if pbs && enableMutations {
 		want += len(pbsMutationTools)
@@ -148,7 +162,8 @@ func boolInt(b bool) int {
 // mutations enabled exercise the fullest surface.
 func TestRegisteredToolSurface_MatchesRegisteredTools(t *testing.T) {
 	app := application.New(nopLogger{}, "v1.0.0",
-		application.WithPVE(&stubPVEGateway{}), application.WithPBS(&stubPBSGateway{}))
+		application.WithPVE(&stubPVEGateway{}), application.WithCeph(&stubCephGateway{}),
+		application.WithPBS(&stubPBSGateway{}))
 	_, sess := newTestServer(t, app, true)
 
 	surface := RegisteredToolSurface(app, true)
@@ -168,7 +183,8 @@ func TestRegisteredToolSurface_MatchesRegisteredTools(t *testing.T) {
 // mirror of what a client sees over the protocol.
 func TestRegisteredToolSurface_Order(t *testing.T) {
 	app := application.New(nopLogger{}, "v1.0.0",
-		application.WithPVE(&stubPVEGateway{}), application.WithPBS(&stubPBSGateway{}))
+		application.WithPVE(&stubPVEGateway{}), application.WithCeph(&stubCephGateway{}),
+		application.WithPBS(&stubPBSGateway{}))
 	surface := RegisteredToolSurface(app, true)
 
 	require.GreaterOrEqual(t, len(surface), 2)
@@ -186,7 +202,8 @@ func TestRegisteredToolSurface_Order(t *testing.T) {
 // the startup tool-surface log can emit a meaningful `title` for every tool.
 func TestToolSurface_EveryEntryHasTitle(t *testing.T) {
 	app := application.New(nopLogger{}, "v1.0.0",
-		application.WithPVE(&stubPVEGateway{}), application.WithPBS(&stubPBSGateway{}))
+		application.WithPVE(&stubPVEGateway{}), application.WithCeph(&stubCephGateway{}),
+		application.WithPBS(&stubPBSGateway{}))
 	surface := RegisteredToolSurface(app, true)
 
 	require.NotEmpty(t, surface, "full surface must not be empty")
