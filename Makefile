@@ -1,16 +1,17 @@
 # Makefile — build-system interface (R07) for mcp-proxmox.
 #
 # CI binds to these targets instead of raw language-specific commands, so the
-# same targets work across CI providers (GitLab CI + Forgejo Actions).
+# same targets stay consistent across the pipeline (GitHub Actions — the single
+# CI provider, SPEC R6).
 #
 # Standard interface (R07): build, test, lint.
 #   build  — produce binary artifacts (goreleaser snapshot) into dist/
-#   test   — hermetic unit tests (-race) + coverage >= 95% gate (C1)
+#   test   — hermetic unit tests (-race) + coverage >= 95% gate (C01)
 #   lint   — golangci-lint + vet + gofmt + go-arch-lint + gosec + govulncheck
 #
 # Dedicated hard-gate jobs (NOT part of the standard interface; CI runs them
 # as separate stages/jobs so failures are isolated):
-#   mutation — gremlins mutation testing, hard gate (C2/C8)
+#   mutation — gremlins mutation testing, hard gate (C02/C08GO, 80/80)
 #   secrets  — gitleaks secret scan over the full git history (C3/N28)
 #
 # This is a Local (stdio-only) server. `e2e` is an OPTIONAL, harness-backed
@@ -33,7 +34,7 @@ COVER_CORE := coverage-core.out
 build:
 	goreleaser build --snapshot --clean
 
-## test — hermetic unit tests (-race) + coverage >= 95% gate (C1)
+## test — hermetic unit tests (-race) + coverage >= 95% gate (C01)
 test:
 	$(GO) test -race ./...
 	$(GO) test ./... -coverprofile=$(COVER_OUT)
@@ -62,7 +63,7 @@ lint:
 	gosec ./...
 	govulncheck ./...
 
-## mutation — gremlins mutation testing on core packages; HARD GATE (C2/C8)
+## mutation — gremlins mutation testing on core packages; HARD GATE (C02/C08GO, 80/80)
 mutation:
 	gremlins unleash --workers 4 --timeout-coefficient 50 --threshold-efficacy=80 --threshold-mcover=80 ./application -E '.*mocks.*'
 	gremlins unleash --workers 4 --timeout-coefficient 50 --threshold-efficacy=80 --threshold-mcover=80 ./domain
