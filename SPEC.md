@@ -242,8 +242,10 @@ The tool surface is delivered **phased** and **gated**:
   in the full registry (§6.1–6.10) is registered when the gate is enabled: PVE
   mutations (create/resize/migrate/HA add & remove, backup jobs, VM/LXC
   start/stop/shutdown/reboot/reset/suspend/resume/delete/clone/snapshot/restore/
-  set, storage download-url) and PBS mutations (verify/GC/prune/sync start,
-  restore file & VM, backup forget, task stop). There is no separate
+  set, storage download-url), Ceph mutations (CRUSH rule, pool, OSD, mon, mgr
+  create/delete; flags/config set; init/destroy) and PBS mutations
+  (verify/GC/prune/sync start, restore file & VM, backup forget, task stop).
+  There is no separate
   "implemented vs planned" split — the registry in §6 is the implemented
   surface (see also §11).
 - **Default:** mutations are off (read-only + system vertical slice) until
@@ -260,8 +262,9 @@ that fact for each tool.
 
 ## 3. Domains and capabilities
 
-The tool surface is grouped into three domains — **Proxmox VE**, **Proxmox
-Backup Server**, and **system** — each with a distinct tool name prefix.
+The tool surface is grouped into four domains — **Proxmox VE**, **PVE-managed
+Ceph**, **Proxmox Backup Server**, and **system** — each with a distinct tool
+name prefix.
 
 ### 3.1 Proxmox VE (prefix `pve_`)
 
@@ -302,8 +305,42 @@ Mutation tools (verify/gc/prune/sync start) are registered only when
 
 ### 3.3 System (no prefix)
 
-- `ping` — liveness check; reports which backends (`pve`, `pbs`) are enabled.
+- `ping` — liveness check; reports which backends (`pve`, `pbs`, `ceph`) are enabled.
 - `status` — server status: version, transport, enabled backends.
+
+### 3.4 PVE-managed Ceph (prefix `ceph_`)
+
+Operates the **Ceph** subset of the Proxmox VE REST API (`/api2/json`),
+providing CRUD over a PVE-managed Ceph cluster. It is delivered as **its own
+secondary port + adapter** (`port.CephGateway` / `adapter/ceph`), following the
+two-gateway shape (SPEC §2.3): Ceph has a distinct object model (pools, OSDs,
+mons, mgrs, CRUSH) and **never shares an entity set** with PVE or PBS.
+
+- **Rides the PVE backend config.** Ceph is enabled **together with the PVE
+  backend** and uses `PVE_ENDPOINT` + `PVE_TOKEN` (+ `PVE_CA_CERT_PATH`) — **no
+  new environment variables** are introduced. It has its **own resty client**
+  (`adapter/ceph`) built from the same PVE endpoint/token/CA config, with its
+  own `ceph:`-prefixed error family (`UpstreamError`/`APIError`/`EmptyDataError`)
+  and the same retry semantics as `adapter/pve` (reads retried, mutations never).
+- **Cluster reads:** `ceph_cluster_status`, `ceph_cluster_config`,
+  `ceph_cluster_log` (optional `limit`), `ceph_cluster_metadata`.
+- **Node reads:** `ceph_node_status`, `ceph_node_config`, `ceph_node_configdb`,
+  `ceph_node_flags`, `ceph_node_metadata`, `ceph_node_crush`, `ceph_node_rules`,
+  `ceph_pool_list`, `ceph_osd_list`, `ceph_mon_list`, `ceph_mgr_list`.
+- **Mutations (gated by `ENABLE_MUTATIONS`, never retried):** CRUSH rule
+  create/delete (`ceph_rule_create`/`ceph_rule_delete`), pool
+  create/update/delete (`ceph_pool_*`), OSD create/delete
+  (`ceph_osd_create`/`ceph_osd_delete`), mon create/delete
+  (`ceph_mon_create`/`ceph_mon_delete`), mgr create (`ceph_mgr_create`), flag and
+  config set (`ceph_flags_set`/`ceph_config_set`), init and destroy
+  (`ceph_init`/`ceph_destroy`). Create/init tools return the task UPID.
+
+**Security:** Ceph rides the PVE API token (`Authorization: PVEAPIToken=...`),
+which is **never logged** and never a per-call parameter. Destructive tools
+(`ceph_rule_delete`, `ceph_pool_delete`, `ceph_osd_delete`, `ceph_mon_delete`,
+`ceph_destroy`) are registered only under the `ENABLE_MUTATIONS` gate, carry
+`destructive=true` (HITL confirmation upstream), and are **never retried** —
+like every other mutation.
 
 ---
 
@@ -751,13 +788,13 @@ the same sensitive-key policy.
 
 ## 6. Tool registry (complete)
 
-With both backends enabled and `ENABLE_MUTATIONS=true` (SPEC §2.5), **79 tools**
-are registered. Naming uses the domain prefixes `pve_` and `pbs_`; system tools
-(`ping`, `status`) have no prefix. `query` = read (idempotent, retried);
-`mutation` = write (never retried). Read-only query tools are always registered
-for an enabled backend; mutation tools are registered **only** when
-`ENABLE_MUTATIONS=true` — with the default (mutations disabled) **36 tools** are
-registered (system 2, PVE 22, PBS 12).
+With both backends enabled and `ENABLE_MUTATIONS=true` (SPEC §2.5), **108 tools**
+are registered. Naming uses the domain prefixes `pve_`, `ceph_` and `pbs_`;
+system tools (`ping`, `status`) have no prefix. `query` = read (idempotent,
+retried); `mutation` = write (never retried). Read-only query tools are always
+registered for an enabled backend; mutation tools are registered **only** when
+`ENABLE_MUTATIONS=true` — with the default (mutations disabled) **51 tools** are
+registered (system 2, PVE 22, Ceph 15, PBS 12).
 
 > This list is the implemented, defensible surface — it is derived directly from
 > the tool-registration code in `adapter/mcp`. Every endpoint below exists in the
@@ -938,9 +975,9 @@ with destructive mutations (delete / restore / rollback / GC / prune) carrying
 | 78 | `pbs_sync_start` | mutation | `POST /admin/datastore/{store}/sync` |
 | 79 | `pbs_task_stop` | mutation | `DELETE /nodes/localhost/tasks/{upid}` |
 
-**Total: 79 tools** with `ENABLE_MUTATIONS=true` (system 2, PVE 57, PBS 20).
-With `ENABLE_MUTATIONS` unset (default `false`), only the read-only surface is
-registered: **36 tools** (system 2, PVE 22, PBS 12).
+**Total: 108 tools** with `ENABLE_MUTATIONS=true` (system 2, PVE 57, Ceph 29,
+PBS 20). With `ENABLE_MUTATIONS` unset (default `false`), only the read-only
+surface is registered: **51 tools** (system 2, PVE 22, Ceph 15, PBS 12).
 
 > **Mutation gate:** every `mutation`-typed row above is registered only when
 > `ENABLE_MUTATIONS=true` (§2.5); when unset, only the `query` rows are exposed.
@@ -1268,7 +1305,7 @@ upgraded implicitly.
    `Deps.EnableMutations` in `adapter/mcp`, honored during tool registration).
    The milestone default surface is read-only + system (`ping`/`status`).
 6. **Exact tool list:** the tool registry in §6 is the agreed, implemented
-   surface (79 tools with mutations enabled, 36 read-only by default); it may be
+   surface (108 tools with mutations enabled, 51 read-only by default); it may be
    trimmed/extended in later features (e.g. more PVE config options).
 7. **API-token only** (no ticket/CSRF flow) — matches the stated requirement.
 8. **Tokens from config, not per-call** — confirmed in §2.4; revisit only if a
@@ -1352,13 +1389,13 @@ not from the `mcp-proxmox` code:
 
 ## Integration tests
 
-This section defines the **live-cluster integration test plan** for `mcp-proxmox`. It complements (and does not replace) the hermetic unit/coverage/mutation gates (§8). It runs against a **real Proxmox VE cluster** and a **real Proxmox Backup Server (PBS)**, driving every one of the **79 tools** (§6) through the actual MCP stdio server with `ENABLE_MUTATIONS=true`. Every mutation is executed only against a brand-new, dedicated, throwaway resource; **no pre-existing resource is ever touched**.
+This section defines the **live-cluster integration test plan** for `mcp-proxmox`. It complements (and does not replace) the hermetic unit/coverage/mutation gates (§8). It runs against a **real Proxmox VE cluster** and a **real Proxmox Backup Server (PBS)**, driving every one of the **108 tools** (§6) through the actual MCP stdio server with `ENABLE_MUTATIONS=true`. Every mutation is executed only against a brand-new, dedicated, throwaway resource; **no pre-existing resource is ever touched**.
 
 > **Integration fixes (§11) applied.** The eight PBS tools previously broken against a real PBS (§11) are now fixed in the `fix/integration-fixes` branch and no longer carry the ⚠️ known-broken flag: `pbs_backup_list`, `pbs_backup_get`, `pbs_backup_restore_file`, `pbs_backup_vm_restore`, `pbs_verify_status`, `pbs_prune_status`, `pbs_task_status`, `pbs_task_log`. The integration test still asserts the corrected endpoints (per §11) as a regression guard.
 
 ### I.1 Overview & isolation guarantee
 
-**Isolation is the top priority of this plan.** All state-mutating tools operate **only** on a single brand-new dedicated throwaway VM named `int-test-<uuid>`, plus the additional dedicated throwaway objects required to cover the full 79-tool surface (a clone VM, two restore-target VMs, one LXC container, one backup job, one HA resource — all `int-test-<uuid>-*` prefixed). The plan **MUST NOT**:
+**Isolation is the top priority of this plan.** All state-mutating tools operate **only** on a single brand-new dedicated throwaway VM named `int-test-<uuid>`, plus the additional dedicated throwaway objects required to cover the full 108-tool surface (a clone VM, two restore-target VMs, one LXC container, one backup job, one HA resource — all `int-test-<uuid>-*` prefixed). The plan **MUST NOT**:
 
 - use, start, stop, reboot, reset, suspend, resize, migrate, clone, snapshot, roll back, back up, restore, or **delete** any **existing** VM, LXC, or HA resource;
 - alter, update, or delete any **existing** storage, datastore, backup job, backup group, snapshot, or node;
@@ -1409,9 +1446,9 @@ Every object created by the run uses the prefix **`int-test-<uuid>`** where `<uu
 
 The cleanup phase (`I.7`) discovers leftover objects **by this prefix only**, so it can never match a production resource.
 
-### I.4 Scope & coverage accounting (all 79 tools)
+### I.4 Scope & coverage accounting (all 108 tools)
 
-System 2 + PVE read 22 + PVE write 35 + PBS read 12 + PBS write 8 = **79 tools**, all covered. The previously-broken PBS tools from §11 were fixed in `fix/integration-fixes`; the run asserts their corrected endpoints (§11) as a regression guard (they are no longer flagged ⚠️). Each phase table row lists: **Tool · Phase · Input (on int-test objects) · Expected · PASS/FAIL assertion**.
+System 2 + PVE read 22 + PVE write 35 + Ceph read 15 + Ceph write 14 + PBS read 12 + PBS write 8 = **108 tools**, all covered. The previously-broken PBS tools from §11 were fixed in `fix/integration-fixes`; the run asserts their corrected endpoints (§11) as a regression guard (they are no longer flagged ⚠️). Each phase table row lists: **Tool · Phase · Input (on int-test objects) · Expected · PASS/FAIL assertion**.
 
 > **Node tracking after migration.** `pve_vm_migrate` (Phase 3) moves the VM from `NODE_A` to `NODE_B`. From that point every VM tool in later phases must pass `node=NODE_B`. The matrix says `node=host` and the runner substitutes the current host (`NODE_A` before Phase 3, `NODE_B` after).
 

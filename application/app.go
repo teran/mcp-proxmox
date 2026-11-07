@@ -17,6 +17,9 @@ type App struct {
 	PVE *PVEService
 	// PBS is non-nil only when the PBS backend is enabled (WithPBS applied).
 	PBS *PBSService
+	// Ceph is non-nil only when the PVE backend (which carries Ceph) is enabled
+	// (WithCeph applied). It rides the PVE endpoint/token (SPEC.md §3.4).
+	Ceph *CephService
 	// System is always present.
 	System *SystemService
 
@@ -41,6 +44,7 @@ func New(log port.AppLogger, version string, opts ...Option) *App {
 	// have been applied.
 	a.System.pve = a.PVE
 	a.System.pbs = a.PBS
+	a.System.ceph = a.Ceph
 
 	return a
 }
@@ -58,5 +62,14 @@ func WithPVE(gw port.PVEGateway) Option {
 func WithPBS(gw port.PBSGateway) Option {
 	return func(a *App) {
 		a.PBS = &PBSService{gw: gw, log: port.NewCtxLogger(a.log)}
+	}
+}
+
+// WithCeph wires a CephGateway (adapter/ceph) into the App. It must be called at
+// startup only when the PVE backend (which carries Ceph) is enabled, so the Ceph
+// tools are registered. Ceph rides the PVE endpoint/token (SPEC.md §3.4).
+func WithCeph(gw port.CephGateway) Option {
+	return func(a *App) {
+		a.Ceph = &CephService{gw: gw, log: port.NewCtxLogger(a.log)}
 	}
 }

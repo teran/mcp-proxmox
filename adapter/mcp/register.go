@@ -24,6 +24,11 @@ func RegisterTools(s *mcpSDK.Server, app *application.App, log toolLogger, enabl
 		_ = registerPVETools(s, app, log, enableMutations)
 	}
 
+	// --- PVE-managed Ceph (rides the PVE backend; only when it is enabled) ---
+	if app.Ceph != nil {
+		_ = registerCephTools(s, app, log, enableMutations)
+	}
+
 	// --- Proxmox Backup Server (only when the PBS backend is enabled) ---
 	if app.PBS != nil {
 		_ = registerPBSTools(s, app, log, enableMutations)

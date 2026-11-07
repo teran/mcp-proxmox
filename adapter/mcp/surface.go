@@ -34,6 +34,9 @@ func RegisteredToolSurface(app *application.App, enableMutations bool) []ToolSur
 	if app.PVE != nil {
 		surface = append(surface, registerPVETools(nil, app, toolLogger{}, enableMutations)...)
 	}
+	if app.Ceph != nil {
+		surface = append(surface, registerCephTools(nil, app, toolLogger{}, enableMutations)...)
+	}
 	if app.PBS != nil {
 		surface = append(surface, registerPBSTools(nil, app, toolLogger{}, enableMutations)...)
 	}

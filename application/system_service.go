@@ -11,18 +11,23 @@ import (
 // exists; the PVE/PBS services may be nil when the corresponding backend is
 // disabled, and the system tools report which backends are active.
 type SystemService struct {
-	// pve/pbs are set by application.New after options are applied. They may be
-	// nil when a backend is disabled.
+	// pve/pbs/ceph are set by application.New after options are applied. They
+	// may be nil when a backend is disabled.
 	pve     *PVEService
 	pbs     *PBSService
+	ceph    *CephService
 	log     port.CtxLogger
 	Version string
 }
 
 // EnabledBackends returns a map describing which backends are enabled
-// ("pve" / "pbs"). It backs both the ping and status tools.
+// ("pve" / "pbs" / "ceph"). It backs both the ping and status tools.
 func (s *SystemService) EnabledBackends() map[string]bool {
-	return map[string]bool{"pve": s.pve != nil, "pbs": s.pbs != nil}
+	return map[string]bool{
+		"pve":  s.pve != nil,
+		"pbs":  s.pbs != nil,
+		"ceph": s.ceph != nil,
+	}
 }
 
 // Ping is the liveness check. It is a pure liveness probe: it returns the
