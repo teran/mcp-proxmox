@@ -238,11 +238,14 @@ The tool surface is delivered **phased** and **gated**:
   `RegisterTools` / `registerPVETools` / `registerPBSTools`). `adapter/mcp`
   registers a mutation tool **only** when the flag is true; read-only tools are
   unaffected.
-- Implemented mutations (when enabled): PVE — `pve_vm_create`, `pve_vm_resize`,
-  `pve_vm_migrate`, `pve_ha_add`, `pve_vm_backup`; PBS — `pbs_verify_start`,
-  `pbs_gc_start`, `pbs_prune_start`, `pbs_sync_start`. Further mutations
-  (start/stop/reboot/shutdown/delete, LXC, restore/forget/notes-set) remain
-  planned.
+- **The complete mutation surface is implemented** — every `mutation`-typed tool
+  in the full registry (§6.1–6.10) is registered when the gate is enabled: PVE
+  mutations (create/resize/migrate/HA add & remove, backup jobs, VM/LXC
+  start/stop/shutdown/reboot/reset/suspend/resume/delete/clone/snapshot/restore/
+  set, storage download-url) and PBS mutations (verify/GC/prune/sync start,
+  restore file & VM, backup forget, task stop). There is no separate
+  "implemented vs planned" split — the registry in §6 is the implemented
+  surface (see also §11).
 - **Default:** mutations are off (read-only + system vertical slice) until
   `ENABLE_MUTATIONS=true` is set.
 
@@ -953,6 +956,48 @@ registered: **36 tools** (system 2, PVE 22, PBS 12).
 > PVE backend is configured; all `pbs_*` tools only when PBS is configured.
 > `ping`/`status` are always registered.
 
+### 6.11 Self-describing server (M8/M9)
+
+The server is **self-describing** over the MCP protocol, so a client can discover
+what it is, how to use it, and how its secrets are handled without consulting the
+repo. Three mechanisms (all implemented in `adapter/mcp`):
+
+**(a) Server-level `Instructions`** (`server.go` `ServerInstructions`). Advertised
+in the **initialize result** (`ServerOptions.Instructions`). It states that this
+is a **local stdio** MCP server, that both backends are **optional** and enabled
+only when an endpoint + API token is configured via environment variables, that
+tools are **grouped read → write → delete** by domain prefix (`pve_` / `pbs_` /
+system `ping`/`status`), that mutation tools are registered only when
+`ENABLE_MUTATIONS=true` (default off), that API tokens are **never per-call
+parameters and never logged**, that TLS verification is always on, and it points
+clients to the guidance resources below.
+
+**(b) `resources` capability — read-only markdown guidance** (`resources.go`).
+The server registers three read-only resources under the namespaced URI
+`mcp-proxmox://guidance/*`: `overview`, `tools`, and `security`. Registering them
+causes the SDK to advertise the `resources` capability automatically. They are
+served via `resources/read` (`ReadResourceRequest`) with MIME type
+`text/markdown`; an **unknown URI resolves to `ResourceNotFoundError`** (not a
+silent 200). The bodies are **secrets-safe** (no tokens, no per-call
+credentials) and **ANSI-safe** (plain markdown):
+
+| URI | Title | Purpose |
+|---|---|---|
+| `mcp-proxmox://guidance/overview` | Server overview | what the server is and how optional backends are enabled |
+| `mcp-proxmox://guidance/tools` | Tool surface | how tools are grouped read → write → delete by prefix, and the mutation gate |
+| `mcp-proxmox://guidance/security` | Secrets & data hygiene | token handling, TLS, the local-stdio file-I/O boundary, logging |
+
+**(c) Enriched tool descriptions.** Every registered tool carries a per-tool
+`Title` and `Instructions` (natural-language guidance) in its SDK `Description`
+(§6.0); mutation-tool descriptions note the `ENABLE_MUTATIONS` gate and
+destructive/never-retried semantics, pointing the model at the relevant guidance.
+
+**(d) Boundary — resources carry no application data.** The `resources`
+capability exposes **only** static guidance markdown. **No application data and
+no filesystem/file I/O are served through resources** — application data is
+reached exclusively through the tools (§6.1–6.10), and the server performs no
+user-supplied local filesystem access (S04 / §4.8).
+
 ---
 
 ## 7. Error handling and retries
@@ -1169,6 +1214,28 @@ and a **dedicated `e2e` CI job** in `.github/workflows/ci.yml` (**C4/C9GO**;
 requires Docker, provided by the job runner). The hermetic unit + coverage ≥95%
 (**C1**) + mutation (**C2**) gates remain the hard gates; the e2e job
 complements, never replaces, them.
+
+### 8.7 Pinned versions (C05)
+
+Key dependencies and tooling are pinned to specific versions (C05 / version
+currency). Runtime/Go dependencies are pinned in `go.mod`; build/CI tooling is
+pinned in `.github/workflows/ci.yml` (and the goreleaser config). No version is
+upgraded implicitly.
+
+| Component | Version | Where pinned |
+|---|---|---|
+| Go toolchain | 1.27.3 | `go.mod` (`go 1.27.3`) |
+| `github.com/modelcontextprotocol/go-sdk` | v1.8.0 | `go.mod` |
+| `resty.dev/v3` | v3.0.0-rc.4 | `go.mod` |
+| `github.com/sirupsen/logrus` | v1.10.2 | `go.mod` |
+| `github.com/kelseyhightower/envconfig` | v1.4.0 | `go.mod` |
+| `github.com/google/jsonschema-go` | v0.4.3 | `go.mod` |
+| `github.com/stretchr/testify` | v1.12.1 | `go.mod` |
+| `github.com/teran/go-docker-testsuite` | v1.6.0 | `go.mod` (e2e) |
+| golangci-lint | v2.15.0 | `.github/workflows/ci.yml` |
+| gosec | v2.30.0 | `.github/workflows/ci.yml` |
+| govulncheck | v1.9.0 | `.github/workflows/ci.yml` |
+| goreleaser | v2 (action v6/v7) | `.goreleaser.yml`, `.github/workflows/*` |
 
 ---
 

@@ -38,16 +38,16 @@ an API token for it.
 
 ## Features
 
-- **Two optional backends + system tools — 74 MCP tools in total with
-  `ENABLE_MUTATIONS=true`** (35 read-only tools with mutations disabled, the default):
-  - **Proxmox VE** (`pve_*`, 53 tools): nodes, cluster & HA (list/status/resources/next-id/backup-jobs/HA-add),
+- **Two optional backends + system tools — 79 MCP tools in total with
+  `ENABLE_MUTATIONS=true`** (36 read-only tools with mutations disabled, the default):
+  - **Proxmox VE** (`pve_*`, 57 tools): nodes, cluster & HA (list/status/resources/next-id/backup-jobs/HA-add/HA-remove),
     backup jobs (create/update/delete), QEMU VMs
     (list/get/status/snapshot-list/create/resize/migrate/backup/start/stop/shutdown/reboot/reset/suspend/resume/
     delete/clone/snapshot-create/delete/rollback/restore/set), LXC
-    containers (list/get/status/snapshot-list/start/stop/shutdown/reboot/delete/clone/snapshot-*/set), storage
-    (list/status), network (list), tasks (list/status/log), and PVE version.
-  - **Proxmox Backup Server** (`pbs_*`, 19 tools): datastores (list/status/config),
-    backups/snapshots & files (list/get/notes/files), restore (file, VM), verify/prune/task
+    containers (list/get/status/snapshot-list/create/start/stop/shutdown/reboot/delete/clone/snapshot-*/set),
+    storage (list/status/content/download-url), network (list), tasks (list/status/log), and PVE version.
+  - **Proxmox Backup Server** (`pbs_*`, 20 tools): datastores (list/status/config),
+    backups/snapshots & files (list/get/notes/files/forget), restore (file, VM), verify/prune/task
     status, verify/gc/prune/sync start, and PBS version.
   - **System**: `ping`, `status` — always registered; report which backends are enabled.
 - **Backends enabled only when configured:** a backend whose `endpoint` or `token`
@@ -252,7 +252,7 @@ client as a subprocess (see the client configuration below).
 
 ## Complete tool registry
 
-**74 tools** with `ENABLE_MUTATIONS=true`, grouped by domain (35 read-only tools
+**79 tools** with `ENABLE_MUTATIONS=true`, grouped by domain (36 read-only tools
 with mutations disabled, the default). `query` = read (idempotent, retried);
 `mutation` = write (never retried). This mirrors
 [`SPEC.md`](./SPEC.md#6-tool-registry-complete) §6.
@@ -264,7 +264,7 @@ with mutations disabled, the default). `query` = read (idempotent, retried);
 | `ping` | query | liveness; reports enabled backends (`pve`, `pbs`) |
 | `status` | query | server status: version, transport, enabled backends |
 
-### Proxmox VE — nodes, cluster & HA (7)
+### Proxmox VE — nodes, cluster & HA (8)
 
 | Tool | Type | Description |
 |---|---|---|
@@ -275,6 +275,7 @@ with mutations disabled, the default). `query` = read (idempotent, retried);
 | `pve_nextid` | query | next free VMID |
 | `pve_backup_job_list` | query | list vzdump backup jobs (schedules) |
 | `pve_ha_add` | mutation | register a new HA resource |
+| `pve_ha_remove` | mutation | unregister an HA resource |
 
 ### Proxmox VE — backup jobs (3)
 
@@ -311,7 +312,7 @@ with mutations disabled, the default). `query` = read (idempotent, retried);
 | `pve_vm_restore` | mutation | restore a VM from a backup archive (qmrestore) |
 | `pve_vm_set` | mutation | set VM config options (`qm set`) |
 
-### Proxmox VE — LXC containers (14)
+### Proxmox VE — LXC containers (15)
 
 | Tool | Type | Description |
 |---|---|---|
@@ -319,6 +320,7 @@ with mutations disabled, the default). `query` = read (idempotent, retried);
 | `pve_lxc_get` | query | container config |
 | `pve_lxc_status` | query | container status |
 | `pve_lxc_snapshot_list` | query | list container snapshots |
+| `pve_lxc_create` | mutation | create a container |
 | `pve_lxc_start` | mutation | start a container |
 | `pve_lxc_stop` | mutation | stop a container |
 | `pve_lxc_shutdown` | mutation | gracefully shut down a container |
@@ -330,12 +332,14 @@ with mutations disabled, the default). `query` = read (idempotent, retried);
 | `pve_lxc_snapshot_rollback` | mutation | roll a container back to a snapshot |
 | `pve_lxc_set` | mutation | set container config options (`pct set`) |
 
-### Proxmox VE — storage & network (3)
+### Proxmox VE — storage & network (5)
 
 | Tool | Type | Description |
 |---|---|---|
 | `pve_storage_list` | query | list cluster storage |
 | `pve_storage_get` | query | storage status on a node |
+| `pve_storage_content_list` | query | list content on a storage |
+| `pve_storage_download_url` | mutation | download a URL into a storage (import from URL) |
 | `pve_network_list` | query | list network interfaces on a node |
 
 ### Proxmox VE — tasks & version (4)
@@ -355,7 +359,7 @@ with mutations disabled, the default). `query` = read (idempotent, retried);
 | `pbs_datastore_status` | query | datastore status (usage, size, free) |
 | `pbs_datastore_config_get` | query | datastore configuration (path, retention, GC schedule) |
 
-### PBS — backups/snapshots & files (6)
+### PBS — backups/snapshots & files (7)
 
 | Tool | Type | Description |
 |---|---|---|
@@ -365,6 +369,7 @@ with mutations disabled, the default). `query` = read (idempotent, retried);
 | `pbs_backup_files_list` | query | list files inside a backup snapshot |
 | `pbs_backup_restore_file` | mutation | restore a single file from a backup snapshot |
 | `pbs_backup_vm_restore` | mutation | restore a VM backup snapshot into PVE (returns task UPID) |
+| `pbs_backup_forget` | mutation | forget/remove a snapshot from the catalog |
 
 ### PBS — verify, GC, prune, sync, tasks & version (10)
 
@@ -381,10 +386,10 @@ with mutations disabled, the default). `query` = read (idempotent, retried);
 | `pbs_sync_start` | mutation | start a one-off sync job on a datastore |
 | `pbs_task_stop` | mutation | stop a running PBS task by UPID |
 
-**Total: 74 tools** with `ENABLE_MUTATIONS=true` (system 2, PVE 53, PBS 19).
+**Total: 79 tools** with `ENABLE_MUTATIONS=true` (system 2, PVE 57, PBS 20).
 Mutation tools are registered **only** when `ENABLE_MUTATIONS=true`; with the
-default (mutations disabled) **35 read-only tools** are registered (system 2,
-PVE 21, PBS 12). For the authoritative registry, see
+default (mutations disabled) **36 read-only tools** are registered (system 2,
+PVE 22, PBS 12). For the authoritative registry, see
 [`SPEC.md`](./SPEC.md#6-tool-registry-complete) §6.
 
 ---
