@@ -998,6 +998,371 @@ func (s *stubPBSGateway) RestoreVMBackup(
 
 var _ port.PBSGateway = (*stubPBSGateway)(nil)
 
+// stubCephGateway is a controllable port.CephGateway stub for adapter/mcp
+// tests. Every method defaults to a canned success value; a test can override
+// any method (or set err) to force an error.
+type stubCephGateway struct {
+	err error
+
+	getClusterStatus func(ctx context.Context) (*model.CephClusterStatus, error)
+	getClusterConfig func(ctx context.Context) ([]model.CephConfigEntry, error)
+	getClusterLog    func(ctx context.Context, limit int) ([]model.CephLogEntry, error)
+	getClusterMeta   func(ctx context.Context) (*model.CephClusterMetadata, error)
+	getNodeStatus    func(ctx context.Context, node string) (*model.CephNodeStatus, error)
+	getNodeConfig    func(ctx context.Context, node string) ([]model.CephConfigEntry, error)
+	getNodeConfigDB  func(ctx context.Context, node string) ([]model.CephConfigEntry, error)
+	getNodeFlags     func(ctx context.Context, node string) ([]model.CephFlag, error)
+	getNodeMeta      func(ctx context.Context, node string) (*model.CephNodeMetadata, error)
+	getNodeCrush     func(ctx context.Context, node string) (*model.CephCrushMap, error)
+	getNodeRules     func(ctx context.Context, node string) ([]model.CephCrushRule, error)
+	listPools        func(ctx context.Context, node string) ([]model.CephPool, error)
+	listOSDs         func(ctx context.Context, node string) ([]model.CephOSD, error)
+	listMons         func(ctx context.Context, node string) ([]model.CephMon, error)
+	listMgrs         func(ctx context.Context, node string) ([]model.CephMgr, error)
+
+	createCrushRule func(ctx context.Context, node string, req model.CephCrushRuleCreateRequest) (string, error)
+	deleteCrushRule func(ctx context.Context, node, name string) error
+	createPool      func(ctx context.Context, node string, req model.CephPoolCreateRequest) (string, error)
+	updatePool      func(ctx context.Context, node, name string, req model.CephPoolUpdateRequest) error
+	deletePool      func(ctx context.Context, node, name string) error
+	createOSD       func(ctx context.Context, node string, req model.CephOSDCreateRequest) (string, error)
+	deleteOSD       func(ctx context.Context, node string, osdid int) error
+	createMon       func(ctx context.Context, node string, req model.CephMonCreateRequest) (string, error)
+	deleteMon       func(ctx context.Context, node, monid string) error
+	createMgr       func(ctx context.Context, node string, req model.CephMgrCreateRequest) (string, error)
+	setFlags        func(ctx context.Context, node string, req model.CephFlagsSetRequest) error
+	setConfig       func(ctx context.Context, node string, req model.CephConfigSetRequest) error
+	initCeph        func(ctx context.Context, node string, req model.CephInitRequest) (string, error)
+	destroyCeph     func(ctx context.Context, node string, req model.CephDestroyRequest) error
+}
+
+func (s *stubCephGateway) fail() bool { return s.err != nil }
+
+func (s *stubCephGateway) GetClusterStatus(ctx context.Context) (*model.CephClusterStatus, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getClusterStatus != nil {
+		return s.getClusterStatus(ctx)
+	}
+
+	return &model.CephClusterStatus{Status: "HEALTH_OK", Quorum: []int{1}}, nil
+}
+
+func (s *stubCephGateway) GetClusterConfig(ctx context.Context) ([]model.CephConfigEntry, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getClusterConfig != nil {
+		return s.getClusterConfig(ctx)
+	}
+
+	return []model.CephConfigEntry{{Name: "mon_allow_pool_delete", Value: "true"}}, nil
+}
+
+func (s *stubCephGateway) GetClusterLog(ctx context.Context, limit int) ([]model.CephLogEntry, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getClusterLog != nil {
+		return s.getClusterLog(ctx, limit)
+	}
+
+	return []model.CephLogEntry{{Message: "boot"}}, nil
+}
+
+func (s *stubCephGateway) GetClusterMetadata(ctx context.Context) (*model.CephClusterMetadata, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getClusterMeta != nil {
+		return s.getClusterMeta(ctx)
+	}
+
+	return &model.CephClusterMetadata{Fsid: "abc", CephVersion: "17.2.7"}, nil
+}
+
+func (s *stubCephGateway) GetNodeStatus(ctx context.Context, node string) (*model.CephNodeStatus, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getNodeStatus != nil {
+		return s.getNodeStatus(ctx, node)
+	}
+
+	return &model.CephNodeStatus{Status: "HEALTH_WARN"}, nil
+}
+
+func (s *stubCephGateway) GetNodeConfig(ctx context.Context, node string) ([]model.CephConfigEntry, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getNodeConfig != nil {
+		return s.getNodeConfig(ctx, node)
+	}
+
+	return []model.CephConfigEntry{{Name: "n", Value: "v"}}, nil
+}
+
+func (s *stubCephGateway) GetNodeConfigDB(ctx context.Context, node string) ([]model.CephConfigEntry, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getNodeConfigDB != nil {
+		return s.getNodeConfigDB(ctx, node)
+	}
+
+	return []model.CephConfigEntry{{Name: "db", Value: "1"}}, nil
+}
+
+func (s *stubCephGateway) GetNodeFlags(ctx context.Context, node string) ([]model.CephFlag, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getNodeFlags != nil {
+		return s.getNodeFlags(ctx, node)
+	}
+
+	return []model.CephFlag{{ID: 1, Name: "noout", Value: "0", Enabled: 0}}, nil
+}
+
+func (s *stubCephGateway) GetNodeMetadata(ctx context.Context, node string) (*model.CephNodeMetadata, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getNodeMeta != nil {
+		return s.getNodeMeta(ctx, node)
+	}
+
+	return &model.CephNodeMetadata{}, nil
+}
+
+func (s *stubCephGateway) GetNodeCrush(ctx context.Context, node string) (*model.CephCrushMap, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getNodeCrush != nil {
+		return s.getNodeCrush(ctx, node)
+	}
+
+	return &model.CephCrushMap{Rules: []model.CephCrushRule{{ID: 0, RuleName: "replicated_rule"}}}, nil
+}
+
+func (s *stubCephGateway) GetNodeRules(ctx context.Context, node string) ([]model.CephCrushRule, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.getNodeRules != nil {
+		return s.getNodeRules(ctx, node)
+	}
+
+	return []model.CephCrushRule{{ID: 0, RuleName: "replicated_rule"}}, nil
+}
+
+func (s *stubCephGateway) ListPools(ctx context.Context, node string) ([]model.CephPool, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.listPools != nil {
+		return s.listPools(ctx, node)
+	}
+
+	return []model.CephPool{{ID: 1, PoolName: "rbd", Type: "replicated"}}, nil
+}
+
+func (s *stubCephGateway) ListOSDs(ctx context.Context, node string) ([]model.CephOSD, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.listOSDs != nil {
+		return s.listOSDs(ctx, node)
+	}
+
+	return []model.CephOSD{{ID: 0, Name: "osd.0", Status: "up"}}, nil
+}
+
+func (s *stubCephGateway) ListMons(ctx context.Context, node string) ([]model.CephMon, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.listMons != nil {
+		return s.listMons(ctx, node)
+	}
+
+	return []model.CephMon{{ID: 1, Name: "pve1"}}, nil
+}
+
+func (s *stubCephGateway) ListMgrs(ctx context.Context, node string) ([]model.CephMgr, error) {
+	if s.fail() {
+		return nil, s.err
+	}
+	if s.listMgrs != nil {
+		return s.listMgrs(ctx, node)
+	}
+
+	return []model.CephMgr{{ID: 1, Name: "pve1", Status: "active"}}, nil
+}
+
+func (s *stubCephGateway) CreateCrushRule(
+	ctx context.Context, node string, req model.CephCrushRuleCreateRequest,
+) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.createCrushRule != nil {
+		return s.createCrushRule(ctx, node, req)
+	}
+
+	return "replicated_rule", nil
+}
+
+func (s *stubCephGateway) DeleteCrushRule(ctx context.Context, node, name string) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.deleteCrushRule != nil {
+		return s.deleteCrushRule(ctx, node, name)
+	}
+
+	return nil
+}
+
+func (s *stubCephGateway) CreatePool(ctx context.Context, node string, req model.CephPoolCreateRequest) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.createPool != nil {
+		return s.createPool(ctx, node, req)
+	}
+
+	return "pool1", nil
+}
+
+func (s *stubCephGateway) UpdatePool(
+	ctx context.Context, node, name string, req model.CephPoolUpdateRequest,
+) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.updatePool != nil {
+		return s.updatePool(ctx, node, name, req)
+	}
+
+	return nil
+}
+
+func (s *stubCephGateway) DeletePool(ctx context.Context, node, name string) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.deletePool != nil {
+		return s.deletePool(ctx, node, name)
+	}
+
+	return nil
+}
+
+func (s *stubCephGateway) CreateOSD(ctx context.Context, node string, req model.CephOSDCreateRequest) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.createOSD != nil {
+		return s.createOSD(ctx, node, req)
+	}
+
+	return "osd.0", nil
+}
+
+func (s *stubCephGateway) DeleteOSD(ctx context.Context, node string, osdid int) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.deleteOSD != nil {
+		return s.deleteOSD(ctx, node, osdid)
+	}
+
+	return nil
+}
+
+func (s *stubCephGateway) CreateMon(ctx context.Context, node string, req model.CephMonCreateRequest) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.createMon != nil {
+		return s.createMon(ctx, node, req)
+	}
+
+	return "pve2", nil
+}
+
+func (s *stubCephGateway) DeleteMon(ctx context.Context, node, monid string) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.deleteMon != nil {
+		return s.deleteMon(ctx, node, monid)
+	}
+
+	return nil
+}
+
+func (s *stubCephGateway) CreateMgr(ctx context.Context, node string, req model.CephMgrCreateRequest) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.createMgr != nil {
+		return s.createMgr(ctx, node, req)
+	}
+
+	return "pve2", nil
+}
+
+func (s *stubCephGateway) SetFlags(ctx context.Context, node string, req model.CephFlagsSetRequest) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.setFlags != nil {
+		return s.setFlags(ctx, node, req)
+	}
+
+	return nil
+}
+
+func (s *stubCephGateway) SetConfig(ctx context.Context, node string, req model.CephConfigSetRequest) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.setConfig != nil {
+		return s.setConfig(ctx, node, req)
+	}
+
+	return nil
+}
+
+func (s *stubCephGateway) InitCeph(ctx context.Context, node string, req model.CephInitRequest) (string, error) {
+	if s.fail() {
+		return "", s.err
+	}
+	if s.initCeph != nil {
+		return s.initCeph(ctx, node, req)
+	}
+
+	return "UPID:ceph:init:...", nil
+}
+
+func (s *stubCephGateway) DestroyCeph(ctx context.Context, node string, req model.CephDestroyRequest) error {
+	if s.fail() {
+		return s.err
+	}
+	if s.destroyCeph != nil {
+		return s.destroyCeph(ctx, node, req)
+	}
+
+	return nil
+}
+
+var _ port.CephGateway = (*stubCephGateway)(nil)
+
 // nopLogger is a no-op port.AppLogger for tests.
 type nopLogger struct{}
 
@@ -1046,6 +1411,25 @@ var pbsMutationTools = []string{
 	"pbs_verify_start", "pbs_gc_start", "pbs_prune_start", "pbs_sync_start",
 	"pbs_backup_restore_file", "pbs_backup_vm_restore", "pbs_task_stop",
 	"pbs_backup_forget",
+}
+
+// cephROTools is the read-only Ceph tool surface (SPEC.md §6.x).
+var cephROTools = []string{
+	"ceph_cluster_status", "ceph_cluster_config", "ceph_cluster_log", "ceph_cluster_metadata",
+	"ceph_node_status", "ceph_node_config", "ceph_node_configdb", "ceph_node_flags",
+	"ceph_node_metadata", "ceph_node_crush", "ceph_node_rules",
+	"ceph_pool_list", "ceph_osd_list", "ceph_mon_list", "ceph_mgr_list",
+}
+
+// cephMutationTools is the gated Ceph mutation tool surface (SPEC.md §6.x).
+var cephMutationTools = []string{
+	"ceph_rule_create", "ceph_rule_delete",
+	"ceph_pool_create", "ceph_pool_update", "ceph_pool_delete",
+	"ceph_osd_create", "ceph_osd_delete",
+	"ceph_mon_create", "ceph_mon_delete",
+	"ceph_mgr_create",
+	"ceph_flags_set", "ceph_config_set",
+	"ceph_init", "ceph_destroy",
 }
 
 // newTestServer builds an mcpSDK.Server wired through the real application.App

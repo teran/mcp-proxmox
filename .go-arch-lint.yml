@@ -33,6 +33,7 @@ components:
 
   adapter_pve:        { in: adapter/pve }
   adapter_pbs:        { in: adapter/pbs }
+  adapter_ceph:       { in: adapter/ceph }
   adapter_token:      { in: adapter/token }
   adapter_logging:    { in: adapter/logging }
   adapter_config:     { in: adapter/config }
@@ -68,6 +69,7 @@ deps:
       - application
       - adapter_pve
       - adapter_pbs
+      - adapter_ceph
       - adapter_token
       - adapter_logging
       - adapter_config
@@ -79,6 +81,19 @@ deps:
       - application
       - adapter_pve
       - adapter_pbs
+      - adapter_ceph
+      - adapter_token
+      - adapter_logging
+      - adapter_config
+      - adapter_mcp
+  adapter_ceph:
+    mayDependOn:
+      - model
+      - port
+      - application
+      - adapter_pve
+      - adapter_pbs
+      - adapter_ceph
       - adapter_token
       - adapter_logging
       - adapter_config
@@ -90,6 +105,7 @@ deps:
       - application
       - adapter_pve
       - adapter_pbs
+      - adapter_ceph
       - adapter_token
       - adapter_logging
       - adapter_config
@@ -101,6 +117,7 @@ deps:
       - application
       - adapter_pve
       - adapter_pbs
+      - adapter_ceph
       - adapter_token
       - adapter_logging
       - adapter_config
@@ -112,6 +129,7 @@ deps:
       - application
       - adapter_pve
       - adapter_pbs
+      - adapter_ceph
       - adapter_token
       - adapter_logging
       - adapter_config
@@ -123,6 +141,7 @@ deps:
       - application
       - adapter_pve
       - adapter_pbs
+      - adapter_ceph
       - adapter_token
       - adapter_logging
       - adapter_config

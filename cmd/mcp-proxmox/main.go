@@ -21,6 +21,7 @@ import (
 	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/sirupsen/logrus"
 
+	"github.com/teran/mcp-proxmox/adapter/ceph"
 	"github.com/teran/mcp-proxmox/adapter/config"
 	"github.com/teran/mcp-proxmox/adapter/logging"
 	"github.com/teran/mcp-proxmox/adapter/mcp"
@@ -56,8 +57,9 @@ const (
 	// defaultLogFile is the stdio-friendly file sink used when LOG_LEVEL is set
 	// (override via LOG_FILENAME). See SPEC.md §5.2 / L1–L3.
 	defaultLogFile = "/tmp/mcp-proxmox.log"
-	// maxBackends is the capacity hint for the App options slice (PVE + PBS).
-	maxBackends = 2
+	// maxBackends is the capacity hint for the App options slice (PVE + Ceph +
+	// PBS).
+	maxBackends = 3
 	// defaultRetries / defaultRetryBackoff configure the gateway read retries.
 	defaultRetries      = 2
 	defaultRetryBackoff = 200 * time.Millisecond
@@ -116,6 +118,22 @@ func buildApp(cfg config.Config, logger port.AppLogger, version string) *applica
 		})
 		opts = append(opts, application.WithPVE(pveGW))
 		logger.Infof("PVE backend enabled: %s", cfg.PVEEndpoint)
+
+		// PVE-managed Ceph rides the same PVE endpoint/token/CA config (SPEC.md
+		// §3.4): its own gateway keeps the two-gateway shape, but it shares the
+		// PVE token source so no new env vars are needed.
+		cephGW := ceph.NewGateway(ceph.Config{
+			Endpoint:     cfg.PVEEndpoint,
+			TokenSource:  pveToken,
+			CACertPath:   cfg.PVECACertPath,
+			HTTPClient:   &http.Client{Timeout: cfg.HTTPTimeout},
+			Logger:       logger,
+			Retries:      defaultRetries,
+			RetryBackoff: defaultRetryBackoff,
+			UserAgent:    fmt.Sprintf("%s/%s (https://github.com/teran/mcp-proxmox)", appName, appVersion),
+		})
+		opts = append(opts, application.WithCeph(cephGW))
+		logger.Infof("Ceph backend enabled (rides PVE): %s", cfg.PVEEndpoint)
 	}
 
 	if cfg.PBSEnabled() {

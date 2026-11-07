@@ -128,6 +128,7 @@ const guidanceTools = "# Tool surface\n" +
 	"Tools are grouped by a domain prefix and by operation kind:\n" +
 	"\n" +
 	"- `pve_` — Proxmox VE (nodes, VMs, LXC containers, storage, cluster).\n" +
+	"- `ceph_` — PVE-managed Ceph (cluster, pools, OSDs, mons, mgrs, CRUSH).\n" +
 	"- `pbs_` — Proxmox Backup Server (datastores, snapshots, verify, prune).\n" +
 	"- `ping` / `status` — system tools, always available.\n" +
 	"\n" +

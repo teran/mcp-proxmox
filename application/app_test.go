@@ -70,23 +70,23 @@ func TestAppServicesWired(t *testing.T) {
 func TestSystemService_EnabledBackends(t *testing.T) {
 	t.Run("none", func(t *testing.T) {
 		app := New(nopAppLogger{}, "v1.0.0")
-		assert.Equal(t, map[string]bool{"pve": false, "pbs": false}, app.System.EnabledBackends())
-		assert.Equal(t, map[string]bool{"pve": false, "pbs": false}, app.System.Ping(context.Background()))
+		assert.Equal(t, map[string]bool{"ceph": false, "pve": false, "pbs": false}, app.System.EnabledBackends())
+		assert.Equal(t, map[string]bool{"ceph": false, "pve": false, "pbs": false}, app.System.Ping(context.Background()))
 	})
 
 	t.Run("pve only", func(t *testing.T) {
 		app := New(nopAppLogger{}, "v1.0.0", WithPVE(&mockPVEGateway{}))
-		assert.Equal(t, map[string]bool{"pve": true, "pbs": false}, app.System.EnabledBackends())
+		assert.Equal(t, map[string]bool{"ceph": false, "pve": true, "pbs": false}, app.System.EnabledBackends())
 	})
 
 	t.Run("pbs only", func(t *testing.T) {
 		app := New(nopAppLogger{}, "v1.0.0", WithPBS(&mockPBSGateway{}))
-		assert.Equal(t, map[string]bool{"pve": false, "pbs": true}, app.System.EnabledBackends())
+		assert.Equal(t, map[string]bool{"ceph": false, "pve": false, "pbs": true}, app.System.EnabledBackends())
 	})
 
 	t.Run("both", func(t *testing.T) {
 		app := New(nopAppLogger{}, "v1.0.0", WithPVE(&mockPVEGateway{}), WithPBS(&mockPBSGateway{}))
-		assert.Equal(t, map[string]bool{"pve": true, "pbs": true}, app.System.EnabledBackends())
+		assert.Equal(t, map[string]bool{"ceph": false, "pve": true, "pbs": true}, app.System.EnabledBackends())
 	})
 }
 
