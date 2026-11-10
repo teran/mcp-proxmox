@@ -831,7 +831,7 @@ the SDK `Description` so it is surfaced to the client as the model hint.
 {
   "name": "pve_node_list",
   "title": "List PVE nodes",
-  "description": "List the Proxmox VE cluster nodes.\n\nInstructions: Returns all cluster nodes and their status. No arguments; read-only and idempotent — safe to call repeatedly.",
+  "description": "List the Proxmox VE cluster nodes.\n\nInstructions: Returns all cluster nodes and their status. No arguments; read-only and idempotent — safe to call repeatedly.\n\nSee mcp-proxmox://guidance/tools for the tool surface and usage guidance.",
   "annotations": { "readOnlyHint": true, "idempotentHint": true, "openWorldHint": false, "destructiveHint": false }
 }
 ```

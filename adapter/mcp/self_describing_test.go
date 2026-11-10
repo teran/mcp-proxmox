@@ -105,6 +105,23 @@ func guidanceUris(t *testing.T, sess *mcpSDK.ClientSession) []*mcpSDK.Resource {
 	return res.Resources
 }
 
+// TestServer_ToolDescriptionsNameGuidanceResource is the N48 regression guard:
+// every published tool's Description must name the tool-surface guidance
+// resource URI (mcp-proxmox://guidance/tools). EnableMutations=true so both
+// read-only and mutation tools are covered.
+func TestServer_ToolDescriptionsNameGuidanceResource(t *testing.T) {
+	_, sess := newTestServer(t, newTestApp(), true)
+
+	tools := toolsByName(t, sess)
+	require.NotEmpty(t, tools, "server must publish at least one tool")
+
+	for name, tool := range tools {
+		require.NotNil(t, tool, "tool %s must have a descriptor", name)
+		assert.Contains(t, tool.Description, guidanceURI+"tools",
+			"tool %s description must name the guidance resource", name)
+	}
+}
+
 // TestServer_RegistersGuidanceResources verifies NewServer registers the
 // guidance resources capability: ListResources advertises at least overview and
 // tools under mcp-proxmox://guidance/, each marked text/markdown.

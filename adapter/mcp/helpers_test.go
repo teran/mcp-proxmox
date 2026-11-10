@@ -16,10 +16,16 @@ import (
 	"github.com/teran/mcp-proxmox/domain/port"
 )
 
+// TestDescWithInstructions pins the N48/M08 tool-description enrichment: every
+// registered tool's Description must name the guidance resource URI
+// (mcp-proxmox://guidance/tools) as the tool-surface pointer, whether or not the
+// tool carries per-tool natural-language instructions.
 func TestDescWithInstructions(t *testing.T) {
-	assert.Equal(t, "just a desc", descWithInstructions("just a desc", ""))
 	assert.Equal(t,
-		"desc\n\nInstructions: guidance",
+		"just a desc\n\nSee mcp-proxmox://guidance/tools for the tool surface and usage guidance.",
+		descWithInstructions("just a desc", ""))
+	assert.Equal(t,
+		"desc\n\nInstructions: guidance\n\nSee mcp-proxmox://guidance/tools for the tool surface and usage guidance.",
 		descWithInstructions("desc", "guidance"))
 }
 
