@@ -86,15 +86,17 @@ func roTool[In, Out any](
 }
 
 // descWithInstructions appends natural-language per-tool instructions to the
-// tool description. The go-sdk's Tool.Description is the field treated as the
-// model hint, so it is the right place to carry the per-tool instructions
-// (SPEC.md M4/N11).
+// tool description, and always ends with a pointer to the tool-surface guidance
+// resource. The go-sdk's Tool.Description is the field treated as the model
+// hint, so it is the right place to carry the per-tool instructions (SPEC.md
+// M4/N11) and the guidance-resource pointer (M08/N48): naming the URI lets a
+// model-host client navigate from any tool over the protocol to its contract.
 func descWithInstructions(desc, instr string) string {
-	if instr == "" {
-		return desc
+	if instr != "" {
+		desc += "\n\nInstructions: " + instr
 	}
 
-	return desc + "\n\nInstructions: " + instr
+	return desc + "\n\nSee " + guidanceNamespace + "tools for the tool surface and usage guidance."
 }
 
 // mutTool registers a mutation tool (gated by EnableMutations). It mirrors
