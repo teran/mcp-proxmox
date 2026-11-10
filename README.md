@@ -10,11 +10,12 @@
 [![MCP: stdio Local server](https://img.shields.io/badge/MCP-stdio%20Local-orange)](SPEC.md)
 [![Go Reference](https://img.shields.io/badge/godoc-reference-blue.svg)](https://pkg.go.dev/github.com/teran/mcp-proxmox)
 [![Go Version](https://img.shields.io/badge/Go-1.27.3-blue)](https://go.dev/dl/)
-[![Coverage](https://img.shields.io/badge/coverage-%3E%3D95%25-brightgreen)](https://github.com/teran/mcp-proxmox/actions)
-[![gosec](https://img.shields.io/badge/gosec-passing-brightgreen)](https://github.com/teran/mcp-proxmox/actions)
-[![govulncheck](https://img.shields.io/badge/govulncheck-passing-brightgreen)](https://github.com/teran/mcp-proxmox/actions)
-[![gremlins mutation](https://img.shields.io/badge/gremlins-%3E%3D80%25-brightgreen)](https://github.com/teran/mcp-proxmox/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/teran/mcp-proxmox)](https://goreportcard.com/report/github.com/teran/mcp-proxmox)
 [![goreleaser](https://img.shields.io/badge/goreleaser-v2-blue)](.goreleaser.yml)
+
+> Quality gates (coverage ≥ 95%, golangci-lint + gosec + govulncheck, gremlins
+> mutation ≥ 80%, gitleaks) are enforced by the [CI workflow](./.github/workflows/ci.yml)
+> and reflected by the live **CI** and **Go Report Card** badges above.
 
 An **MCP (Model Context Protocol) server** that exposes the REST APIs of
 **Proxmox VE** and **Proxmox Backup Server (PBS)** as a set of callable tools
