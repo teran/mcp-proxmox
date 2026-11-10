@@ -38,14 +38,18 @@ an API token for it.
 
 ## Features
 
-- **Two optional backends + system tools — 79 MCP tools in total with
-  `ENABLE_MUTATIONS=true`** (36 read-only tools with mutations disabled, the default):
+- **Optional backends + system tools — 108 MCP tools in total with
+  `ENABLE_MUTATIONS=true`** (51 read-only tools with mutations disabled, the default):
   - **Proxmox VE** (`pve_*`, 57 tools): nodes, cluster & HA (list/status/resources/next-id/backup-jobs/HA-add/HA-remove),
     backup jobs (create/update/delete), QEMU VMs
     (list/get/status/snapshot-list/create/resize/migrate/backup/start/stop/shutdown/reboot/reset/suspend/resume/
     delete/clone/snapshot-create/delete/rollback/restore/set), LXC
     containers (list/get/status/snapshot-list/create/start/stop/shutdown/reboot/delete/clone/snapshot-*/set),
     storage (list/status/content/download-url), network (list), tasks (list/status/log), and PVE version.
+  - **PVE-managed Ceph** (`ceph_*`, 29 tools, enabled together with PVE): cluster
+    (status/config/log/metadata), node (status/config/config-db/flags/metadata), CRUSH (map/rules),
+    pools (list/create/update/delete), OSDs (list/create/delete), monitors (list/create/delete),
+    managers (list/create), flags/config set, init, and destroy.
   - **Proxmox Backup Server** (`pbs_*`, 20 tools): datastores (list/status/config),
     backups/snapshots & files (list/get/notes/files/forget), restore (file, VM), verify/prune/task
     status, verify/gc/prune/sync start, and PBS version.
@@ -232,12 +236,15 @@ client as a subprocess (see the client configuration below).
 | Prefix | Domain | Example tools |
 |---|---|---|
 | `pve_` | Proxmox VE | `pve_node_list`, `pve_vm_start`, `pve_vm_clone`, `pve_storage_list`, `pve_network_list`, `pve_task_status`, `pve_version` |
+| `ceph_` | PVE-managed Ceph | `ceph_cluster_status`, `ceph_pool_list`, `ceph_osd_create`, `ceph_rule_create`, `ceph_init`, `ceph_destroy` |
 | `pbs_` | Proxmox Backup Server | `pbs_datastore_list`, `pbs_backup_list`, `pbs_backup_vm_restore`, `pbs_backup_notes_get`, `pbs_verify_start`, `pbs_task_stop` |
 | — | System | `ping`, `status` |
 
 > **Enablement recap:** all `pve_*` tools are registered only when the PVE backend
-> is configured; all `pbs_*` tools only when PBS is configured. `ping`/`status`
-> are always registered and report which backends are active.
+> is configured; all `ceph_*` tools ride the PVE backend and are registered
+> together with it (same `PVE_ENDPOINT`/`PVE_TOKEN`); all `pbs_*` tools only when
+> PBS is configured. `ping`/`status` are always registered and report which
+> backends are active.
 
 > **Restore semantics (PBS):** `pbs_backup_restore_file` restores a single file out
 > of a backup snapshot to a target path on the PBS filesystem; `pbs_backup_vm_restore`
@@ -252,7 +259,7 @@ client as a subprocess (see the client configuration below).
 
 ## Complete tool registry
 
-**79 tools** with `ENABLE_MUTATIONS=true`, grouped by domain (36 read-only tools
+**108 tools** with `ENABLE_MUTATIONS=true`, grouped by domain (51 read-only tools
 with mutations disabled, the default). `query` = read (idempotent, retried);
 `mutation` = write (never retried). This mirrors
 [`SPEC.md`](./SPEC.md#6-tool-registry-complete) §6.
@@ -386,10 +393,49 @@ with mutations disabled, the default). `query` = read (idempotent, retried);
 | `pbs_sync_start` | mutation | start a one-off sync job on a datastore |
 | `pbs_task_stop` | mutation | stop a running PBS task by UPID |
 
-**Total: 79 tools** with `ENABLE_MUTATIONS=true` (system 2, PVE 57, PBS 20).
-Mutation tools are registered **only** when `ENABLE_MUTATIONS=true`; with the
-default (mutations disabled) **36 read-only tools** are registered (system 2,
-PVE 22, PBS 12). For the authoritative registry, see
+### PVE-managed Ceph — cluster & node reads (15)
+
+| Tool | Type | Description |
+|---|---|---|
+| `ceph_cluster_status` | query | Ceph cluster status (quorum/health) |
+| `ceph_cluster_config` | query | Ceph cluster configuration |
+| `ceph_cluster_log` | query | Ceph cluster log (optional `limit`) |
+| `ceph_cluster_metadata` | query | Ceph cluster metadata (fsid, version) |
+| `ceph_node_status` | query | Ceph status of a single node |
+| `ceph_node_config` | query | Ceph config of a single node |
+| `ceph_node_configdb` | query | Ceph config-db entries of a single node |
+| `ceph_node_flags` | query | Ceph flags of a single node |
+| `ceph_node_metadata` | query | Ceph metadata of a single node |
+| `ceph_node_crush` | query | Ceph CRUSH map of a single node |
+| `ceph_node_rules` | query | list Ceph CRUSH rules of a single node |
+| `ceph_pool_list` | query | list Ceph pools on a node |
+| `ceph_osd_list` | query | list Ceph OSDs on a node |
+| `ceph_mon_list` | query | list Ceph monitors on a node |
+| `ceph_mgr_list` | query | list Ceph managers on a node |
+
+### PVE-managed Ceph — mutations (14)
+
+| Tool | Type | Description |
+|---|---|---|
+| `ceph_rule_create` | mutation | create a Ceph CRUSH rule (returns task UPID) |
+| `ceph_rule_delete` | mutation | delete a Ceph CRUSH rule by name (destructive) |
+| `ceph_pool_create` | mutation | create a Ceph pool (returns task UPID) |
+| `ceph_pool_update` | mutation | update a Ceph pool by name (idempotent) |
+| `ceph_pool_delete` | mutation | delete a Ceph pool by name (destructive) |
+| `ceph_osd_create` | mutation | create a Ceph OSD (returns task UPID) |
+| `ceph_osd_delete` | mutation | delete a Ceph OSD by numeric ID (destructive) |
+| `ceph_mon_create` | mutation | create a Ceph monitor (returns task UPID) |
+| `ceph_mon_delete` | mutation | delete a Ceph monitor by ID (destructive) |
+| `ceph_mgr_create` | mutation | create a Ceph manager (returns task UPID) |
+| `ceph_flags_set` | mutation | set Ceph flags (idempotent) |
+| `ceph_config_set` | mutation | set a Ceph config option (idempotent) |
+| `ceph_init` | mutation | initialize Ceph on a node (returns task UPID) |
+| `ceph_destroy` | mutation | destroy Ceph on a node (destructive) |
+
+**Total: 108 tools** with `ENABLE_MUTATIONS=true` (system 2, PVE 57, Ceph 29,
+PBS 20). Mutation tools are registered **only** when `ENABLE_MUTATIONS=true`;
+with the default (mutations disabled) **51 read-only tools** are registered
+(system 2, PVE 22, Ceph 15, PBS 12). For the authoritative registry, see
 [`SPEC.md`](./SPEC.md#6-tool-registry-complete) §6.
 
 ---
